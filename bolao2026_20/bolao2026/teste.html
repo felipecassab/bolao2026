@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Teste Firebase</title></head>
+<body style="background:#111;color:#0f0;font-family:monospace;padding:20px;font-size:13px;">
+<h2 style="color:#f5c518;">Diagnóstico do App</h2>
+<div id="log"></div>
+<br>
+<button onclick="testeLogin()" style="padding:10px 20px;background:#f5c518;color:#111;font-weight:700;border:none;border-radius:8px;font-size:14px;cursor:pointer;">Testar tela de login</button>
+<script>
+function log(msg, color) {
+  const d = document.createElement('div');
+  d.style.color = color || '#0f0';
+  d.style.margin = '4px 0';
+  d.textContent = new Date().toLocaleTimeString() + ' — ' + msg;
+  document.getElementById('log').appendChild(d);
+}
+
+// Teste Firestore
+const PROJECT = 'bolao2026-d536a';
+const APIKEY  = 'AIzaSyByMy18Y4f6_n6eAusJjFhNquiw0CTKoPI';
+const URL     = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/bolao/data?key=${APIKEY}`;
+
+log('Testando Firestore REST API...');
+fetch(URL)
+  .then(r => { log('Status HTTP: ' + r.status + (r.status===404?' (banco vazio — normal)':' (erro)'), r.status===200||r.status===404?'#0f0':'#f00'); return r.json(); })
+  .then(data => { log('Conexão com Firestore: OK ✓', '#0f0'); })
+  .catch(e => { log('ERRO: ' + e.message, '#f00'); });
+
+function testeLogin() {
+  window.location.href = '/index.html';
+}
+</script>
+</body>
+</html>
