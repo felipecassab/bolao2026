@@ -634,12 +634,36 @@ async function loadState() {
   }
   showLoading(false);
   const u = localStorage.getItem('bolao_user');
-  if (u && state.users[u]) {
-    state.user = u;
-    updateHeader();
-    renderAll();
+  if (u) {
+    if (state.users[u]) {
+      // User found in Firebase data — login OK
+      state.user = u;
+      updateHeader();
+      renderAll();
+    } else if (Object.keys(state.users).length === 0) {
+      // Firebase returned empty (possible connection issue) — trust localStorage
+      // Try to restore from backup
+      try {
+        const bk = localStorage.getItem('bolao_backup');
+        if (bk) {
+          const s = JSON.parse(bk);
+          state.users = s.users||{}; state.palpites = s.palpites||{};
+          state.results = s.results||{}; state.snapshots = s.snapshots||[];
+        }
+      } catch(e) {}
+      if (state.users[u]) {
+        state.user = u;
+        updateHeader();
+        renderAll();
+      } else {
+        openModal('login');
+      }
+    } else {
+      // Firebase has users but this one isn't in it — force login
+      localStorage.removeItem('bolao_user');
+      openModal('login');
+    }
   } else {
-    localStorage.removeItem('bolao_user');
     openModal('login');
   }
   startPolling();
