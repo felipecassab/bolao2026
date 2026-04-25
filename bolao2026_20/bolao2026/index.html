@@ -1111,6 +1111,43 @@ function flagImg(code, cls='flag') {
   if (code==='un') return '<span style="font-size:16px;">🏳️</span>';
   return `<img class="${cls}" src="https://flagcdn.com/w40/${code}.png" onerror="this.style.display='none'"/>`;
 }
+// FIFA Ranking (approximate) — lower = better
+const FIFA_RANKING = {
+  'Argentina':1,'França':2,'Espanha':3,'Inglaterra':4,'Brasil':5,
+  'Portugal':6,'Bélgica':7,'Holanda':8,'Alemanha':9,'Uruguai':10,
+  'Colômbia':11,'Itália':12,'Croácia':13,'Estados Unidos':14,'México':15,
+  'Coreia do Sul':16,'Japão':17,'Marrocos':18,'Suíça':19,'Senegal':20,
+  'Dinamarca':21,'Áustria':22,'Turquia':23,'Equador':24,'Austrália':25,
+  'Irã':26,'Noruega':27,'Ucrânia':28,'Hungria':29,'Suécia':30,
+  'Eslovênia':31,'Eslovaquia':32,'Rep. Tcheca':33,'Escócia':34,'Grécia':35,
+  'Egito':36,'Argélia':37,'África do Sul':38,'Nigéria':39,'Costa do Marfim':40,
+  'Camarões':41,'Mali':42,'Rep. D. Congo':43,'Gana':44,'Tunísia':45,
+  'Cabo Verde':46,'Arábia Saudita':47,'Iraque':48,'Jordânia':49,'Qatar':50,
+  'Uzbequistão':51,'Panamá':52,'Costa Rica':53,'Paraguai':54,'Haiti':55,
+  'Jamaica':56,'Canadá':57,'Bósnia e Herz.':58,'Curaçau':59,'Nova Zelândia':60,
+  'Bolívia':61,'Peru':62,'Chile':63,'Honduras':64,'Suriname':65,
+};
+
+function compareTeams(a, b, headToHead) {
+  // Step 1: Head-to-head (if provided)
+  if (headToHead) {
+    const ha = headToHead[a.name], hb = headToHead[b.name];
+    if (ha && hb) {
+      if (hb.pt !== ha.pt) return hb.pt - ha.pt;
+      const sgA = ha.gp-ha.gc, sgB = hb.gp-hb.gc;
+      if (sgB !== sgA) return sgB - sgA;
+      if (hb.gp !== ha.gp) return hb.gp - ha.gp;
+    }
+  }
+  // Step 2: Overall group stats
+  const sgA = a.gp-a.gc, sgB = b.gp-b.gc;
+  if (sgB !== sgA) return sgB - sgA;
+  if (b.gp !== a.gp) return b.gp - a.gp;
+  // Step 3: FIFA ranking (lower = better)
+  const rA = FIFA_RANKING[a.name]||99, rB = FIFA_RANKING[b.name]||99;
+  return rA - rB;
+}
+
 function calcGroupStandings(group, userPalpites) {
   const matches = MATCHES.filter(m => m.group === group && m.phase === 'group');
   // Collect all teams in this group
@@ -1131,14 +1168,32 @@ function calcGroupStandings(group, userPalpites) {
     else if (p.h < p.a) { ta.v++; ta.pt+=3; th.d++; }
     else                 { th.e++; th.pt++; ta.e++; ta.pt++; }
   });
-  // Sort: PT > SG > GP > name
-  return Object.values(teams).sort((a,b) => {
+  const teamList = Object.values(teams);
+  // Calculate head-to-head for tied teams
+  teamList.sort((a,b) => {
     if (b.pt !== a.pt) return b.pt - a.pt;
-    const sgA = a.gp-a.gc, sgB = b.gp-b.gc;
-    if (sgB !== sgA) return sgB - sgA;
-    if (b.gp !== a.gp) return b.gp - a.gp;
-    return a.name.localeCompare(b.name);
+    // Head-to-head among tied teams
+    const tied = teamList.filter(t => t.pt === a.pt);
+    if (tied.length > 1) {
+      const h2h = {};
+      tied.forEach(t => h2h[t.name] = {pt:0,gp:0,gc:0});
+      matches.forEach(m => {
+        const p = userPalpites?.[m.id];
+        if (!p) return;
+        const hInTied = tied.find(t=>t.name===m.home);
+        const aInTied = tied.find(t=>t.name===m.away);
+        if (!hInTied || !aInTied) return;
+        h2h[m.home].gp+=p.h; h2h[m.home].gc+=p.a;
+        h2h[m.away].gp+=p.a; h2h[m.away].gc+=p.h;
+        if (p.h>p.a)      { h2h[m.home].pt+=3; }
+        else if (p.h<p.a) { h2h[m.away].pt+=3; }
+        else              { h2h[m.home].pt++; h2h[m.away].pt++; }
+      });
+      return compareTeams(a, b, h2h);
+    }
+    return compareTeams(a, b, null);
   });
+  return teamList;
 }
 
 function renderGroupStandings(group, userPalpites) {
@@ -1168,6 +1223,10 @@ function renderGroupStandings(group, userPalpites) {
 
 function renderMatches() {
   const locked = isPastDeadline();
+  // Auto-fill knockout names from group standings
+  if (state.user && state.palpites[state.user]) {
+    autoFillKnockout(state.palpites[state.user]);
+  }
   const groups = {};
   MATCHES.forEach(m=>{ if(!groups[m.group]) groups[m.group]=[]; groups[m.group].push(m); });
   let html = locked ? `<div style="background:rgba(244,67,54,0.1);border:1px solid rgba(244,67,54,0.3);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">🔒</span><div><p style="font-size:13px;font-weight:600;color:var(--red);">Palpites encerrados</p><p style="font-size:12px;color:var(--gray);margin-top:2px;">Prazo encerrado em 10/06 às 23h59.</p></div></div>` : '';
@@ -1256,6 +1315,126 @@ function renderMatches() {
 // ═══════════════════════════════════════════════════════════════════
 // SAVE PALPITES
 // ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// AUTO-ADVANCE: fill knockout brackets from group standings
+// ═══════════════════════════════════════════════════════════════════
+function getGroupWinner(group, pos, userPalpites) {
+  // pos: 0=1st, 1=2nd, 2=3rd
+  const standings = calcGroupStandings(group, userPalpites);
+  if (!standings[pos] || standings[pos].j === 0) return null;
+  return standings[pos];
+}
+
+function getBest8Thirds(userPalpites) {
+  const groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+  const thirds = groups.map(g => {
+    const s = calcGroupStandings(g, userPalpites);
+    if (!s[2] || s[2].j === 0) return null;
+    return {...s[2], group: g};
+  }).filter(Boolean);
+
+  if (thirds.length < 8) return [];
+
+  // Sort thirds by: PT > SG > GP > FIFA ranking
+  thirds.sort((a,b) => {
+    if (b.pt !== a.pt) return b.pt - a.pt;
+    const sgA=a.gp-a.gc, sgB=b.gp-b.gc;
+    if (sgB !== sgA) return sgB - sgA;
+    if (b.gp !== a.gp) return b.gp - a.gp;
+    return (FIFA_RANKING[a.name]||99)-(FIFA_RANKING[b.name]||99);
+  });
+
+  return thirds.slice(0,8);
+}
+
+function autoFillKnockout(userPalpites) {
+  if (!userPalpites) return userPalpites;
+  const p = JSON.parse(JSON.stringify(userPalpites));
+
+  // Map group winners/runners-up to 32-avos matches
+  // Based on official Copa 2026 bracket
+  const bracket = [
+    // {matchId, homeGroup, homePos, awayGroup, awayPos}
+    // pos: 0=1st, 1=2nd, 2=third (from best thirds)
+    {id:'r32_1',  hg:'A', hp:1, ag:'B', ap:1},  // 2ºA x 2ºB
+    {id:'r32_3',  hg:'F', hp:0, ag:'C', ap:1},  // 1ºF x 2ºC
+    {id:'r32_4',  hg:'C', hp:0, ag:'F', ap:1},  // 1ºC x 2ºF
+    {id:'r32_6',  hg:'E', hp:1, ag:'I', ap:1},  // 2ºE x 2ºI
+    {id:'r32_7',  hg:'A', hp:0, ag:null},        // 1ºA x 3º (melhor)
+    {id:'r32_11', hg:'K', hp:1, ag:'L', ap:1},  // 2ºK x 2ºL
+    {id:'r32_12', hg:'H', hp:0, ag:'J', ap:1},  // 1ºH x 2ºJ
+    {id:'r32_14', hg:'J', hp:0, ag:'H', ap:1},  // 1ºJ x 2ºH
+  ];
+
+  // Get best 8 thirds
+  const thirds = getBest8Thirds(p);
+
+  // Auto-fill matches where we can determine teams
+  // For simplicity, fill matches where both teams are 1st/2nd place
+  const groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+
+  // Fill all 32-avos that have clear 1st/2nd matchups
+  const clearMatchups = [
+    {id:'r32_1',  hg:'A', hp:1, ag:'B', ap:1},
+    {id:'r32_3',  hg:'F', hp:0, ag:'C', ap:1},
+    {id:'r32_4',  hg:'C', hp:0, ag:'F', ap:1},
+    {id:'r32_6',  hg:'E', hp:1, ag:'I', ap:1},
+    {id:'r32_11', hg:'K', hp:1, ag:'L', ap:1},
+    {id:'r32_12', hg:'H', hp:0, ag:'J', ap:1},
+    {id:'r32_14', hg:'J', hp:0, ag:'H', ap:1},
+    {id:'r32_2',  hg:'E', hp:0, ag:null, ap:null},  // 1ºE x 3º
+    {id:'r32_5',  hg:'I', hp:0, ag:null, ap:null},  // 1ºI x 3º
+    {id:'r32_8',  hg:'L', hp:0, ag:null, ap:null},  // 1ºL x 3º
+    {id:'r32_9',  hg:'D', hp:0, ag:null, ap:null},  // 1ºD x 3º
+    {id:'r32_10', hg:'G', hp:0, ag:null, ap:null},  // 1ºG x 3º
+    {id:'r32_13', hg:'B', hp:0, ag:null, ap:null},  // 1ºB x 3º
+    {id:'r32_15', hg:'K', hp:0, ag:null, ap:null},  // 1ºK x 3º
+    {id:'r32_16', hg:'D', hp:1, ag:'G', ap:1},      // 2ºD x 2ºG
+  ];
+
+  clearMatchups.forEach(({id, hg, hp, ag, ap}) => {
+    const hTeam = hg ? getGroupWinner(hg, hp, p) : null;
+    const aTeam = ag ? getGroupWinner(ag, ap, p) : null;
+
+    const match = MATCHES.find(m=>m.id===id);
+    if (!match) return;
+
+    // Update match home/away names and flags for display
+    if (hTeam) {
+      match.home = hTeam.name;
+      match.fH   = hTeam.flag;
+    }
+    if (aTeam) {
+      match.away = aTeam.name;
+      match.fA   = aTeam.flag;
+    }
+  });
+
+  // For 3rd place slots, use best thirds if available
+  if (thirds.length >= 8) {
+    const thirdMatchups = [
+      {id:'r32_7',  tidx:0},
+      {id:'r32_2',  tidx:1},
+      {id:'r32_5',  tidx:2},
+      {id:'r32_8',  tidx:3},
+      {id:'r32_9',  tidx:4},
+      {id:'r32_10', tidx:5},
+      {id:'r32_13', tidx:6},
+      {id:'r32_15', tidx:7},
+    ];
+    thirdMatchups.forEach(({id, tidx}) => {
+      const t = thirds[tidx];
+      if (!t) return;
+      const match = MATCHES.find(m=>m.id===id);
+      if (!match) return;
+      match.away = t.name;
+      match.fA   = t.flag;
+    });
+  }
+
+  return p;
+}
+
 function updateGroupStandings(group) {
   // Read current input values for this group's matches
   const tempPalpites = state.user ? JSON.parse(JSON.stringify(state.palpites[state.user]||{})) : {};
@@ -1268,6 +1447,8 @@ function updateGroupStandings(group) {
       delete tempPalpites[m.id];
     }
   });
+  // Auto-fill knockout brackets
+  autoFillKnockout(tempPalpites);
   // Find and update the standings div for this group
   // Re-render just that group's standings
   const groups = {};
