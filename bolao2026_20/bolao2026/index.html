@@ -1225,7 +1225,7 @@ function renderMatches() {
   const locked = isPastDeadline();
   // Auto-fill knockout names from group standings
   if (state.user && state.palpites[state.user]) {
-    autoFillKnockout(state.palpites[state.user]);
+    buildResolvedTeams(state.palpites[state.user]);
   }
   const groups = {};
   MATCHES.forEach(m=>{ if(!groups[m.group]) groups[m.group]=[]; groups[m.group].push(m); });
@@ -1241,14 +1241,20 @@ function renderMatches() {
       const dis = locked?'disabled':'';
       const canViewMatch = isPastDeadline() && Object.keys(state.users).length > 0;
       const matchClick = canViewMatch ? `onclick="viewMatchPalpites('${m.id}')" style="cursor:pointer;"` : '';
+      // Use resolved team names/flags for knockout matches
+      const rt = resolvedTeams[m.id];
+      const dispHome = (rt?.home?.name) || m.home;
+      const dispFH   = (rt?.home?.flag) || m.fH;
+      const dispAway = (rt?.away?.name) || m.away;
+      const dispFA   = (rt?.away?.flag) || m.fA;
       html += `<div class="match-row" ${matchClick}>
-        <div class="team">${flagImg(m.fH)}<span>${m.home}</span></div>
+        <div class="team">${flagImg(dispFH)}<span>${dispHome}</span></div>
         <div class="score-inputs">
           <input class="score-inp" type="number" min="0" max="20" id="p_${m.id}_h" value="${p?.h??''}" placeholder="-" ${dis}/>
           <span class="score-sep">:</span>
           <input class="score-inp" type="number" min="0" max="20" id="p_${m.id}_a" value="${p?.a??''}" placeholder="-" ${dis}/>
         </div>
-        <div class="team" style="justify-content:flex-end;"><span style="text-align:right;">${m.away}</span>${flagImg(m.fA)}</div>
+        <div class="team" style="justify-content:flex-end;"><span style="text-align:right;">${dispAway}</span>${flagImg(dispFA)}</div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 8px;">
         <div style="display:flex;align-items:center;gap:8px;">
@@ -1347,92 +1353,52 @@ function getBest8Thirds(userPalpites) {
   return thirds.slice(0,8);
 }
 
-function autoFillKnockout(userPalpites) {
-  if (!userPalpites) return userPalpites;
-  const p = JSON.parse(JSON.stringify(userPalpites));
+// Resolved teams map: matchId -> {home:{name,flag}, away:{name,flag}}
+let resolvedTeams = {};
 
-  // Map group winners/runners-up to 32-avos matches
-  // Based on official Copa 2026 bracket
+function buildResolvedTeams(userPalpites) {
+  resolvedTeams = {};
+  if (!userPalpites) return;
+
+  // Official Copa 2026 bracket — 1st/2nd place matchups
   const bracket = [
-    // {matchId, homeGroup, homePos, awayGroup, awayPos}
-    // pos: 0=1st, 1=2nd, 2=third (from best thirds)
-    {id:'r32_1',  hg:'A', hp:1, ag:'B', ap:1},  // 2ºA x 2ºB
-    {id:'r32_3',  hg:'F', hp:0, ag:'C', ap:1},  // 1ºF x 2ºC
-    {id:'r32_4',  hg:'C', hp:0, ag:'F', ap:1},  // 1ºC x 2ºF
-    {id:'r32_6',  hg:'E', hp:1, ag:'I', ap:1},  // 2ºE x 2ºI
-    {id:'r32_7',  hg:'A', hp:0, ag:null},        // 1ºA x 3º (melhor)
-    {id:'r32_11', hg:'K', hp:1, ag:'L', ap:1},  // 2ºK x 2ºL
-    {id:'r32_12', hg:'H', hp:0, ag:'J', ap:1},  // 1ºH x 2ºJ
-    {id:'r32_14', hg:'J', hp:0, ag:'H', ap:1},  // 1ºJ x 2ºH
+    {id:'r32_1',  hg:'A', hp:1, ag:'B', ap:1},   // 2ºA x 2ºB
+    {id:'r32_2',  hg:'E', hp:0, ag:null,ap:null}, // 1ºE x 3º(best)
+    {id:'r32_3',  hg:'F', hp:0, ag:'C', ap:1},    // 1ºF x 2ºC
+    {id:'r32_4',  hg:'C', hp:0, ag:'F', ap:1},    // 1ºC x 2ºF
+    {id:'r32_5',  hg:'I', hp:0, ag:null,ap:null}, // 1ºI x 3º
+    {id:'r32_6',  hg:'E', hp:1, ag:'I', ap:1},    // 2ºE x 2ºI
+    {id:'r32_7',  hg:'A', hp:0, ag:null,ap:null}, // 1ºA x 3º
+    {id:'r32_8',  hg:'L', hp:0, ag:null,ap:null}, // 1ºL x 3º
+    {id:'r32_9',  hg:'D', hp:0, ag:null,ap:null}, // 1ºD x 3º
+    {id:'r32_10', hg:'G', hp:0, ag:null,ap:null}, // 1ºG x 3º
+    {id:'r32_11', hg:'K', hp:1, ag:'L', ap:1},    // 2ºK x 2ºL
+    {id:'r32_12', hg:'H', hp:0, ag:'J', ap:1},    // 1ºH x 2ºJ
+    {id:'r32_13', hg:'B', hp:0, ag:null,ap:null}, // 1ºB x 3º
+    {id:'r32_14', hg:'J', hp:0, ag:'H', ap:1},    // 1ºJ x 2ºH
+    {id:'r32_15', hg:'K', hp:0, ag:null,ap:null}, // 1ºK x 3º
+    {id:'r32_16', hg:'D', hp:1, ag:'G', ap:1},    // 2ºD x 2ºG
   ];
 
-  // Get best 8 thirds
-  const thirds = getBest8Thirds(p);
+  const thirds = getBest8Thirds(userPalpites);
+  let thirdIdx = 0;
 
-  // Auto-fill matches where we can determine teams
-  // For simplicity, fill matches where both teams are 1st/2nd place
-  const groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
-
-  // Fill all 32-avos that have clear 1st/2nd matchups
-  const clearMatchups = [
-    {id:'r32_1',  hg:'A', hp:1, ag:'B', ap:1},
-    {id:'r32_3',  hg:'F', hp:0, ag:'C', ap:1},
-    {id:'r32_4',  hg:'C', hp:0, ag:'F', ap:1},
-    {id:'r32_6',  hg:'E', hp:1, ag:'I', ap:1},
-    {id:'r32_11', hg:'K', hp:1, ag:'L', ap:1},
-    {id:'r32_12', hg:'H', hp:0, ag:'J', ap:1},
-    {id:'r32_14', hg:'J', hp:0, ag:'H', ap:1},
-    {id:'r32_2',  hg:'E', hp:0, ag:null, ap:null},  // 1ºE x 3º
-    {id:'r32_5',  hg:'I', hp:0, ag:null, ap:null},  // 1ºI x 3º
-    {id:'r32_8',  hg:'L', hp:0, ag:null, ap:null},  // 1ºL x 3º
-    {id:'r32_9',  hg:'D', hp:0, ag:null, ap:null},  // 1ºD x 3º
-    {id:'r32_10', hg:'G', hp:0, ag:null, ap:null},  // 1ºG x 3º
-    {id:'r32_13', hg:'B', hp:0, ag:null, ap:null},  // 1ºB x 3º
-    {id:'r32_15', hg:'K', hp:0, ag:null, ap:null},  // 1ºK x 3º
-    {id:'r32_16', hg:'D', hp:1, ag:'G', ap:1},      // 2ºD x 2ºG
-  ];
-
-  clearMatchups.forEach(({id, hg, hp, ag, ap}) => {
-    const hTeam = hg ? getGroupWinner(hg, hp, p) : null;
-    const aTeam = ag ? getGroupWinner(ag, ap, p) : null;
-
-    const match = MATCHES.find(m=>m.id===id);
-    if (!match) return;
-
-    // Update match home/away names and flags for display
-    if (hTeam) {
-      match.home = hTeam.name;
-      match.fH   = hTeam.flag;
+  bracket.forEach(({id, hg, hp, ag, ap}) => {
+    const entry = {};
+    if (hg) {
+      const t = getGroupWinner(hg, hp, userPalpites);
+      if (t && t.j > 0) entry.home = {name: t.name, flag: t.flag};
     }
-    if (aTeam) {
-      match.away = aTeam.name;
-      match.fA   = aTeam.flag;
+    if (ag) {
+      const t = getGroupWinner(ag, ap, userPalpites);
+      if (t && t.j > 0) entry.away = {name: t.name, flag: t.flag};
+    } else {
+      // Third place slot
+      const t = thirds[thirdIdx++];
+      if (t) entry.away = {name: t.name, flag: t.flag};
     }
+    if (entry.home || entry.away) resolvedTeams[id] = entry;
   });
-
-  // For 3rd place slots, use best thirds if available
-  if (thirds.length >= 8) {
-    const thirdMatchups = [
-      {id:'r32_7',  tidx:0},
-      {id:'r32_2',  tidx:1},
-      {id:'r32_5',  tidx:2},
-      {id:'r32_8',  tidx:3},
-      {id:'r32_9',  tidx:4},
-      {id:'r32_10', tidx:5},
-      {id:'r32_13', tidx:6},
-      {id:'r32_15', tidx:7},
-    ];
-    thirdMatchups.forEach(({id, tidx}) => {
-      const t = thirds[tidx];
-      if (!t) return;
-      const match = MATCHES.find(m=>m.id===id);
-      if (!match) return;
-      match.away = t.name;
-      match.fA   = t.flag;
-    });
-  }
-
-  return p;
 }
 
 function updateGroupStandings(group) {
@@ -1448,7 +1414,7 @@ function updateGroupStandings(group) {
     }
   });
   // Auto-fill knockout brackets
-  autoFillKnockout(tempPalpites);
+  buildResolvedTeams(tempPalpites);
   // Find and update the standings div for this group
   // Re-render just that group's standings
   const groups = {};
