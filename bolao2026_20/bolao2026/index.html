@@ -137,6 +137,11 @@ body{display:flex;flex-direction:column}
 /* CHART */
 .chart-wrap{overflow-x:auto}
 
+/* PENALTY SELECTOR */
+.penalty-selector { margin-top:6px; padding:8px 10px; background:rgba(245,197,24,0.08); border:1px solid rgba(245,197,24,0.2); border-radius:var(--radius-sm); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.penalty-label { font-size:11px; color:var(--gold); font-weight:600; letter-spacing:0.5px; flex-shrink:0; }
+.penalty-btn { padding:5px 12px; border-radius:50px; border:1px solid rgba(255,255,255,0.15); background:transparent; color:var(--light); font-size:12px; cursor:pointer; font-family:'Barlow',sans-serif; transition:all 0.15s; }
+.penalty-btn.selected { background:var(--gold); color:var(--navy); border-color:var(--gold); font-weight:700; }
 /* CLASSIFICATION TABLE */
 .classif-table { width:100%; border-collapse:collapse; margin-top:10px; font-size:12px; }
 .classif-table th { font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.5px; color:var(--gray); padding:4px 4px; text-align:center; border-bottom:1px solid rgba(255,255,255,0.08); }
@@ -1256,13 +1261,27 @@ function renderMatches() {
         </div>
         <div class="team" style="justify-content:flex-end;"><span style="text-align:right;">${dispAway}</span>${flagImg(dispFA)}</div>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 4px;">
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="status-pill ${statusClass}">${statusLabel}</span>
           <span style="font-size:11px;color:var(--gray);">${m.city||''}</span>
         </div>
         ${res?`<span style="font-size:12px;color:var(--gray);">Oficial: <b style="color:var(--gold);font-family:'Barlow Condensed';font-size:15px;">${res.h}:${res.a}</b></span>`:''}
-      </div>`;
+      </div>
+      ${(()=>{
+        if (m.phase !== 'knockout' || locked) return '';
+        const ph = document.getElementById('p_'+m.id+'_h')?.value;
+        const pa = document.getElementById('p_'+m.id+'_a')?.value;
+        const savedP = state.user && state.palpites[state.user]?.[m.id];
+        const hVal = ph !== undefined && ph !== '' ? +ph : (savedP?.h ?? '');
+        const aVal = pa !== undefined && pa !== '' ? +pa : (savedP?.a ?? '');
+        if (hVal === '' || aVal === '' || hVal !== aVal) return '';
+        const penWinner = savedP?.pen || '';
+        const hName = dispHome; const aName = dispAway;
+        const hSel = penWinner === 'H' ? 'selected' : '';
+        const aSel = penWinner === 'A' ? 'selected' : '';
+        return '<div class="penalty-selector"><span class="penalty-label">🥅 Pênaltis:</span><button class="penalty-btn '+hSel+'" onclick="setPenalty(''+m.id+'','H')">'+hName+'</button><button class="penalty-btn '+aSel+'" onclick="setPenalty(''+m.id+'','A')">'+aName+'</button></div>';
+      })()}`;
     });
     // Add standings table for group phase
     if (g.length === 1) { // single letter = group phase
@@ -1279,6 +1298,24 @@ function renderMatches() {
     const ia = document.getElementById('p_'+m.id+'_a');
     if (ih) ih.addEventListener('input', ()=>updateGroupStandings(m.group));
     if (ia) ia.addEventListener('input', ()=>updateGroupStandings(m.group));
+  });
+  // Add listeners for knockout matches to show penalty selector on draw
+  MATCHES.filter(m=>m.phase==='knockout').forEach(m=>{
+    const ih = document.getElementById('p_'+m.id+'_h');
+    const ia = document.getElementById('p_'+m.id+'_a');
+    const refresh = () => {
+      // Rebuild resolved teams with current inputs
+      const tempP = state.user ? JSON.parse(JSON.stringify(state.palpites[state.user]||{})) : {};
+      MATCHES.filter(x=>x.phase==='knockout').forEach(x=>{
+        const h = document.getElementById('p_'+x.id+'_h')?.value;
+        const a = document.getElementById('p_'+x.id+'_a')?.value;
+        if (h!==''&&a!=='') { if(!tempP[x.id]) tempP[x.id]={}; tempP[x.id].h=+h; tempP[x.id].a=+a; }
+      });
+      buildResolvedTeams(tempP);
+      renderMatches();
+    };
+    if (ih) ih.addEventListener('input', refresh);
+    if (ia) ia.addEventListener('input', refresh);
   });
 
   // Progress counter
@@ -1399,6 +1436,76 @@ function buildResolvedTeams(userPalpites) {
     }
     if (entry.home || entry.away) resolvedTeams[id] = entry;
   });
+
+  // Helper: get winner of a knockout match from palpites
+  function knockoutWinner(matchId) {
+    const p = userPalpites[matchId];
+    if (!p || p.h === undefined || p.a === undefined) return null;
+    const rt = resolvedTeams[matchId];
+    if (!rt) return null;
+    if (p.h > p.a) return rt.home || null;
+    if (p.a > p.h) return rt.away || null;
+    // Draw — use penalty winner if set
+    if (p.pen === 'H') return rt.home || null;
+    if (p.pen === 'A') return rt.away || null;
+    return null; // Draw with no penalty winner yet — don't advance
+  }
+
+  // OITAVAS: winners of 32-avos advance
+  // Official bracket pairing for oitavas
+  const r16Bracket = [
+    {id:'r16_1', hm:'r32_2', am:'r32_5'},   // J74 x J77
+    {id:'r16_2', hm:'r32_1', am:'r32_3'},   // J73 x J75
+    {id:'r16_3', hm:'r32_4', am:'r32_6'},   // J76 x J78
+    {id:'r16_4', hm:'r32_7', am:'r32_8'},   // J79 x J80
+    {id:'r16_5', hm:'r32_11',am:'r32_12'},  // J83 x J84
+    {id:'r16_6', hm:'r32_9', am:'r32_10'},  // J81 x J82
+    {id:'r16_7', hm:'r32_14',am:'r32_16'},  // J86 x J88
+    {id:'r16_8', hm:'r32_13',am:'r32_15'},  // J85 x J87
+  ];
+  r16Bracket.forEach(({id, hm, am}) => {
+    const h = knockoutWinner(hm), a = knockoutWinner(am);
+    if (h || a) resolvedTeams[id] = {home: h||null, away: a||null};
+  });
+
+  // QUARTAS: winners of oitavas advance
+  const qfBracket = [
+    {id:'qf_1', hm:'r16_1', am:'r16_2'},
+    {id:'qf_2', hm:'r16_5', am:'r16_6'},
+    {id:'qf_3', hm:'r16_3', am:'r16_4'},
+    {id:'qf_4', hm:'r16_7', am:'r16_8'},
+  ];
+  qfBracket.forEach(({id, hm, am}) => {
+    const h = knockoutWinner(hm), a = knockoutWinner(am);
+    if (h || a) resolvedTeams[id] = {home: h||null, away: a||null};
+  });
+
+  // SEMIFINAIS: winners of quartas advance
+  const sfBracket = [
+    {id:'sf_1', hm:'qf_1', am:'qf_2'},
+    {id:'sf_2', hm:'qf_3', am:'qf_4'},
+  ];
+  sfBracket.forEach(({id, hm, am}) => {
+    const h = knockoutWinner(hm), a = knockoutWinner(am);
+    if (h || a) resolvedTeams[id] = {home: h||null, away: a||null};
+  });
+
+  // TERCEIRO LUGAR: losers of semifinais
+  function knockoutLoser(matchId) {
+    const p = userPalpites[matchId];
+    if (!p || p.h === undefined || p.a === undefined) return null;
+    const rt = resolvedTeams[matchId];
+    if (!rt) return null;
+    if (p.h > p.a) return rt.away || null;
+    if (p.a > p.h) return rt.home || null;
+    return rt.home || null;
+  }
+  const h3 = knockoutLoser('sf_1'), a3 = knockoutLoser('sf_2');
+  if (h3 || a3) resolvedTeams['third'] = {home: h3||null, away: a3||null};
+
+  // FINAL: winners of semifinais
+  const hf = knockoutWinner('sf_1'), af = knockoutWinner('sf_2');
+  if (hf || af) resolvedTeams['final'] = {home: hf||null, away: af||null};
 }
 
 function updateGroupStandings(group) {
@@ -1436,6 +1543,20 @@ function updateGroupStandings(group) {
       if (ia) ia.addEventListener('input', ()=>updateGroupStandings(group));
     });
   }
+}
+
+function setPenalty(matchId, winner) {
+  if (!state.user) { openModal('login'); return; }
+  if (isPastDeadline()) return;
+  if (!state.palpites[state.user]) state.palpites[state.user] = {};
+  if (!state.palpites[state.user][matchId]) state.palpites[state.user][matchId] = {};
+  state.palpites[state.user][matchId].pen = winner;
+  // Save to draft locally
+  const draft = JSON.parse(localStorage.getItem('bolao_draft_'+state.user)||'{}');
+  if (draft[matchId]) draft[matchId].pen = winner;
+  localStorage.setItem('bolao_draft_'+state.user, JSON.stringify(draft));
+  // Re-render just the match row area
+  renderMatches();
 }
 
 function saveDraft() {
@@ -1484,7 +1605,12 @@ async function savePalpites() {
   MATCHES.forEach(m=>{
     const h=document.getElementById('p_'+m.id+'_h')?.value;
     const a=document.getElementById('p_'+m.id+'_a')?.value;
-    if(h!==''&&a!=='') temp[m.id]={h:+h,a:+a};
+    if(h!==''&&a!=='') {
+      temp[m.id]={h:+h,a:+a};
+      // Preserve penalty winner if already set
+      const existing = state.palpites[state.user]?.[m.id];
+      if (existing?.pen && +h===+a) temp[m.id].pen = existing.pen;
+    }
   });
   const missingM = MATCHES.filter(m=>!temp[m.id]);
   const savedQA = state.palpites[state.user]?._qa||{};
