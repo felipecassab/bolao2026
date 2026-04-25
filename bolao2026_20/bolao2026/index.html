@@ -1143,7 +1143,7 @@ function calcGroupStandings(group, userPalpites) {
 
 function renderGroupStandings(group, userPalpites) {
   const standings = calcGroupStandings(group, userPalpites);
-  if (standings.every(t => t.j === 0)) return ''; // no palpites yet
+  // Always show table, even when zeroed
   let html = '<div class="classif-wrap">';
   html += '<div class="classif-title">CLASSIFICAÇÃO PREVISTA — GRUPO ' + group + '</div>';
   html += '<table class="classif-table"><thead><tr>';
