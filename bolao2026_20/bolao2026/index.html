@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Bolão 2026"/>
 <link rel="manifest" href="manifest.json"/>
-<link rel="apple-touch-icon" href="icons/icon-192.png"/>
+<link rel="apple-touch-icon" href="icons/icon-180.png"/>
 <title>Bolão Copa 2026</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -137,6 +137,20 @@ body{display:flex;flex-direction:column}
 /* CHART */
 .chart-wrap{overflow-x:auto}
 
+/* CLASSIFICATION TABLE */
+.classif-table { width:100%; border-collapse:collapse; margin-top:10px; font-size:12px; }
+.classif-table th { font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.5px; color:var(--gray); padding:4px 4px; text-align:center; border-bottom:1px solid rgba(255,255,255,0.08); }
+.classif-table th:first-child { text-align:left; }
+.classif-table td { padding:5px 4px; text-align:center; color:var(--light); border-bottom:1px solid rgba(255,255,255,0.04); font-family:'Barlow Condensed',sans-serif; font-size:13px; }
+.classif-table td:first-child { text-align:left; font-family:'Barlow',sans-serif; font-size:12px; display:flex; align-items:center; gap:5px; }
+.classif-table tr:last-child td { border-bottom:none; }
+.classif-table tr.top2 td { color:var(--white); }
+.classif-table tr.top2 td:nth-child(2) { color:var(--gold); font-weight:700; }
+.classif-pos { width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; flex-shrink:0; font-family:'Barlow Condensed',sans-serif; }
+.classif-pos.q { background:var(--gold); color:var(--navy); }
+.classif-pos.out { background:rgba(255,255,255,0.08); color:var(--gray); }
+.classif-wrap { background:var(--card2); border-radius:var(--radius-sm); padding:8px 10px; margin-top:8px; }
+.classif-title { font-size:10px; font-weight:700; color:var(--gold); letter-spacing:1.5px; margin-bottom:4px; font-family:'Barlow Condensed',sans-serif; }
 /* MATCH PALPITES MODAL */
 .match-modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:8500; align-items:flex-end; justify-content:center; }
 .match-modal-bg.open { display:flex; }
@@ -1097,6 +1111,61 @@ function flagImg(code, cls='flag') {
   if (code==='un') return '<span style="font-size:16px;">🏳️</span>';
   return `<img class="${cls}" src="https://flagcdn.com/w40/${code}.png" onerror="this.style.display='none'"/>`;
 }
+function calcGroupStandings(group, userPalpites) {
+  const matches = MATCHES.filter(m => m.group === group && m.phase === 'group');
+  // Collect all teams in this group
+  const teams = {};
+  matches.forEach(m => {
+    if (!teams[m.home]) teams[m.home] = {name:m.home, flag:m.fH, pt:0,j:0,v:0,e:0,d:0,gp:0,gc:0};
+    if (!teams[m.away]) teams[m.away] = {name:m.away, flag:m.fA, pt:0,j:0,v:0,e:0,d:0,gp:0,gc:0};
+  });
+  // Apply palpites
+  matches.forEach(m => {
+    const p = userPalpites?.[m.id];
+    if (!p || p.h === undefined || p.a === undefined) return;
+    const th = teams[m.home], ta = teams[m.away];
+    th.j++; ta.j++;
+    th.gp += p.h; th.gc += p.a;
+    ta.gp += p.a; ta.gc += p.h;
+    if (p.h > p.a)      { th.v++; th.pt+=3; ta.d++; }
+    else if (p.h < p.a) { ta.v++; ta.pt+=3; th.d++; }
+    else                 { th.e++; th.pt++; ta.e++; ta.pt++; }
+  });
+  // Sort: PT > SG > GP > name
+  return Object.values(teams).sort((a,b) => {
+    if (b.pt !== a.pt) return b.pt - a.pt;
+    const sgA = a.gp-a.gc, sgB = b.gp-b.gc;
+    if (sgB !== sgA) return sgB - sgA;
+    if (b.gp !== a.gp) return b.gp - a.gp;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function renderGroupStandings(group, userPalpites) {
+  const standings = calcGroupStandings(group, userPalpites);
+  if (standings.every(t => t.j === 0)) return ''; // no palpites yet
+  let html = '<div class="classif-wrap">';
+  html += '<div class="classif-title">CLASSIFICAÇÃO PREVISTA — GRUPO ' + group + '</div>';
+  html += '<table class="classif-table"><thead><tr>';
+  html += '<th style="width:35%;">Seleção</th><th>PT</th><th>J</th><th>V</th><th>E</th><th>D</th><th>GP</th><th>GC</th><th>SG</th>';
+  html += '</tr></thead><tbody>';
+  standings.forEach((t,i) => {
+    const isTop2 = i < 2;
+    const sg = t.gp - t.gc;
+    html += `<tr class="${isTop2?'top2':''}">
+      <td>
+        <span class="classif-pos ${isTop2?'q':'out'}">${i+1}</span>
+        <img src="https://flagcdn.com/w20/${t.flag}.png" style="width:16px;height:11px;border-radius:1px;object-fit:cover;" onerror="this.style.display='none'"/>
+        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70px;">${t.name}</span>
+      </td>
+      <td>${t.pt}</td><td>${t.j}</td><td>${t.v}</td><td>${t.e}</td><td>${t.d}</td>
+      <td>${t.gp}</td><td>${t.gc}</td><td style="color:${sg>0?'var(--green)':sg<0?'var(--red)':'var(--gray)'};">${sg>0?'+':''}${sg}</td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
 function renderMatches() {
   const locked = isPastDeadline();
   const groups = {};
@@ -1130,9 +1199,22 @@ function renderMatches() {
         ${res?`<span style="font-size:12px;color:var(--gray);">Oficial: <b style="color:var(--gold);font-family:'Barlow Condensed';font-size:15px;">${res.h}:${res.a}</b></span>`:''}
       </div>`;
     });
+    // Add standings table for group phase
+    if (g.length === 1) { // single letter = group phase
+      const p = state.user ? state.palpites[state.user] : {};
+      html += renderGroupStandings(g, p);
+    }
     html += '</div></div>';
   });
   document.getElementById('matches-container').innerHTML = html;
+  
+  // Add live update listeners to score inputs
+  MATCHES.filter(m=>m.phase==='group').forEach(m=>{
+    const ih = document.getElementById('p_'+m.id+'_h');
+    const ia = document.getElementById('p_'+m.id+'_a');
+    if (ih) ih.addEventListener('input', ()=>updateGroupStandings(m.group));
+    if (ia) ia.addEventListener('input', ()=>updateGroupStandings(m.group));
+  });
 
   // Progress counter
   const filled = MATCHES.filter(m=>{ const h=document.getElementById('p_'+m.id+'_h')?.value; const a=document.getElementById('p_'+m.id+'_a')?.value; return h!==''&&a!==''; }).length;
@@ -1174,6 +1256,41 @@ function renderMatches() {
 // ═══════════════════════════════════════════════════════════════════
 // SAVE PALPITES
 // ═══════════════════════════════════════════════════════════════════
+function updateGroupStandings(group) {
+  // Read current input values for this group's matches
+  const tempPalpites = state.user ? JSON.parse(JSON.stringify(state.palpites[state.user]||{})) : {};
+  MATCHES.filter(m=>m.group===group&&m.phase==='group').forEach(m=>{
+    const h = document.getElementById('p_'+m.id+'_h')?.value;
+    const a = document.getElementById('p_'+m.id+'_a')?.value;
+    if (h!==''&&h!==undefined&&a!==''&&a!==undefined) {
+      tempPalpites[m.id] = {h:+h, a:+a};
+    } else {
+      delete tempPalpites[m.id];
+    }
+  });
+  // Find and update the standings div for this group
+  // Re-render just that group's standings
+  const groups = {};
+  MATCHES.forEach(m=>{ if(!groups[m.group]) groups[m.group]=[]; groups[m.group].push(m); });
+  // Find all cards and update the one matching this group
+  const cards = document.querySelectorAll('#matches-container .classif-wrap');
+  const allGroups = [...new Set(MATCHES.filter(m=>m.phase==='group').map(m=>m.group))];
+  const idx = allGroups.indexOf(group);
+  if (cards[idx]) {
+    const newHtml = renderGroupStandings(group, tempPalpites);
+    const tmp = document.createElement('div');
+    tmp.innerHTML = newHtml;
+    cards[idx].outerHTML = tmp.firstChild ? tmp.firstChild.outerHTML : '';
+    // Re-attach listeners for this group
+    MATCHES.filter(m=>m.group===group&&m.phase==='group').forEach(m=>{
+      const ih = document.getElementById('p_'+m.id+'_h');
+      const ia = document.getElementById('p_'+m.id+'_a');
+      if (ih) ih.addEventListener('input', ()=>updateGroupStandings(group));
+      if (ia) ia.addEventListener('input', ()=>updateGroupStandings(group));
+    });
+  }
+}
+
 function saveDraft() {
   if (!state.user) { openModal('login'); return; }
   if (isPastDeadline()) { showToast('Prazo encerrado!', true); return; }
