@@ -115,7 +115,7 @@ body{display:flex;flex-direction:column}
 /* MODAL AUTH */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:8000;align-items:flex-end;justify-content:center;padding:0}
 .modal-bg.open{display:flex}
-.modal-box{background:var(--navy2);border-radius:24px 24px 0 0;padding:24px 20px calc(24px + var(--safe-bot));width:100%;max-width:480px;border-top:1px solid rgba(255,255,255,0.1);max-height:90vh;overflow-y:auto}
+.modal-box{background:var(--navy2);border-radius:24px 24px 0 0;padding:24px 20px calc(24px + var(--safe-bot));width:100%;max-width:480px;border-top:1px solid rgba(255,255,255,0.1);max-height:90vh;overflow-y:auto;position:relative;z-index:1}
 .modal-handle{width:40px;height:4px;background:rgba(255,255,255,0.2);border-radius:2px;margin:0 auto 20px}
 .modal-title{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;color:var(--gold);margin-bottom:4px}
 .modal-sub{font-size:13px;color:var(--gray);margin-bottom:18px;line-height:1.4}
@@ -370,14 +370,14 @@ body{display:flex;flex-direction:column}
         </div>
         <span style="margin-left:auto;color:var(--gray);">›</span>
       </button>
-      <button onclick="doLogout()" style="width:100%;display:flex;align-items:center;gap:12px;padding:14px;background:rgba(244,67,54,0.08);border:1px solid rgba(244,67,54,0.2);border-radius:var(--radius-sm);cursor:pointer;text-align:left;">
+      <div onclick="doLogout()" style="width:100%;display:flex;align-items:center;gap:12px;padding:14px;background:rgba(244,67,54,0.08);border:1px solid rgba(244,67,54,0.2);border-radius:var(--radius-sm);cursor:pointer;text-align:left;-webkit-tap-highlight-color:rgba(244,67,54,0.2);">
         <span style="font-size:20px;">🚪</span>
-        <div>
+        <div style="pointer-events:none;">
           <p style="font-size:14px;font-weight:500;color:var(--red);">Sair da conta</p>
           <p style="font-size:12px;color:var(--gray);margin-top:1px;">Encerrar sessão no app</p>
         </div>
-        <span style="margin-left:auto;color:var(--gray);">›</span>
-      </button>
+        <span style="margin-left:auto;color:var(--gray);pointer-events:none;">›</span>
+      </div>
     </div>
 
     <!-- Edit name view -->
@@ -1401,6 +1401,19 @@ function adminLogin() {
     renderAdminGames(); renderAdminTabs(); renderAdminParticipants();
   } else { showToast('Senha incorreta',true); document.getElementById('admin-pwd').value=''; }
 }
+function confirmLogout() { doLogout(); }
+function doLogout() {
+  const pm = document.getElementById('profile-modal');
+  if (pm) { pm.classList.remove('open'); pm.style.display='none'; }
+  state.user = null;
+  localStorage.removeItem('bolao_user');
+  updateHeader();
+  setTimeout(() => {
+    if (pm) pm.style.display='';
+    openModal('login');
+  }, 150);
+}
+
 function adminLogout() {
   adminAuthed=false;
   document.getElementById('admin-login-view').style.display='block';
