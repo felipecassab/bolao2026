@@ -334,8 +334,9 @@ body{display:flex;flex-direction:column}
   <button class="nav-btn" id="nav-regras" onclick="showPage('regras',this)">
     <svg viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Regras
   </button>
-  <button class="nav-btn" id="nav-admin" onclick="showPage('admin',this)">
-    <svg viewBox="0 0 24 24"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>Admin
+  <button class="nav-btn" id="nav-admin" onclick="showPage('admin',this)" style="position:relative;">
+    <svg viewBox="0 0 24 24"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+    Admin<span id="admin-badge" style="display:none;position:absolute;top:6px;right:8px;background:#f44336;color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:50%;display:none;align-items:center;justify-content:center;padding:0 3px;font-family:'Barlow Condensed',sans-serif;"></span>
   </button>
 </nav>
 
@@ -859,6 +860,7 @@ function startPolling() {
       }
       renderRanking();
       renderHistorico();
+      updateAdminBadge();
     } catch(e) {}
   }, 60000);
 }
@@ -1017,6 +1019,24 @@ function renderAll() {
   renderRanking();
   renderHistorico();
   updateDeadlinePill();
+  updateAdminBadge();
+}
+
+function updateAdminBadge() {
+  const badge = document.getElementById('admin-badge');
+  if (!badge) return;
+  // Only show badge if current user is admin (has admin password stored)
+  if (!adminAuthed && localStorage.getItem('bolao_admin') !== 'true') {
+    badge.style.display = 'none';
+    return;
+  }
+  const pending = Object.values(state.users).filter(u => u.status === 'pending').length;
+  if (pending > 0) {
+    badge.style.display = 'flex';
+    badge.textContent = pending > 9 ? '9+' : pending;
+  } else {
+    badge.style.display = 'none';
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1396,6 +1416,7 @@ function renderPremiacao() {
 function adminLogin() {
   if (document.getElementById('admin-pwd').value===ADMIN_PWD) {
     adminAuthed=true;
+    localStorage.setItem('bolao_admin','true');
     document.getElementById('admin-login-view').style.display='none';
     document.getElementById('admin-main-view').style.display='block';
     renderAdminGames(); renderAdminTabs(); renderAdminParticipants();
@@ -1416,9 +1437,11 @@ function doLogout() {
 
 function adminLogout() {
   adminAuthed=false;
+  localStorage.removeItem('bolao_admin');
   document.getElementById('admin-login-view').style.display='block';
   document.getElementById('admin-main-view').style.display='none';
   document.getElementById('admin-pwd').value='';
+  updateAdminBadge();
 }
 function renderAdminPage() {
   if (!adminAuthed) { document.getElementById('admin-login-view').style.display='block'; document.getElementById('admin-main-view').style.display='none'; }
@@ -1528,6 +1551,7 @@ async function adminApprove(wpp) {
   await saveGlobal();
   showToast(state.users[wpp].name.split(' ')[0] + ' aprovado! ✓');
   renderAdminParticipants();
+  updateAdminBadge();
 }
 
 async function adminReject(wpp) {
