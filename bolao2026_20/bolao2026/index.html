@@ -136,6 +136,29 @@ body{display:flex;flex-direction:column}
 .prog-bar-fill{height:6px;border-radius:4px;background:var(--gold);transition:width 0.3s}
 /* CHART */
 .chart-wrap{overflow-x:auto}
+/* FLOATING SAVE BUTTON */
+.float-save {
+  position: fixed;
+  bottom: calc(70px + var(--safe-bot));
+  right: 16px;
+  z-index: 500;
+  background: var(--navy3);
+  color: var(--light);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 50px;
+  padding: 10px 18px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  transition: opacity 0.2s;
+}
+.float-save:active { opacity: 0.8; }
 /* GROUP STANDINGS */
 .classif-wrap{background:var(--card2);border-radius:var(--radius-sm);padding:8px 10px;margin-top:8px;}
 .classif-title{font-size:10px;font-weight:700;color:var(--gold);letter-spacing:1.5px;margin-bottom:4px;font-family:'Barlow Condensed',sans-serif;}
@@ -542,6 +565,11 @@ body{display:flex;flex-direction:column}
     <div id="viewer-content"></div>
   </div>
 </div>
+
+<!-- FLOATING SAVE BUTTON -->
+<button class="float-save" id="float-save-btn" onclick="saveDraft()">
+  💾 Salvar rascunho
+</button>
 
 <!-- LOADING SCREEN -->
 <div id="loading-screen" style="display:none;position:fixed;inset:0;background:var(--navy);z-index:9999;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
@@ -1332,6 +1360,15 @@ function showPage(page, btn) {
   if (page==='premiacao') renderPremiacao();
   if (page==='extras') renderExtras();
   if (page==='admin') renderAdminPage();
+  // Show float button only on palpites page
+  updateFloatBtn(page);
+}
+
+function updateFloatBtn(page) {
+  var btn = document.getElementById('float-save-btn');
+  if (!btn) return;
+  var show = (page === 'palpites') && state.user && !isPastDeadline();
+  btn.style.display = show ? 'flex' : 'none';
 }
 function renderAll() {
   // Only render matches if no inputs are currently filled (user not actively typing)
@@ -1570,6 +1607,9 @@ function renderMatches() {
       <button class="btn-primary" onclick="saveDraft()" style="background:var(--navy3);color:var(--light);border:1px solid rgba(255,255,255,0.2);margin-bottom:10px;">
         💾 SALVAR RASCUNHO
       </button>
+      <button class="btn-primary" onclick="syncDraft()" style="background:var(--navy3);color:#7eb8f5;border:1px solid rgba(126,184,245,0.3);margin-bottom:10px;">
+        🔄 SINCRONIZAR COM OUTROS DISPOSITIVOS
+      </button>
       <button class="btn-primary" onclick="savePalpites()" style="margin-bottom:10px;">
         ✅ ENVIAR PALPITES À COMISSÃO
       </button>
@@ -1593,6 +1633,39 @@ function renderMatches() {
 // ═══════════════════════════════════════════════════════════════════
 // SAVE PALPITES
 // ═══════════════════════════════════════════════════════════════════
+async function syncDraft() {
+  if (!state.user) { openModal('login'); return; }
+  if (isPastDeadline()) { showToast('Prazo encerrado!', true); return; }
+  // Read all current input values from DOM
+  const temp = {};
+  MATCHES.forEach(m => {
+    const h = document.getElementById('p_'+m.id+'_h')?.value;
+    const a = document.getElementById('p_'+m.id+'_a')?.value;
+    if (h !== '' && a !== '') {
+      temp[m.id] = {h:+h, a:+a};
+      // Preserve penalty if set
+      const existing = state.palpites[state.user]?.[m.id];
+      if (existing?.pen && +h === +a) temp[m.id].pen = existing.pen;
+    }
+  });
+  // Merge with existing saved palpites (don't overwrite what was already saved)
+  if (!state.palpites[state.user]) state.palpites[state.user] = {};
+  Object.assign(state.palpites[state.user], temp);
+  // Save local draft too
+  localStorage.setItem('bolao_draft_' + state.user, JSON.stringify(state.palpites[state.user]));
+  localStorage.setItem('bolao_draft_time_' + state.user, new Date().toISOString());
+  // Save to Firebase
+  try {
+    showToast('Sincronizando...');
+    await saveGlobal();
+    const count = Object.keys(temp).length;
+    showToast('✓ ' + count + ' palpites sincronizados! Acesse de qualquer dispositivo.');
+    renderMatches();
+  } catch(e) {
+    showToast('Erro ao sincronizar. Verifique sua conexão.', true);
+  }
+}
+
 function clearPalpites() {
   if (!state.user) { openModal('login'); return; }
   if (isPastDeadline()) { showToast('Prazo encerrado!', true); return; }
