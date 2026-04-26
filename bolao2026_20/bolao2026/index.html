@@ -1034,7 +1034,10 @@ function renderAll() {
     const h = document.getElementById('p_'+m.id+'_h');
     return h && h.value !== '';
   });
-  if (!hasFilledInput) renderMatches();
+  if (!hasFilledInput) {
+    renderMatches();
+
+  }
   renderRanking();
   renderHistorico();
   updateDeadlinePill();
@@ -1226,16 +1229,12 @@ function renderGroupStandings(group, userPalpites) {
   return html;
 }
 
-function renderPenaltySelector(matchId, homeName, awayName, locked) {
+function renderPenaltySelector(matchId, homeName, awayName, locked, savedP) {
   const m = MATCHES.find(x=>x.id===matchId);
   if (!m || m.phase !== 'knockout' || locked) return '';
-  const ph = document.getElementById('p_'+matchId+'_h')?.value;
-  const pa = document.getElementById('p_'+matchId+'_a')?.value;
-  const savedP = state.user && state.palpites[state.user]?.[matchId];
-  const hVal = (ph !== undefined && ph !== '') ? +ph : (savedP?.h ?? '');
-  const aVal = (pa !== undefined && pa !== '') ? +pa : (savedP?.a ?? '');
-  if (hVal === '' || aVal === '' || +hVal !== +aVal) return '';
-  const penWinner = savedP?.pen || '';
+  if (!savedP || savedP.h === undefined || savedP.a === undefined) return '';
+  if (+savedP.h !== +savedP.a) return '';
+  const penWinner = savedP.pen || '';
   const hSel = penWinner === 'H' ? ' selected' : '';
   const aSel = penWinner === 'A' ? ' selected' : '';
   return '<div class="penalty-selector">' +
@@ -1245,84 +1244,103 @@ function renderPenaltySelector(matchId, homeName, awayName, locked) {
     '</div>';
 }
 
-let _renderingMatches = false;
 function renderMatches() {
-  if (_renderingMatches) return;
-  _renderingMatches = true;
-  try {
   const locked = isPastDeadline();
-  // Auto-fill knockout names from group standings
+
+  // Build resolved teams for knockout display
   if (state.user && state.palpites[state.user]) {
     buildResolvedTeams(state.palpites[state.user]);
   }
-  const groups = {};
-  MATCHES.forEach(m=>{ if(!groups[m.group]) groups[m.group]=[]; groups[m.group].push(m); });
-  let html = locked ? `<div style="background:rgba(244,67,54,0.1);border:1px solid rgba(244,67,54,0.3);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">🔒</span><div><p style="font-size:13px;font-weight:600;color:var(--red);">Palpites encerrados</p><p style="font-size:12px;color:var(--gray);margin-top:2px;">Prazo encerrado em 10/06 às 23h59.</p></div></div>` : '';
 
-  Object.keys(groups).forEach(g=>{
-    html += `<div class="card"><div class="card-header"><span class="group-label">${g.length<=1?'Grupo ':''}${g}</span></div><div class="card-body">`;
-    groups[g].forEach(m=>{
-      const p = state.user && state.palpites[state.user]?.[m.id];
+  const groups = {};
+  MATCHES.forEach(m => { if (!groups[m.group]) groups[m.group] = []; groups[m.group].push(m); });
+
+  let html = locked
+    ? '<div style="background:rgba(244,67,54,0.1);border:1px solid rgba(244,67,54,0.3);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">🔒</span><div><p style="font-size:13px;font-weight:600;color:var(--red);">Palpites encerrados</p><p style="font-size:12px;color:var(--gray);margin-top:2px;">Prazo encerrado em 10/06 às 23h59.</p></div></div>'
+    : '';
+
+  Object.keys(groups).forEach(g => {
+    html += '<div class="card"><div class="card-header"><span class="group-label">' + (g.length <= 1 ? 'Grupo ' : '') + g + '</span></div><div class="card-body">';
+    groups[g].forEach(m => {
+      const p = state.user && state.palpites[state.user] && state.palpites[state.user][m.id];
       const res = state.results[m.id];
-      const statusClass = res?'pill-done':m.status==='live'?'pill-live':'pill-upcoming';
-      const statusLabel = res?'Encerrado':m.status==='live'?'AO VIVO':m.date;
-      const dis = locked?'disabled':'';
+      const statusClass = res ? 'pill-done' : m.status === 'live' ? 'pill-live' : 'pill-upcoming';
+      const statusLabel = res ? 'Encerrado' : m.status === 'live' ? 'AO VIVO' : m.date;
+      const dis = locked ? 'disabled' : '';
       const canViewMatch = isPastDeadline() && Object.keys(state.users).length > 0;
-      const matchClick = canViewMatch ? `onclick="viewMatchPalpites('${m.id}')" style="cursor:pointer;"` : '';
-      // Use resolved team names/flags for knockout matches
+      const matchClick = canViewMatch ? 'onclick="viewMatchPalpites('' + m.id + '')" style="cursor:pointer;"' : '';
+
       const rt = resolvedTeams[m.id];
-      const dispHome = (rt?.home?.name) || m.home;
-      const dispFH   = (rt?.home?.flag) || m.fH;
-      const dispAway = (rt?.away?.name) || m.away;
-      const dispFA   = (rt?.away?.flag) || m.fA;
-      html += `<div class="match-row" ${matchClick}>
-        <div class="team">${flagImg(dispFH)}<span>${dispHome}</span></div>
-        <div class="score-inputs">
-          <input class="score-inp" type="number" min="0" max="20" id="p_${m.id}_h" value="${p?.h??''}" placeholder="-" ${dis}/>
-          <span class="score-sep">:</span>
-          <input class="score-inp" type="number" min="0" max="20" id="p_${m.id}_a" value="${p?.a??''}" placeholder="-" ${dis}/>
-        </div>
-        <div class="team" style="justify-content:flex-end;"><span style="text-align:right;">${dispAway}</span>${flagImg(dispFA)}</div>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 4px;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span class="status-pill ${statusClass}">${statusLabel}</span>
-          <span style="font-size:11px;color:var(--gray);">${m.city||''}</span>
-        </div>
-        ${res?`<span style="font-size:12px;color:var(--gray);">Oficial: <b style="color:var(--gold);font-family:'Barlow Condensed';font-size:15px;">${res.h}:${res.a}</b></span>`:''}
-      </div>
-      ${renderPenaltySelector(m.id, dispHome, dispAway, locked)}`;
+      const dispHome = (rt && rt.home && rt.home.name) ? rt.home.name : m.home;
+      const dispFH   = (rt && rt.home && rt.home.flag) ? rt.home.flag : m.fH;
+      const dispAway = (rt && rt.away && rt.away.name) ? rt.away.name : m.away;
+      const dispFA   = (rt && rt.away && rt.away.flag) ? rt.away.flag : m.fA;
+
+      html += '<div class="match-row" ' + matchClick + '>';
+      html += '<div class="team">' + flagImg(dispFH) + '<span>' + dispHome + '</span></div>';
+      html += '<div class="score-inputs">';
+      html += '<input class="score-inp" type="number" min="0" max="20" id="p_' + m.id + '_h" value="' + (p ? p.h : '') + '" placeholder="-" ' + dis + '/>';
+      html += '<span class="score-sep">:</span>';
+      html += '<input class="score-inp" type="number" min="0" max="20" id="p_' + m.id + '_a" value="' + (p ? p.a : '') + '" placeholder="-" ' + dis + '/>';
+      html += '</div>';
+      html += '<div class="team" style="justify-content:flex-end;"><span style="text-align:right;">' + dispAway + '</span>' + flagImg(dispFA) + '</div>';
+      html += '</div>';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 4px;">';
+      html += '<div style="display:flex;align-items:center;gap:8px;">';
+      html += '<span class="status-pill ' + statusClass + '">' + statusLabel + '</span>';
+      html += '<span style="font-size:11px;color:var(--gray);">' + (m.city || '') + '</span>';
+      html += '</div>';
+      if (res) html += '<span style="font-size:12px;color:var(--gray);">Oficial: <b style="color:var(--gold);font-family:'Barlow Condensed';font-size:15px;">' + res.h + ':' + res.a + '</b></span>';
+      html += '</div>';
+      html += renderPenaltySelector(m.id, dispHome, dispAway, locked, p);
     });
-    // Add standings table for group phase
-    if (g.length === 1) { // single letter = group phase
-      const p = state.user ? state.palpites[state.user] : {};
-      html += renderGroupStandings(g, p);
+
+    // Group standings table
+    if (g.length === 1) {
+      const userP = state.user ? (state.palpites[state.user] || {}) : {};
+      html += renderGroupStandings(g, userP);
     }
     html += '</div></div>';
   });
+
   document.getElementById('matches-container').innerHTML = html;
-  
-  // Add live update listeners to score inputs
-  MATCHES.filter(m=>m.phase==='group').forEach(m=>{
-    const ih = document.getElementById('p_'+m.id+'_h');
-    const ia = document.getElementById('p_'+m.id+'_a');
-    if (ih) ih.addEventListener('input', ()=>updateGroupStandings(m.group));
-    if (ia) ia.addEventListener('input', ()=>updateGroupStandings(m.group));
+
+  // Add group listeners
+  MATCHES.filter(m => m.phase === 'group').forEach(m => {
+    const ih = document.getElementById('p_' + m.id + '_h');
+    const ia = document.getElementById('p_' + m.id + '_a');
+    if (ih) ih.addEventListener('input', () => updateGroupStandings(m.group));
+    if (ia) ia.addEventListener('input', () => updateGroupStandings(m.group));
   });
-  // Knockout listeners handled by addKnockoutListeners() called after render
 
   // Progress counter
-  const filled = MATCHES.filter(m=>{ const h=document.getElementById('p_'+m.id+'_h')?.value; const a=document.getElementById('p_'+m.id+'_a')?.value; return h!==''&&a!==''; }).length;
-  const savedQA = state.user?(state.palpites[state.user]?._qa||{}):{};
-  const filledEx = EXTRA_QS.filter(q=>savedQA[q.id]?.answer?.trim()).length;
-  const allDone = filled===MATCHES.length && filledEx===EXTRA_QS.length;
-  const mc = filled===MATCHES.length?'var(--green)':filled>0?'#f5a623':'var(--gray)';
-  const ec = filledEx===EXTRA_QS.length?'var(--green)':filledEx>0?'#f5a623':'var(--gray)';
-  document.getElementById('progress-counter').innerHTML = locked?'' :
+  const filled = MATCHES.filter(m => {
+    const h = document.getElementById('p_' + m.id + '_h');
+    const a = document.getElementById('p_' + m.id + '_a');
+    return h && h.value !== '' && a && a.value !== '';
+  }).length;
+  const savedQA = state.user ? (state.palpites[state.user] && state.palpites[state.user]._qa ? state.palpites[state.user]._qa : {}) : {};
+  const filledEx = EXTRA_QS.filter(q => savedQA[q.id] && savedQA[q.id].answer && savedQA[q.id].answer.trim()).length;
+  const allDone = filled === MATCHES.length && filledEx === EXTRA_QS.length;
+  const mc = filled === MATCHES.length ? 'var(--green)' : filled > 0 ? '#f5a623' : 'var(--gray)';
+  const ec = filledEx === EXTRA_QS.length ? 'var(--green)' : filledEx > 0 ? '#f5a623' : 'var(--gray)';
+  document.getElementById('progress-counter').innerHTML = locked ? '' :
     '<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">' +
-    '<span style="color:'+mc+';font-weight:600;font-size:13px;">⚽ '+filled+'/'+MATCHES.length+' jogos</span>' +
-    '<span style="color:'+ec+';font-weight:600;font-size:13px;">❓ '+filledEx+'/'+EXTRA_QS.length+' perguntas</span>' +
-    '</div>' + (allDone?'<p style="font-size:12px;color:var(--green);margin-top:4px;">✓ Tudo preenchido! Pronto para salvar.</p>':'');
+    '<span style="color:' + mc + ';font-weight:600;font-size:13px;">⚽ ' + filled + '/' + MATCHES.length + ' jogos</span>' +
+    '<span style="color:' + ec + ';font-weight:600;font-size:13px;">❓ ' + filledEx + '/' + EXTRA_QS.length + ' perguntas</span>' +
+    '</div>' + (allDone ? '<p style="font-size:12px;color:var(--green);margin-top:4px;">✓ Tudo preenchido! Pronto para salvar.</p>' : '');
+
+  const draftEl = document.getElementById('draft-status');
+  if (draftEl) {
+    const lastDraft = localStorage.getItem('bolao_draft_time_' + (state.user || ''));
+    if (lastDraft) {
+      const d = new Date(lastDraft);
+      draftEl.textContent = '💾 Rascunho salvo em ' + d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+    } else {
+      draftEl.textContent = '';
+    }
+  }
+
   const btnWrap = document.getElementById('save-btn-wrap');
   if (locked) {
     btnWrap.innerHTML = '<button class="btn-primary" disabled>🔒 PALPITES ENCERRADOS</button>';
@@ -1331,23 +1349,9 @@ function renderMatches() {
       '<button class="btn-primary" onclick="saveDraft()" style="background:var(--navy3);color:var(--light);border:1px solid rgba(255,255,255,0.2);margin-bottom:10px;">💾 SALVAR RASCUNHO</button>' +
       '<button class="btn-primary" onclick="savePalpites()">✅ ENVIAR PALPITES À COMISSÃO</button>';
   }
-  const draftEl = document.getElementById('draft-status');
-  if (draftEl) {
-    const lastDraft = localStorage.getItem('bolao_draft_time_' + (state.user||''));
-    if (lastDraft) {
-      const d = new Date(lastDraft);
-      draftEl.textContent = '💾 Rascunho salvo em ' + d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
-    } else { draftEl.textContent = ''; }
-  }
-  setTimeout(addKnockoutListeners, 0);
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// SAVE PALPITES
-// ═══════════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════════
-// AUTO-ADVANCE: fill knockout brackets from group standings
-// ═══════════════════════════════════════════════════════════════════
+
 function getGroupWinner(group, pos, userPalpites) {
   // pos: 0=1st, 1=2nd, 2=3rd
   const standings = calcGroupStandings(group, userPalpites);
@@ -1499,27 +1503,26 @@ function addKnockoutListeners() {
   MATCHES.filter(m=>m.phase==='knockout').forEach(m=>{
     const ih = document.getElementById('p_'+m.id+'_h');
     const ia = document.getElementById('p_'+m.id+'_a');
-    if (ih) ih.addEventListener('input', refreshKnockout);
-    if (ia) ia.addEventListener('input', refreshKnockout);
+    // Remove old listeners first
+    if (ih) { const ni = ih.cloneNode(true); ih.parentNode.replaceChild(ni, ih); }
+    const ia2 = document.getElementById('p_'+m.id+'_a');
+    if (ia2) { const na = ia2.cloneNode(true); ia2.parentNode.replaceChild(na, ia2); }
+    // Add fresh listener
+    const ih2 = document.getElementById('p_'+m.id+'_h');
+    const ia3 = document.getElementById('p_'+m.id+'_a');
+    if (ih2) ih2.addEventListener('input', refreshKnockout);
+    if (ia3) ia3.addEventListener('input', refreshKnockout);
   });
 }
 
-let _refreshing = false;
 function refreshKnockout() {
-  if (_refreshing) return;
-  _refreshing = true;
-  try {
-    const tempP = state.user ? JSON.parse(JSON.stringify(state.palpites[state.user]||{})) : {};
-    MATCHES.filter(x=>x.phase==='knockout').forEach(x=>{
-      const h = document.getElementById('p_'+x.id+'_h')?.value;
-      const a = document.getElementById('p_'+x.id+'_a')?.value;
-      if (h!==''&&a!=='') { if(!tempP[x.id]) tempP[x.id]={}; tempP[x.id].h=+h; tempP[x.id].a=+a; }
-    });
-    buildResolvedTeams(tempP);
-    renderMatches();
-  } finally {
-    _refreshing = false;
-  }
+  const tempP = state.user ? JSON.parse(JSON.stringify(state.palpites[state.user]||{})) : {};
+  MATCHES.filter(x=>x.phase==='knockout').forEach(x=>{
+    const h = document.getElementById('p_'+x.id+'_h')?.value;
+    const a = document.getElementById('p_'+x.id+'_a')?.value;
+    if (h!==''&&a!=='') { if(!tempP[x.id]) tempP[x.id]={}; tempP[x.id].h=+h; tempP[x.id].a=+a; }
+  });
+  buildResolvedTeams(tempP);
 }
 
 function updateGroupStandings(group) {
