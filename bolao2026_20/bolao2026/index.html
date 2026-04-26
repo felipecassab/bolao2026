@@ -1029,19 +1029,21 @@ function showPage(page, btn) {
   if (page==='admin') renderAdminPage();
 }
 function renderAll() {
-  // Only render matches if no inputs are currently filled (user not actively typing)
-  const hasFilledInput = MATCHES.some(m => {
-    const h = document.getElementById('p_'+m.id+'_h');
-    return h && h.value !== '';
-  });
-  if (!hasFilledInput) {
-    renderMatches();
-
+  try {
+    const hasFilledInput = MATCHES.some(m => {
+      const h = document.getElementById('p_'+m.id+'_h');
+      return h && h.value !== '';
+    });
+    if (!hasFilledInput) renderMatches();
+  } catch(e) {
+    console.error('renderMatches error:', e);
+    document.getElementById('matches-container').innerHTML =
+      '<div class="card"><div class="card-body"><p style="color:var(--red);font-size:13px;">Erro: ' + e.message + '</p></div></div>';
   }
-  renderRanking();
-  renderHistorico();
-  updateDeadlinePill();
-  updateAdminBadge();
+  try { renderRanking(); } catch(e) { console.error('renderRanking error:', e); }
+  try { renderHistorico(); } catch(e) { console.error('renderHistorico error:', e); }
+  try { updateDeadlinePill(); } catch(e) {}
+  try { updateAdminBadge(); } catch(e) {}
 }
 
 function updateAdminBadge() {
