@@ -1405,13 +1405,13 @@ function renderMatches() {
       const canViewMatch = isPastDeadline() && Object.keys(state.users).length > 0;
       const matchClick = canViewMatch ? `onclick="viewMatchPalpites('${m.id}')" style="cursor:pointer;"` : '';
       html += `<div class="match-row" ${matchClick}>
-        <div class="team">${flagImg(dispFH)}<span>${dispHome}</span></div>
+        <div class="team">${flagImg(dispFH)}<span class="team-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:90px;">${dispHome}</span></div>
         <div class="score-inputs">
           <input class="score-inp" type="number" min="0" max="20" id="p_${m.id}_h" value="${p?.h??''}" placeholder="-" ${dis}/>
           <span class="score-sep">:</span>
           <input class="score-inp" type="number" min="0" max="20" id="p_${m.id}_a" value="${p?.a??''}" placeholder="-" ${dis}/>
         </div>
-        <div class="team" style="justify-content:flex-end;"><span style="text-align:right;">${dispAway}</span>${flagImg(dispFA)}</div>
+        <div class="team" style="justify-content:flex-end;"><span class="team-name" style="text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:90px;">${dispAway}</span>${flagImg(dispFA)}</div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 8px;">
         <div style="display:flex;align-items:center;gap:8px;">
@@ -1464,7 +1464,7 @@ function renderMatches() {
         if (!row) return;
         var matchRow = row.closest('.match-row');
         if (!matchRow) return;
-        var teams = matchRow.querySelectorAll('.team span');
+        var teams = matchRow.querySelectorAll('.team-name');
         if (rt.home && teams[0]) teams[0].textContent = rt.home.name;
         if (rt.away && teams[1]) teams[1].textContent = rt.away.name;
       });
