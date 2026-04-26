@@ -1226,6 +1226,25 @@ function renderGroupStandings(group, userPalpites) {
   return html;
 }
 
+function renderPenaltySelector(matchId, homeName, awayName, locked) {
+  const m = MATCHES.find(x=>x.id===matchId);
+  if (!m || m.phase !== 'knockout' || locked) return '';
+  const ph = document.getElementById('p_'+matchId+'_h')?.value;
+  const pa = document.getElementById('p_'+matchId+'_a')?.value;
+  const savedP = state.user && state.palpites[state.user]?.[matchId];
+  const hVal = (ph !== undefined && ph !== '') ? +ph : (savedP?.h ?? '');
+  const aVal = (pa !== undefined && pa !== '') ? +pa : (savedP?.a ?? '');
+  if (hVal === '' || aVal === '' || +hVal !== +aVal) return '';
+  const penWinner = savedP?.pen || '';
+  const hSel = penWinner === 'H' ? ' selected' : '';
+  const aSel = penWinner === 'A' ? ' selected' : '';
+  return '<div class="penalty-selector">' +
+    '<span class="penalty-label">🥅 Pênaltis:</span>' +
+    '<button class="penalty-btn' + hSel + '" onclick="setPenalty('' + matchId + '','H')">' + homeName + '</button>' +
+    '<button class="penalty-btn' + aSel + '" onclick="setPenalty('' + matchId + '','A')">' + awayName + '</button>' +
+    '</div>';
+}
+
 function renderMatches() {
   const locked = isPastDeadline();
   // Auto-fill knockout names from group standings
@@ -1268,20 +1287,7 @@ function renderMatches() {
         </div>
         ${res?`<span style="font-size:12px;color:var(--gray);">Oficial: <b style="color:var(--gold);font-family:'Barlow Condensed';font-size:15px;">${res.h}:${res.a}</b></span>`:''}
       </div>
-      ${(()=>{
-        if (m.phase !== 'knockout' || locked) return '';
-        const ph = document.getElementById('p_'+m.id+'_h')?.value;
-        const pa = document.getElementById('p_'+m.id+'_a')?.value;
-        const savedP = state.user && state.palpites[state.user]?.[m.id];
-        const hVal = ph !== undefined && ph !== '' ? +ph : (savedP?.h ?? '');
-        const aVal = pa !== undefined && pa !== '' ? +pa : (savedP?.a ?? '');
-        if (hVal === '' || aVal === '' || hVal !== aVal) return '';
-        const penWinner = savedP?.pen || '';
-        const hName = dispHome; const aName = dispAway;
-        const hSel = penWinner === 'H' ? 'selected' : '';
-        const aSel = penWinner === 'A' ? 'selected' : '';
-        return '<div class="penalty-selector"><span class="penalty-label">🥅 Pênaltis:</span><button class="penalty-btn '+hSel+'" onclick="setPenalty(''+m.id+'','H')">'+hName+'</button><button class="penalty-btn '+aSel+'" onclick="setPenalty(''+m.id+'','A')">'+aName+'</button></div>';
-      })()}`;
+      ${${renderPenaltySelector(m.id, dispHome, dispAway, locked)}`;
     });
     // Add standings table for group phase
     if (g.length === 1) { // single letter = group phase
@@ -1299,24 +1305,8 @@ function renderMatches() {
     if (ih) ih.addEventListener('input', ()=>updateGroupStandings(m.group));
     if (ia) ia.addEventListener('input', ()=>updateGroupStandings(m.group));
   });
-  // Add listeners for knockout matches to show penalty selector on draw
-  MATCHES.filter(m=>m.phase==='knockout').forEach(m=>{
-    const ih = document.getElementById('p_'+m.id+'_h');
-    const ia = document.getElementById('p_'+m.id+'_a');
-    const refresh = () => {
-      // Rebuild resolved teams with current inputs
-      const tempP = state.user ? JSON.parse(JSON.stringify(state.palpites[state.user]||{})) : {};
-      MATCHES.filter(x=>x.phase==='knockout').forEach(x=>{
-        const h = document.getElementById('p_'+x.id+'_h')?.value;
-        const a = document.getElementById('p_'+x.id+'_a')?.value;
-        if (h!==''&&a!=='') { if(!tempP[x.id]) tempP[x.id]={}; tempP[x.id].h=+h; tempP[x.id].a=+a; }
-      });
-      buildResolvedTeams(tempP);
-      renderMatches();
-    };
-    if (ih) ih.addEventListener('input', refresh);
-    if (ia) ia.addEventListener('input', refresh);
-  });
+  // Knockout listeners handled by addKnockoutListeners() called after render
+}
 
   // Progress counter
   const filled = MATCHES.filter(m=>{ const h=document.getElementById('p_'+m.id+'_h')?.value; const a=document.getElementById('p_'+m.id+'_a')?.value; return h!==''&&a!==''; }).length;
@@ -1506,6 +1496,33 @@ function buildResolvedTeams(userPalpites) {
   // FINAL: winners of semifinais
   const hf = knockoutWinner('sf_1'), af = knockoutWinner('sf_2');
   if (hf || af) resolvedTeams['final'] = {home: hf||null, away: af||null};
+}
+
+function addKnockoutListeners() {
+  MATCHES.filter(m=>m.phase==='knockout').forEach(m=>{
+    const ih = document.getElementById('p_'+m.id+'_h');
+    const ia = document.getElementById('p_'+m.id+'_a');
+    if (ih) ih.addEventListener('input', refreshKnockout);
+    if (ia) ia.addEventListener('input', refreshKnockout);
+  });
+}
+
+function refreshKnockout() {
+  const tempP = state.user ? JSON.parse(JSON.stringify(state.palpites[state.user]||{})) : {};
+  MATCHES.filter(x=>x.phase==='knockout').forEach(x=>{
+    const h = document.getElementById('p_'+x.id+'_h')?.value;
+    const a = document.getElementById('p_'+x.id+'_a')?.value;
+    if (h!==''&&a!=='') { if(!tempP[x.id]) tempP[x.id]={}; tempP[x.id].h=+h; tempP[x.id].a=+a; }
+  });
+  buildResolvedTeams(tempP);
+  // Update only knockout match rows without full re-render
+  MATCHES.filter(m=>m.phase==='knockout').forEach(m=>{
+    const rt = resolvedTeams[m.id];
+    if (!rt) return;
+    const hEl = document.querySelector('#p_'+m.id+'_h')?.closest('.match-row')?.querySelector('.team span');
+    // Just rebuild the penalty selector if needed
+  });
+  renderMatches();
 }
 
 function updateGroupStandings(group) {
