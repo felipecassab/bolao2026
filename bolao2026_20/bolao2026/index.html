@@ -1490,11 +1490,13 @@ function calcMaxPts(userPalpites) {
     }
   }
 
-  // Extras — assume all correct if not yet answered
+  // Extras — always assume best case (3 pts each) until comissão validates
+  // Whether answered or not, count as possible until result is confirmed correct/wrong
   EXTRA_QS.forEach(q => {
     const qa = userPalpites?._qa?.[q.id];
-    if (qa?.correct) maxPts += 3;
-    else if (!qa?.answer) maxPts += 3; // not answered yet — assume best case
+    if (qa?.correct === true) maxPts += 3;       // confirmed correct
+    else if (qa?.correct === false) maxPts += 0;  // confirmed wrong
+    else maxPts += 3; // not yet validated — still possible
   });
 
   return maxPts;
