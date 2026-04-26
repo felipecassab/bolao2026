@@ -1035,28 +1035,27 @@ function setPenalty(matchId, winner) {
   propagateKnockout(matchId);
 }
 
-function updateTeamInDOM(teamDiv, team) {
-  if (!team || !teamDiv) return;
-  // Update name
+function updateFlagById(matchId, side, team) {
+  if (!team || !team.flag || team.flag === 'un') return;
+  var wrap = document.getElementById('flag_' + side + '_' + matchId);
+  if (!wrap) return;
+  wrap.innerHTML = '<img class="flag" src="https://flagcdn.com/w40/' + team.flag + '.png" style="width:26px;height:17px;border-radius:2px;object-fit:cover;flex-shrink:0;"/>';
+}
+
+function updateNameById(matchId, side, team) {
+  if (!team) return;
+  // Find the team-name span in the same .team div as the flag span
+  var flagWrap = document.getElementById('flag_' + side + '_' + matchId);
+  if (!flagWrap) return;
+  var teamDiv = flagWrap.parentElement;
+  if (!teamDiv) return;
   var nameSpan = teamDiv.querySelector('.team-name');
   if (nameSpan) nameSpan.textContent = team.name;
-  // Update flag - handle both img.flag and span (white flag placeholder)
-  if (team.flag && team.flag !== 'un') {
-    var flagImg2 = teamDiv.querySelector('img.flag');
-    if (flagImg2) {
-      flagImg2.src = 'https://flagcdn.com/w40/' + team.flag + '.png';
-    } else {
-      // Replace the white flag span with a real flag img
-      var flagSpan = teamDiv.querySelector('span[style*="font-size:16px"]');
-      if (flagSpan) {
-        var newImg = document.createElement('img');
-        newImg.className = 'flag';
-        newImg.src = 'https://flagcdn.com/w40/' + team.flag + '.png';
-        newImg.style.cssText = 'width:26px;height:17px;border-radius:2px;object-fit:cover;flex-shrink:0;';
-        flagSpan.parentNode.replaceChild(newImg, flagSpan);
-      }
-    }
-  }
+}
+
+function updateTeamInDOM(matchId, side, team) {
+  updateNameById(matchId, side, team);
+  updateFlagById(matchId, side, team);
 }
 
 function propagateKnockout(changedMatchId) {
@@ -1079,9 +1078,8 @@ function propagateKnockout(changedMatchId) {
     if (!inp) return;
     var matchRow = inp.closest('.match-row');
     if (!matchRow) return;
-    var teamDivs = matchRow.querySelectorAll('.team');
-    if (rt.home && teamDivs[0]) updateTeamInDOM(teamDivs[0], rt.home);
-    if (rt.away && teamDivs[1]) updateTeamInDOM(teamDivs[1], rt.away);
+    if (rt.home) updateTeamInDOM(m.id, 'h', rt.home);
+    if (rt.away) updateTeamInDOM(m.id, 'a', rt.away);
   });
 }
 
@@ -1457,13 +1455,13 @@ function renderMatches() {
       const canViewMatch = isPastDeadline() && Object.keys(state.users).length > 0;
       const matchClick = canViewMatch ? `onclick="viewMatchPalpites('${m.id}')" style="cursor:pointer;"` : '';
       html += `<div class="match-row" ${matchClick}>
-        <div class="team">${flagImg(dispFH)}<span class="team-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:90px;">${dispHome}</span></div>
+        <div class="team"><span id="flag_h_${m.id}">${flagImg(dispFH)}</span><span class="team-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:90px;">${dispHome}</span></div>
         <div class="score-inputs">
           <input class="score-inp" type="number" min="0" max="20" id="p_${m.id}_h" value="${p?.h??''}" placeholder="-" ${dis}/>
           <span class="score-sep">:</span>
           <input class="score-inp" type="number" min="0" max="20" id="p_${m.id}_a" value="${p?.a??''}" placeholder="-" ${dis}/>
         </div>
-        <div class="team" style="justify-content:flex-end;"><span class="team-name" style="text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:90px;">${dispAway}</span>${flagImg(dispFA)}</div>
+        <div class="team" style="justify-content:flex-end;"><span class="team-name" style="text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:90px;">${dispAway}</span><span id="flag_a_${m.id}">${flagImg(dispFA)}</span></div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 8px;">
         <div style="display:flex;align-items:center;gap:8px;">
@@ -1512,24 +1510,8 @@ function renderMatches() {
       MATCHES.filter(function(x){return x.phase==='knockout';}).forEach(function(x){
         var rt = resolvedTeams[x.id];
         if (!rt) return;
-        var row = document.getElementById('p_'+x.id+'_h');
-        if (!row) return;
-        var matchRow = row.closest('.match-row');
-        if (!matchRow) return;
-        var teams = matchRow.querySelectorAll('.team-name');
-        var flags = matchRow.querySelectorAll('.flag');
-        if (rt.home && teams[0]) {
-          teams[0].textContent = rt.home.name;
-          if (flags[0] && rt.home.flag && rt.home.flag !== 'un') {
-            flags[0].src = 'https://flagcdn.com/w40/' + rt.home.flag + '.png';
-          }
-        }
-        if (rt.away && teams[1]) {
-          teams[1].textContent = rt.away.name;
-          if (flags[1] && rt.away.flag && rt.away.flag !== 'un') {
-            flags[1].src = 'https://flagcdn.com/w40/' + rt.away.flag + '.png';
-          }
-        }
+        if (rt.home) updateTeamInDOM(x.id, 'h', rt.home);
+        if (rt.away) updateTeamInDOM(x.id, 'a', rt.away);
       });
 
       // Show/hide penalty selector for THIS match only (no full re-render)
