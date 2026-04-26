@@ -1017,7 +1017,7 @@ function setPenalty(matchId, winner) {
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
   if (!state.palpites[state.user][matchId]) state.palpites[state.user][matchId] = {};
   state.palpites[state.user][matchId].pen = winner;
-  // Update buttons visually WITHOUT re-rendering
+  // Update buttons visually
   var penDiv = document.getElementById('pen_' + matchId);
   if (penDiv) {
     var btns = penDiv.querySelectorAll('.penalty-btn');
@@ -1031,6 +1031,45 @@ function setPenalty(matchId, winner) {
   if (!draft[matchId]) draft[matchId] = {};
   draft[matchId].pen = winner;
   localStorage.setItem('bolao_draft_' + state.user, JSON.stringify(draft));
+  // Propagate winner to next phases
+  propagateKnockout(matchId);
+}
+
+function propagateKnockout(changedMatchId) {
+  // Build full tempP from saved state + current DOM inputs
+  var savedP = state.user ? (state.palpites[state.user] || {}) : {};
+  var tempP = Object.assign({}, savedP);
+  MATCHES.filter(function(m){return m.phase==='knockout';}).forEach(function(m){
+    var ih = document.getElementById('p_'+m.id+'_h');
+    var ia = document.getElementById('p_'+m.id+'_a');
+    if (ih && ia && ih.value !== '' && ia.value !== '') {
+      tempP[m.id] = Object.assign({}, savedP[m.id]||{}, {h:+ih.value, a:+ia.value});
+    }
+  });
+  buildResolvedTeams(tempP);
+  // Update ALL knockout match displays
+  MATCHES.filter(function(m){return m.phase==='knockout';}).forEach(function(m){
+    var rt = resolvedTeams[m.id];
+    if (!rt) return;
+    var inp = document.getElementById('p_'+m.id+'_h');
+    if (!inp) return;
+    var matchRow = inp.closest('.match-row');
+    if (!matchRow) return;
+    var teamNames = matchRow.querySelectorAll('.team-name');
+    var flags = matchRow.querySelectorAll('.flag');
+    if (rt.home) {
+      if (teamNames[0]) teamNames[0].textContent = rt.home.name;
+      if (flags[0] && rt.home.flag && rt.home.flag !== 'un') {
+        flags[0].src = 'https://flagcdn.com/w40/' + rt.home.flag + '.png';
+      }
+    }
+    if (rt.away) {
+      if (teamNames[1]) teamNames[1].textContent = rt.away.name;
+      if (flags[1] && rt.away.flag && rt.away.flag !== 'un') {
+        flags[1].src = 'https://flagcdn.com/w40/' + rt.away.flag + '.png';
+      }
+    }
+  });
 }
 
 async function loadState() {
