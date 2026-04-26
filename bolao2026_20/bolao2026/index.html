@@ -1017,7 +1017,20 @@ function setPenalty(matchId, winner) {
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
   if (!state.palpites[state.user][matchId]) state.palpites[state.user][matchId] = {};
   state.palpites[state.user][matchId].pen = winner;
-  renderMatches();
+  // Update buttons visually WITHOUT re-rendering
+  var penDiv = document.getElementById('pen_' + matchId);
+  if (penDiv) {
+    var btns = penDiv.querySelectorAll('.penalty-btn');
+    btns.forEach(function(btn) { btn.classList.remove('selected'); });
+    var winnerBtn = winner === 'H' ? btns[0] : btns[1];
+    if (winnerBtn) winnerBtn.classList.add('selected');
+  }
+  // Save to draft silently
+  var draft = {};
+  try { draft = JSON.parse(localStorage.getItem('bolao_draft_' + state.user) || '{}'); } catch(e) {}
+  if (!draft[matchId]) draft[matchId] = {};
+  draft[matchId].pen = winner;
+  localStorage.setItem('bolao_draft_' + state.user, JSON.stringify(draft));
 }
 
 async function loadState() {
