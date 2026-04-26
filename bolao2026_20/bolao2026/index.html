@@ -830,7 +830,7 @@ function renderGroupStandings(group, userPalpites) {
     var sgColor = sg > 0 ? 'var(--green)' : sg < 0 ? 'var(--red)' : 'var(--gray)';
     html += '<tr class="' + (i<2?'top2':'') + '">';
     html += '<td><span class="classif-pos ' + (i<2?'q':'out') + '">' + (i+1) + '</span>';
-    html += '<img src="https://flagcdn.com/w20/' + t.flag + '.png" style="width:16px;height:11px;border-radius:1px;vertical-align:middle;margin-right:4px;" onerror="this.style.display='none'"/>';
+    html += '<img src="https://flagcdn.com/w20/' + t.flag + '.png" style="width:16px;height:11px;border-radius:1px;vertical-align:middle;margin-right:4px;" onerror="this.style.display=&quot;none&quot;"/>';
     html += t.name + '</td>';
     html += '<td>' + t.pt + '</td><td>' + t.j + '</td><td>' + t.v + '</td><td>' + t.e + '</td><td>' + t.d + '</td>';
     html += '<td>' + t.gp + '</td><td>' + t.gc + '</td>';
@@ -1002,8 +1002,8 @@ function renderPenaltySelector(matchId, homeName, awayName, locked, p) {
   var pen = p.pen || '';
   return '<div class="penalty-selector">' +
     '<span class="penalty-label">🥅 Pênaltis:</span>' +
-    '<button class="penalty-btn' + (pen==='H'?' selected':'') + '" onclick="setPenalty('' + matchId + '','H')">' + homeName + '</button>' +
-    '<button class="penalty-btn' + (pen==='A'?' selected':'') + '" onclick="setPenalty('' + matchId + '','A')">' + awayName + '</button>' +
+    '<button class="penalty-btn' + (pen==='H'?' selected':'') + '" onclick="setPenalty(\'' + matchId + '\',\'H\')">' + homeName + '</button>' +
+    '<button class="penalty-btn' + (pen==='A'?' selected':'') + '" onclick="setPenalty(\'' + matchId + '\',\'A\')">' + awayName + '</button>' +
     '</div>';
 }
 
@@ -1351,7 +1351,7 @@ function takeSnapshot() {
 // ═══════════════════════════════════════════════════════════════════
 function flagImg(code, cls='flag') {
   if (code==='un') return '<span style="font-size:16px;">🏳️</span>';
-  return `<img class="${cls}" src="https://flagcdn.com/w40/${code}.png" onerror="this.style.display='none'"/>`;
+  return `<img class="${cls}" src="https://flagcdn.com/w40/${code}.png" onerror="this.style.display=&quot;none&quot;"/>`;
 }
 function renderMatches() {
   const locked = isPastDeadline();
