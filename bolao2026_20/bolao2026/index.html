@@ -1465,8 +1465,19 @@ function renderMatches() {
         var matchRow = row.closest('.match-row');
         if (!matchRow) return;
         var teams = matchRow.querySelectorAll('.team-name');
-        if (rt.home && teams[0]) teams[0].textContent = rt.home.name;
-        if (rt.away && teams[1]) teams[1].textContent = rt.away.name;
+        var flags = matchRow.querySelectorAll('.flag');
+        if (rt.home && teams[0]) {
+          teams[0].textContent = rt.home.name;
+          if (flags[0] && rt.home.flag && rt.home.flag !== 'un') {
+            flags[0].src = 'https://flagcdn.com/w40/' + rt.home.flag + '.png';
+          }
+        }
+        if (rt.away && teams[1]) {
+          teams[1].textContent = rt.away.name;
+          if (flags[1] && rt.away.flag && rt.away.flag !== 'un') {
+            flags[1].src = 'https://flagcdn.com/w40/' + rt.away.flag + '.png';
+          }
+        }
       });
 
       // Show/hide penalty selector for THIS match only (no full re-render)
