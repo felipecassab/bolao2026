@@ -1408,6 +1408,7 @@ function renderMatches() {
         ${res?`<span style="font-size:12px;color:var(--gray);">Oficial: <b style="color:var(--gold);font-family:'Barlow Condensed';font-size:15px;">${res.h}:${res.a}</b></span>`:''}
       </div>`;
       html += renderPenaltySelector(m.id, dispHome, dispAway, locked, p);
+      html += '<div id="pen_' + m.id + '"></div>';
     });
     // Add standings for group phase
     if (g.length === 1) {
@@ -1474,20 +1475,21 @@ function renderMatches() {
           '<button class="penalty-btn' + (savedPen==='H'?' selected':'') + '" onclick="setPenalty(\'' + m.id + '\',\'H\')">' + homeName + '</button>' +
           '<button class="penalty-btn' + (savedPen==='A'?' selected':'') + '" onclick="setPenalty(\'' + m.id + '\',\'A\')">' + awayName + '</button>' +
           '</div>';
+        var penPlaceholder = document.getElementById('pen_' + m.id);
         if (existingPen) {
           existingPen.outerHTML = penHtml;
-        } else {
-          // Insert after the info div
-          var infoDiv = thisH.closest('.card-body')?.querySelector('[style*="justify-content:space-between"]');
-          if (infoDiv) infoDiv.insertAdjacentHTML('afterend', penHtml);
+        } else if (penPlaceholder) {
+          penPlaceholder.innerHTML = penHtml;
         }
       } else {
         // Hide penalty selector
         if (existingPen) existingPen.remove();
+        var penPlaceholder2 = document.getElementById('pen_' + m.id);
+        if (penPlaceholder2) penPlaceholder2.innerHTML = '';
       }
     }
-    if (ih) ih.addEventListener('input', onKoInput);
-    if (ia) ia.addEventListener('input', onKoInput);
+    if (ih) { ih.addEventListener('input', onKoInput); ih.addEventListener('blur', onKoInput); }
+    if (ia) { ia.addEventListener('input', onKoInput); ia.addEventListener('blur', onKoInput); }
   });
 
   // Progress counter
