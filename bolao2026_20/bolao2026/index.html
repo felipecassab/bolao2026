@@ -1449,6 +1449,57 @@ function updateAdminBadge() {
 // ═══════════════════════════════════════════════════════════════════
 // SCORING
 // ═══════════════════════════════════════════════════════════════════
+function calcMaxPts(userPalpites) {
+  // Calculate maximum points still achievable
+  let maxPts = 0;
+  const BONUS = {'group':0,'32-avos':2,'Oitavas':4,'Quartas':6,'Semifinais':8,'3º Lugar':12,'Final':12};
+  const CAMPEOA_BONUS = 20;
+
+  MATCHES.forEach(m => {
+    const res = state.results[m.id];
+    const p = userPalpites?.[m.id];
+    const bonus = BONUS[m.phase==='group' ? 'group' : m.group] || 0;
+
+    if (res) {
+      // Result known — calculate actual points earned
+      if (!p || p.h === undefined || p.a === undefined) return;
+      const rW = res.h>res.a?'H':res.h<res.a?'A':'E';
+      const pW = +p.h>+p.a?'H':+p.h<+p.a?'A':'E';
+      if (+p.h===+res.h && +p.a===+res.a) maxPts += PTS_EXACT + bonus;
+      else if (rW===pW) maxPts += PTS_WINNER + bonus;
+    } else {
+      // Result unknown — assume best case (exact score)
+      maxPts += PTS_EXACT + bonus;
+    }
+  });
+
+  // Add campeã bonus if final not decided yet
+  const finalRes = state.results['final'];
+  if (!finalRes) maxPts += CAMPEOA_BONUS;
+  else {
+    // Check if user predicted the champion correctly
+    const p = userPalpites?.['final'];
+    if (p) {
+      const rt = resolvedTeams['final'];
+      const winner = finalRes.h > finalRes.a ? 'home' : 'away';
+      const userWinner = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen || null);
+      // Simple check — if they got the winner right
+      if ((winner==='home'&&userWinner==='H') || (winner==='away'&&userWinner==='A')) {
+        maxPts += CAMPEOA_BONUS;
+      }
+    }
+  }
+
+  // Extras — assume all correct if not yet answered
+  EXTRA_QS.forEach(q => {
+    const qa = userPalpites?._qa?.[q.id];
+    if (qa?.correct) maxPts += 3;
+    else if (!qa?.answer) maxPts += 3; // not answered yet — assume best case
+  });
+
+  return maxPts;
+}
+
 function calcPts(userPalpites) {
   let pts=0, ac=0, ex=0;
   MATCHES.forEach(m => {
@@ -1851,10 +1902,15 @@ function renderRanking() {
     const cls=i===0?'color:#FFD700':i===1?'color:#C0C0C0':i===2?'color:#CD7F32':'color:var(--gray)';
     const clickable = canView ? `onclick="viewPalpites('${s.u}')" style="cursor:pointer;"` : '';
     const hint = canView ? '<span style="font-size:10px;color:var(--gold);margin-left:4px;">ver palpites</span>' : '';
+    const maxP = calcMaxPts(state.palpites[s.u]);
     return `<div class="rank-row" ${clickable}>
       <span class="rank-num" style="${cls}">${medal}</span>
       <div class="avatar" style="background:${uColor(s.u)};color:${uColorT(s.u)};">${initials(uName(s.u))}</div>
-      <div style="flex:1;"><div class="rank-name">${uName(s.u)}${hint}</div><div class="rank-sub">${s.ac} acertos · ${s.ex} exatos</div></div>
+      <div style="flex:1;">
+        <div class="rank-name">${uName(s.u)}${hint}</div>
+        <div class="rank-sub">${s.ac} acertos · ${s.ex} exatos</div>
+        <div style="font-size:11px;color:var(--gray);margin-top:1px;">máx. possível: <b style="color:rgba(245,197,24,0.7);">${maxP} pts</b></div>
+      </div>
       <div><div class="pts-big">${s.pts}</div><div class="pts-small">pontos</div></div>
     </div>`;
   }).join('');
