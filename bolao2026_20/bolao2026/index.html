@@ -959,8 +959,49 @@ function buildResolvedTeams(userPalpites) {
   resolvedTeams = {};
   if (!userPalpites) return;
 
-  var thirds = getBest8Thirds(userPalpites);
-  var thirdIdx = 0;
+  // Get all thirds sorted by performance
+  var allThirds = (function() {
+    var groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+    var result = groups.map(function(g) {
+      var s = calcGroupStandings(g, userPalpites);
+      if (!s[2] || s[2].j === 0) return null;
+      return Object.assign({}, s[2], {group: g});
+    }).filter(Boolean);
+    result.sort(function(a,b) {
+      if (b.pt !== a.pt) return b.pt - a.pt;
+      var sgA=a.gp-a.gc, sgB=b.gp-b.gc;
+      if (sgB !== sgA) return sgB - sgA;
+      if (b.gp !== a.gp) return b.gp - a.gp;
+      return (FIFA_RANKING[a.name]||99)-(FIFA_RANKING[b.name]||99);
+    });
+    return result;
+  })();
+
+  // FIFA official 3rd place group sources for each match
+  // Key: matchId, Value: allowed groups for the 3rd place team
+  var thirdSources = {
+    'r32_2':  ['A','B','C','D','F'],      // M74: best 3rd of ABCDF
+    'r32_5':  ['C','D','F','G','H'],      // M77: best 3rd of CDFGH
+    'r32_7':  ['C','E','F','H','I'],      // M79: best 3rd of CEFHI
+    'r32_8':  ['E','H','I','J','K'],      // M80: best 3rd of EHIJK
+    'r32_9':  ['B','E','F','I','J'],      // M81: best 3rd of BEFIJ
+    'r32_10': ['A','E','H','I','J'],      // M82: best 3rd of AEHIJ
+    'r32_13': ['E','F','G','I','J'],      // M85: best 3rd of EFGIJ
+    'r32_15': ['D','E','I','J','L'],      // M87: best 3rd of DEIJL
+  };
+
+  // Assign best available third from allowed groups to each slot
+  var usedThirds = {};
+  function getBestThirdFrom(allowedGroups) {
+    for (var i=0; i<allThirds.length; i++) {
+      var t = allThirds[i];
+      if (!usedThirds[t.group] && allowedGroups.indexOf(t.group) >= 0) {
+        usedThirds[t.group] = true;
+        return t;
+      }
+    }
+    return null;
+  }
 
   var bracket = [
     {id:'r32_1',  hg:'A',hp:1, ag:'B',ap:1},
@@ -983,9 +1024,18 @@ function buildResolvedTeams(userPalpites) {
 
   bracket.forEach(function(b) {
     var entry = {};
-    if (b.hg) { var t=getGroupWinner(b.hg,b.hp,userPalpites); if(t) entry.home={name:t.name,flag:t.flag}; }
-    if (b.ag != null) { var t2=getGroupWinner(b.ag,b.ap,userPalpites); if(t2) entry.away={name:t2.name,flag:t2.flag}; }
-    else { var t3=thirds[thirdIdx++]; if(t3) entry.away={name:t3.name,flag:t3.flag}; }
+    if (b.hg) {
+      var t = getGroupWinner(b.hg, b.hp, userPalpites);
+      if (t) entry.home = {name:t.name, flag:t.flag};
+    }
+    if (b.ag != null) {
+      var t2 = getGroupWinner(b.ag, b.ap, userPalpites);
+      if (t2) entry.away = {name:t2.name, flag:t2.flag};
+    } else if (thirdSources[b.id]) {
+      // Use FIFA official group source rules
+      var t3 = getBestThirdFrom(thirdSources[b.id]);
+      if (t3) entry.away = {name:t3.name, flag:t3.flag};
+    }
     if (entry.home || entry.away) resolvedTeams[b.id] = entry;
   });
 
