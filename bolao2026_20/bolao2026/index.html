@@ -1217,9 +1217,26 @@ function doUpdateGroupStandings(group) {
     if (newWrap) wrap.parentNode.replaceChild(newWrap, wrap);
   }
   // Debounce knockout update separately (heavier operation)
+  // Usar todos os palpites + DOM de todos os grupos para propagar bracket completo
   clearTimeout(_koDebounce);
   _koDebounce = setTimeout(function() {
-    buildResolvedTeams(merged);
+    var fullP = state.user ? Object.assign({}, state.palpites[state.user] || {}) : {};
+    MATCHES.filter(function(m){return m.phase==='group';}).forEach(function(m) {
+      var h = document.getElementById('p_'+m.id+'_h');
+      var a = document.getElementById('p_'+m.id+'_a');
+      if (h && a && h.value !== '' && a.value !== '') fullP[m.id] = {h:+h.value, a:+a.value};
+    });
+    if (fullP._fp === undefined && state.user && state.palpites[state.user] && state.palpites[state.user]._fp) {
+      fullP._fp = state.palpites[state.user]._fp;
+    }
+    buildResolvedTeams(fullP);
+    // Atualizar nomes no DOM do mata-mata
+    MATCHES.filter(function(m){return m.phase==='knockout';}).forEach(function(m) {
+      var rt = resolvedTeams[m.id];
+      if (!rt) return;
+      if (rt.home) updateTeamInDOM(m.id, 'h', rt.home);
+      if (rt.away) updateTeamInDOM(m.id, 'a', rt.away);
+    });
   }, 600);
 }
 
