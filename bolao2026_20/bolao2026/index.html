@@ -2568,8 +2568,16 @@ function renderMatches() {
         if (penPlaceholder2) penPlaceholder2.innerHTML = '';
       }
     }
-    if (ih) { ih.addEventListener('blur', onKoInput); }
-    if (ia) { ia.addEventListener('blur', onKoInput); }
+    function onKoBlur(e) {
+      // Aguardar um tick para ver se o foco foi para um botão de pênaltis
+      setTimeout(function() {
+        var focused = document.activeElement;
+        if (focused && focused.classList.contains('penalty-btn')) return; // ignorar
+        onKoInput();
+      }, 80);
+    }
+    if (ih) { ih.addEventListener('blur', onKoBlur); }
+    if (ia) { ia.addEventListener('blur', onKoBlur); }
   });
 
   // Progress counter
