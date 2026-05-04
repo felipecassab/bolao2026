@@ -208,20 +208,25 @@ body{display:flex;flex-direction:column}
 .fp-modal-btn.selected{background:#7eb8f5;color:var(--navy);border-color:#7eb8f5;}
 .fp-modal-close{width:100%;padding:10px;margin-top:16px;border-radius:var(--radius-sm);border:none;background:var(--navy3);color:var(--light);font-size:14px;font-family:'Barlow Condensed',sans-serif;font-weight:700;cursor:pointer;letter-spacing:0.5px;}
 /* FP RANKING (empate múltiplo) */
-.fp-rank-list{display:flex;flex-direction:column;gap:6px;margin-bottom:4px;}
-.fp-rank-team{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);transition:border-color 0.2s;}
-.fp-rank-team.has-pos{border-color:rgba(126,184,245,0.35);background:rgba(126,184,245,0.07);}
-.fp-rank-badge{width:32px;height:32px;border-radius:50%;border:2px dashed rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:15px;color:rgba(255,255,255,0.25);flex-shrink:0;transition:all 0.2s;}
-.fp-rank-badge.filled{border-style:solid;border-color:#7eb8f5;background:#7eb8f5;color:var(--navy);}
-.fp-rank-info{flex:1;min-width:0;}
-.fp-rank-name{font-size:14px;font-family:'Barlow Condensed',sans-serif;font-weight:700;color:var(--light);}
-.fp-rank-btns{display:flex;gap:4px;flex-shrink:0;}
-.fp-rank-btn{width:34px;height:34px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.4);font-size:12px;font-family:'Barlow Condensed',sans-serif;font-weight:700;cursor:pointer;transition:all 0.15s;display:flex;align-items:center;justify-content:center;}
-.fp-rank-btn.selected{background:#7eb8f5;color:var(--navy);border-color:#7eb8f5;font-weight:900;}
-.fp-rank-btn.taken{background:transparent;color:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.06);cursor:default;}
-.fp-rank-progress{display:flex;align-items:center;justify-content:center;gap:6px;margin:0 0 14px;}
-.fp-rank-progress-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.15);transition:background 0.2s;}
-.fp-rank-progress-dot.done{background:#7eb8f5;}
+.fp-rank-header{display:flex;align-items:center;gap:6px;font-size:11px;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;color:var(--gray);margin-bottom:10px;}
+.fp-rank-list{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
+.fp-rank-item{display:flex;align-items:center;gap:10px;padding:12px 12px;border-radius:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);cursor:grab;user-select:none;transition:background 0.15s,transform 0.15s;}
+.fp-rank-item.dragging{opacity:0.5;transform:scale(0.98);}
+.fp-rank-item.drag-over{border-color:rgba(126,184,245,0.5);background:rgba(126,184,245,0.1);}
+.fp-rank-pos{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;width:28px;text-align:center;flex-shrink:0;}
+.fp-rank-pos.p1{color:#f5c518;}
+.fp-rank-pos.p2{color:#aab8c2;}
+.fp-rank-pos.p3{color:#cd7f32;}
+.fp-rank-pos.p4{color:var(--gray);}
+.fp-rank-flag{width:24px;height:16px;border-radius:2px;object-fit:cover;flex-shrink:0;}
+.fp-rank-name{flex:1;font-size:16px;font-family:'Barlow Condensed',sans-serif;font-weight:700;color:var(--light);}
+.fp-rank-arrows{display:flex;flex-direction:column;gap:3px;flex-shrink:0;}
+.fp-rank-arrow{width:28px;height:28px;border-radius:6px;border:none;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;}
+.fp-rank-arrow:active{background:rgba(126,184,245,0.3);color:#7eb8f5;}
+.fp-rank-arrow:disabled{opacity:0.2;cursor:default;}
+.fp-rank-handle{color:rgba(255,255,255,0.2);font-size:16px;cursor:grab;padding:0 2px;flex-shrink:0;}
+.fp-rank-hint{font-size:11px;color:var(--gray);text-align:center;margin-bottom:14px;}
+.fp-modal-close.ready{background:#3b5bdb;color:#fff;}
 /* FAIR PLAY */
 .fairplay-wrap{background:rgba(126,184,245,0.06);border:1px solid rgba(126,184,245,0.2);border-radius:var(--radius-sm);padding:10px 12px;margin-top:8px;}
 .fairplay-title{font-size:11px;color:#7eb8f5;font-weight:700;letter-spacing:0.5px;margin-bottom:8px;}
@@ -714,7 +719,7 @@ body{display:flex;flex-direction:column}
     <div class="fp-modal-title">⚖️ Fair Play</div>
     <div class="fp-modal-sub">Seu palpite gerou um empate na classificação. Qual seleção se classificará por ser mais disciplinada (menos pontos de cartões)?</div>
     <div id="fp-modal-pairs"></div>
-    <button class="fp-modal-close" onclick="closeFPModal()">✓ CONFIRMAR</button>
+    <button class="fp-modal-close ready" onclick="closeFPModal()">✓ CONFIRMAR ORDEM</button>
   </div>
 </div>
 
@@ -1416,7 +1421,7 @@ function openFPModal(group, pairs, userPalpites) {
 
   // MODO RANKING: 3 ou mais times empatados
   if (teamsInvolved.length >= 3) {
-    if (modalSub) modalSub.textContent = 'Seu palpite gerou empate entre ' + teamsInvolved.length + ' seleções em todos os critérios. Defina a ordem de classificação por Fair Play (1º melhor comportamento):';
+    if (modalSub) modalSub.textContent = 'Seu palpite gerou empate entre ' + teamsInvolved.length + ' seleções. Arraste para definir a ordem por Fair Play (1º = melhor comportamento):';
     var posLabels = ['1º','2º','3º','4º'];
     // Estado local do ranking
     var rankOrder = []; // array de nomes na ordem escolhida
@@ -1427,65 +1432,82 @@ function openFPModal(group, pairs, userPalpites) {
       }
     });
 
-    function renderRanking() {
-      // Barra de progresso
-      var doneCnt = rankOrder.length;
-      var totalCnt = teamsInvolved.length;
-      var progressHtml = '<div class="fp-rank-progress">';
-      for (var d = 0; d < totalCnt; d++) {
-        progressHtml += '<div class="fp-rank-progress-dot' + (d < doneCnt ? ' done' : '') + '"></div>';
-      }
-      progressHtml += '</div>';
+    // rankOrder já inicializado acima com fp salvo
+    // Se vazio, inicializar com ordem atual das seleções
+    if (rankOrder.length === 0) {
+      teamsInvolved.forEach(function(t) { rankOrder.push(t.name); });
+    }
 
-      var html = progressHtml + '<div class="fp-rank-list">';
-      teamsInvolved.forEach(function(team) {
-        var currentPos = rankOrder.indexOf(team.name); // -1 se não escolhido
-        var hasBadge = currentPos !== -1;
-        html += '<div class="fp-rank-team' + (hasBadge ? ' has-pos' : '') + '">';
-        // Badge com posição atual (ou vazio)
-        html += '<div class="fp-rank-badge' + (hasBadge ? ' filled' : '') + '">' + (hasBadge ? posLabels[currentPos] : '?') + '</div>';
-        // Flag + nome
-        html += '<div class="fp-rank-info">';
-        html += '<div style="display:flex;align-items:center;gap:6px;">';
-        html += '<img src="https://flagcdn.com/w20/' + team.flag + '.png" style="width:18px;height:12px;border-radius:1px;flex-shrink:0;" onerror="this.style.display=&quot;none&quot;"/>';
-        html += '<span class="fp-rank-name">' + team.name + '</span>';
+    var posColors = ['p1','p2','p3','p4'];
+
+    function renderRanking() {
+      var html = '<div class="fp-rank-header">&#8597; ARRASTE OU USE AS SETAS PARA ORDENAR</div>';
+      html += '<div class="fp-rank-list" id="fp-rank-list">';
+      rankOrder.forEach(function(name, idx) {
+        var team = teamsInvolved.find(function(t){return t.name===name;});
+        if (!team) return;
+        var posLabel = posLabels[idx] || (idx+1)+'º';
+        var posColor = posColors[idx] || 'p4';
+        html += '<div class="fp-rank-item" draggable="true" data-name="' + name + '" data-idx="' + idx + '">';
+        html += '<span class="fp-rank-pos ' + posColor + '">' + posLabel + '</span>';
+        html += '<img class="fp-rank-flag" src="https://flagcdn.com/w20/' + team.flag + '.png" onerror="this.style.display=&quot;none&quot;"/>';
+        html += '<span class="fp-rank-name">' + name + '</span>';
+        html += '<div class="fp-rank-arrows">';
+        html += '<button class="fp-rank-arrow" data-move="-1" data-idx="' + idx + '"' + (idx===0?' disabled':'') + '>▲</button>';
+        html += '<button class="fp-rank-arrow" data-move="1" data-idx="' + idx + '"' + (idx===rankOrder.length-1?' disabled':'') + '>▼</button>';
         html += '</div>';
-        html += '<div style="font-size:10px;color:var(--gray);margin-top:2px;">' + (hasBadge ? 'Posição ' + posLabels[currentPos] : 'Toque para definir posição') + '</div>';
-        html += '</div>';
-        // Botões de posição
-        html += '<div class="fp-rank-btns">';
-        for (var p = 0; p < teamsInvolved.length; p++) {
-          var posLabel = posLabels[p] || (p+1)+'º';
-          var isSelected = currentPos === p;
-          var takenByOther = rankOrder[p] !== undefined && rankOrder[p] !== team.name;
-          var cls = 'fp-rank-btn' + (isSelected ? ' selected' : takenByOther ? ' taken' : '');
-          html += '<button class="' + cls + '"' +
-            (takenByOther ? ' disabled' : '') +
-            ' data-team="' + team.name + '" data-pos="' + p + '">' + posLabel + '</button>';
-        }
-        html += '</div>';
+        html += '<span class="fp-rank-handle">&#8942;&#8942;</span>';
         html += '</div>';
       });
       html += '</div>';
+      html += '<div class="fp-rank-hint">Segure e arraste para reordenar</div>';
       pairsDiv.innerHTML = html;
 
-      // Listeners
-      pairsDiv.querySelectorAll('.fp-rank-btn:not([disabled])').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-          var teamName = btn.getAttribute('data-team');
-          var pos = parseInt(btn.getAttribute('data-pos'));
-          // Remover time de posição anterior
-          var oldIdx = rankOrder.indexOf(teamName);
-          if (oldIdx !== -1) rankOrder.splice(oldIdx, 1);
-          // Inserir na nova posição
-          rankOrder.splice(pos, 0, teamName);
-          // Se passou de teamsInvolved.length, truncar
-          if (rankOrder.length > teamsInvolved.length) rankOrder = rankOrder.slice(0, teamsInvolved.length);
+      // Salvar automaticamente a cada render
+      setFairPlayRanking(group, rankOrder.slice());
+
+      // Listeners setas
+      pairsDiv.querySelectorAll('.fp-rank-arrow').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var idx = parseInt(btn.getAttribute('data-idx'));
+          var move = parseInt(btn.getAttribute('data-move'));
+          var newIdx = idx + move;
+          if (newIdx < 0 || newIdx >= rankOrder.length) return;
+          var tmp = rankOrder[idx];
+          rankOrder[idx] = rankOrder[newIdx];
+          rankOrder[newIdx] = tmp;
           renderRanking();
-          // Salvar se completo
-          if (rankOrder.length === teamsInvolved.length) {
-            setFairPlayRanking(group, rankOrder);
-          }
+        });
+      });
+
+      // Drag and drop
+      var dragSrcIdx = null;
+      var items = pairsDiv.querySelectorAll('.fp-rank-item');
+      items.forEach(function(item) {
+        item.addEventListener('dragstart', function(e) {
+          dragSrcIdx = parseInt(item.getAttribute('data-idx'));
+          item.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+        });
+        item.addEventListener('dragend', function() {
+          item.classList.remove('dragging');
+          pairsDiv.querySelectorAll('.fp-rank-item').forEach(function(i){ i.classList.remove('drag-over'); });
+        });
+        item.addEventListener('dragover', function(e) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          pairsDiv.querySelectorAll('.fp-rank-item').forEach(function(i){ i.classList.remove('drag-over'); });
+          item.classList.add('drag-over');
+        });
+        item.addEventListener('drop', function(e) {
+          e.preventDefault();
+          var dropIdx = parseInt(item.getAttribute('data-idx'));
+          if (dragSrcIdx === null || dragSrcIdx === dropIdx) return;
+          var moved = rankOrder.splice(dragSrcIdx, 1)[0];
+          rankOrder.splice(dropIdx, 0, moved);
+          dragSrcIdx = null;
+          renderRanking();
         });
       });
     }
