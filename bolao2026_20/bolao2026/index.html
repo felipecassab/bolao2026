@@ -2787,16 +2787,20 @@ function renderAdminParticipants() {
 async function adminApprove(wpp) {
   state.users[wpp].status = 'approved';
   await saveGlobal();
-  showToast(state.users[wpp].name.split(' ')[0] + ' aprovado! ✓');
+  const u = state.users[wpp];
+  const displayName = u.apelido || u.nome || u.name || wpp;
+  showToast(displayName.split(' ')[0] + ' aprovado! ✓');
   renderAdminParticipants();
   updateAdminBadge();
 }
 
 async function adminReject(wpp) {
-  if (!confirm('Recusar o cadastro de ' + state.users[wpp].name + '?')) return;
+  const u = state.users[wpp];
+  const displayName = u.apelido || u.nome || u.name || wpp;
+  if (!confirm('Recusar o cadastro de ' + displayName + '?')) return;
   state.users[wpp].status = 'rejected';
   await saveGlobal();
-  showToast('Cadastro de ' + state.users[wpp].name.split(' ')[0] + ' recusado.');
+  showToast('Cadastro de ' + displayName.split(' ')[0] + ' recusado.');
   renderAdminParticipants();
 }
 async function adminResetAllUsers() {
@@ -2829,9 +2833,11 @@ async function adminRestoreUser(wpp, nome) {
 }
 
 async function adminResetPwd(wpp) {
-  state.users[wpp].pwd=hashPwd('1234');
+  const u = state.users[wpp];
+  const displayName = u.apelido || u.nome || u.name || wpp;
+  state.users[wpp].pwd = hashPwd('1234');
   await saveGlobal();
-  showToast('Senha de '+state.users[wpp].name.split(' ')[0]+' resetada para 1234');
+  showToast('Senha de ' + displayName.split(' ')[0] + ' resetada para 1234');
 }
 
 // ═══════════════════════════════════════════════════════════════════
