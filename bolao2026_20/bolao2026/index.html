@@ -430,7 +430,7 @@ body{display:flex;flex-direction:column}
       <p class="sec-title">Área da Comissão</p>
       <div class="card"><div class="card-body">
         <p style="font-size:13px;color:var(--gray);margin-bottom:14px;">Digite a senha para registrar resultados.</p>
-        <input class="name-input" type="password" id="admin-pwd" placeholder="Senha" style="margin-bottom:12px;text-align:center;letter-spacing:4px;"/>
+        <input class="name-input" type="password" id="admin-pwd" placeholder="Senha" style="margin-bottom:12px;text-align:center;letter-spacing:4px;" onkeydown="if(event.key==='Enter')adminLogin()"/>
         <button class="btn-primary" onclick="adminLogin()">ENTRAR</button>
       </div></div>
     </div>
@@ -1578,6 +1578,14 @@ async function loadState() {
       openModal('login');
     }
   } else {
+    // No saved user — show login but don't block admin access
+    renderRanking();
+    updateDeadlinePill();
+    updateAdminBadge();
+    // Restore admin session if previously authed
+    if (localStorage.getItem('bolao_admin') === 'true') {
+      adminAuthed = true;
+    }
     openModal('login');
   }
   startPolling();
