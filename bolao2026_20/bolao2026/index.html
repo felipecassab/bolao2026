@@ -1113,6 +1113,12 @@ function renderGroupStandings(group, userPalpites) {
   });
 
   if (fpNeeded.length > 0 && !isPastDeadline()) {
+    // Only show if all 6 group matches have been filled in
+    var groupMatchesFilled = groupMatches2.every(function(m) {
+      var p = userPalpites[m.id];
+      return p && p.h !== undefined && p.a !== undefined;
+    });
+    if (!groupMatchesFilled) return html + '</div>';
     var fp = (userPalpites._fp && userPalpites._fp[group]) || [];
     var allChosen = fpNeeded.every(function(pair) {
       return (fp.indexOf(pair.a.name) !== -1 || fp.indexOf(pair.b.name) !== -1);
