@@ -560,12 +560,16 @@ body{display:flex;flex-direction:column}
     <div class="modal-handle"></div>
     <!-- LOGIN VIEW -->
     <div class="modal-view active" id="mv-login">
-      <p class="modal-title">Entrar no Bolão</p>
-      <p class="modal-sub">Use seu WhatsApp e senha cadastrados</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <p class="modal-title" style="margin-bottom:0;">Entrar no Bolão</p>
+        <button onclick="closeModal()" style="background:transparent;border:none;color:var(--gray);font-size:22px;cursor:pointer;padding:0 4px;line-height:1;">×</button>
+      </div>
+      <p class="modal-sub">Use seu apelido e senha cadastrados</p>
+      <p style="font-size:11px;color:var(--gold);text-align:center;margin-bottom:8px;cursor:pointer;" onclick="closeModal();document.getElementById('nav-admin').click();">→ Comissão? Acesse o painel Admin</p>
       <div class="form-error" id="err-login"></div>
       <div class="form-field">
-        <label class="form-label">WHATSAPP</label>
-        <input class="form-input" type="tel" id="f-login-wpp" placeholder="(11) 99999-9999" maxlength="15" oninput="phoneMask(this)"/>
+        <label class="form-label">APELIDO</label>
+        <input class="form-input" type="text" id="f-login-apelido" placeholder="SeuApelido" maxlength="30" autocomplete="off" autocorrect="off" autocapitalize="off" onkeydown="if(event.key==='Enter')doLogin()"/>
       </div>
       <div class="form-field">
         <label class="form-label">SENHA</label>
