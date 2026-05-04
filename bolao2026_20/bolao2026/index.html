@@ -2343,6 +2343,8 @@ function takeSnapshot() {
 // ═══════════════════════════════════════════════════════════════════
 // RENDER MATCHES
 // ═══════════════════════════════════════════════════════════════════
+const MATCH_NUMBERS = {"r32_1": 73, "r32_2": 74, "r32_3": 75, "r32_4": 76, "r32_5": 77, "r32_6": 78, "r32_7": 79, "r32_8": 80, "r32_9": 81, "r32_10": 82, "r32_11": 83, "r32_12": 84, "r32_13": 85, "r32_14": 86, "r32_15": 87, "r32_16": 88, "r16_1": 89, "r16_2": 90, "r16_3": 91, "r16_4": 92, "r16_5": 93, "r16_6": 94, "r16_7": 95, "r16_8": 96, "qf_1": 97, "qf_2": 98, "qf_3": 99, "qf_4": 100, "sf_1": 101, "sf_2": 102, "third": 103, "final": 104};
+
 function flagImg(code, cls='flag') {
   if (code==='un') return '<span style="font-size:16px;">🏳️</span>';
   return `<img class="${cls}" src="https://flagcdn.com/w40/${code}.png" onerror="this.style.display=&quot;none&quot;"/>`;
@@ -2384,6 +2386,7 @@ function renderMatches() {
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="status-pill ${statusClass}">${statusLabel}</span>
           <span style="font-size:11px;color:var(--gray);">${m.city||''}</span>
+          ${m.phase==='knockout' && MATCH_NUMBERS[m.id] ? `<span style="font-size:11px;color:var(--gray);opacity:0.6;">· Match ${MATCH_NUMBERS[m.id]}</span>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           ${res?`<span style="font-size:12px;color:var(--gray);">Oficial: <b style="color:var(--gold);font-family:'Barlow Condensed';font-size:15px;">${res.h}:${res.a}</b></span>`:''}
