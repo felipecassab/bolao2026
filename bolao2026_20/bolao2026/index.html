@@ -1094,46 +1094,52 @@ function renderGroupStandings(group, userPalpites) {
 
   Object.values(ptGroups).forEach(function(tiedGroup) {
     if (tiedGroup.length < 2) return;
-    // Filter to only those also tied on overall SG and GP
-    var sameStat = tiedGroup.filter(function(t) {
-      return tiedGroup.every(function(u) {
-        if (u.name === t.name) return true;
-        return (t.gp-t.gc) === (u.gp-u.gc) && t.gp === u.gp;
+
+    // Agrupar em subgrupos por SG e GP iguais (pode haver múltiplos subgrupos)
+    var subGroups = [];
+    tiedGroup.forEach(function(t) {
+      var found = subGroups.find(function(sg) {
+        return (t.gp - t.gc) === (sg[0].gp - sg[0].gc) && t.gp === sg[0].gp;
       });
-    });
-    if (sameStat.length < 2) return;
-
-    // Calculate H2H among all tied teams
-    var h2h = {};
-    sameStat.forEach(function(t) { h2h[t.name] = {pt:0, gp:0, gc:0}; });
-    groupMatches2.forEach(function(m) {
-      var p = userPalpites[m.id];
-      if (!p) return;
-      var hInTied = sameStat.find(function(t){return t.name===m.home;});
-      var aInTied = sameStat.find(function(t){return t.name===m.away;});
-      if (!hInTied || !aInTied) return;
-      h2h[m.home].gp+=+p.h; h2h[m.home].gc+=+p.a;
-      h2h[m.away].gp+=+p.a; h2h[m.away].gc+=+p.h;
-      if (+p.h>+p.a) h2h[m.home].pt+=3;
-      else if (+p.h<+p.a) h2h[m.away].pt+=3;
-      else { h2h[m.home].pt++; h2h[m.away].pt++; }
+      if (found) found.push(t);
+      else subGroups.push([t]);
     });
 
-    // Find pairs still tied after H2H pts, H2H SG, H2H GP
-    for (var i = 0; i < sameStat.length - 1; i++) {
-      for (var j = i + 1; j < sameStat.length; j++) {
-        var a = sameStat[i], b = sameStat[j];
-        var ha = h2h[a.name], hb = h2h[b.name];
-        if (ha.pt !== hb.pt) continue;
-        if ((ha.gp-ha.gc) !== (hb.gp-hb.gc)) continue;
-        if (ha.gp !== hb.gp) continue;
-        // Truly tied — need fair play
-        var pairKey = [a.name, b.name].sort().join('|');
-        if (!fpNeeded.find(function(p){return p.key===pairKey;})) {
-          fpNeeded.push({key:pairKey, a:a, b:b});
+    subGroups.forEach(function(sameStat) {
+      if (sameStat.length < 2) return;
+
+      // Calculate H2H among teams in this subgroup
+      var h2h = {};
+      sameStat.forEach(function(t) { h2h[t.name] = {pt:0, gp:0, gc:0}; });
+      groupMatches2.forEach(function(m) {
+        var p = userPalpites[m.id];
+        if (!p) return;
+        var hInTied = sameStat.find(function(t){return t.name===m.home;});
+        var aInTied = sameStat.find(function(t){return t.name===m.away;});
+        if (!hInTied || !aInTied) return;
+        h2h[m.home].gp+=+p.h; h2h[m.home].gc+=+p.a;
+        h2h[m.away].gp+=+p.a; h2h[m.away].gc+=+p.h;
+        if (+p.h>+p.a) h2h[m.home].pt+=3;
+        else if (+p.h<+p.a) h2h[m.away].pt+=3;
+        else { h2h[m.home].pt++; h2h[m.away].pt++; }
+      });
+
+      // Find pairs still tied after H2H pts, H2H SG, H2H GP
+      for (var i = 0; i < sameStat.length - 1; i++) {
+        for (var j = i + 1; j < sameStat.length; j++) {
+          var a = sameStat[i], b = sameStat[j];
+          var ha = h2h[a.name], hb = h2h[b.name];
+          if (ha.pt !== hb.pt) continue;
+          if ((ha.gp-ha.gc) !== (hb.gp-hb.gc)) continue;
+          if (ha.gp !== hb.gp) continue;
+          // Truly tied — need fair play
+          var pairKey = [a.name, b.name].sort().join('|');
+          if (!fpNeeded.find(function(p){return p.key===pairKey;})) {
+            fpNeeded.push({key:pairKey, a:a, b:b});
+          }
         }
       }
-    }
+    });
   });
 
   if (fpNeeded.length > 0 && !isPastDeadline()) {
@@ -2436,23 +2442,30 @@ function renderMatches() {
     s2.forEach(function(t){ if(!ptGrps2[t.pt]) ptGrps2[t.pt]=[]; ptGrps2[t.pt].push(t); });
     Object.values(ptGrps2).forEach(function(tg) {
       if (tg.length < 2) return;
-      var same = tg.filter(function(t){ return tg.every(function(u){ return u.name===t.name||(t.gp-t.gc)===(u.gp-u.gc)&&t.gp===u.gp; }); });
-      if (same.length < 2) return;
-      var h2h2 = {}; same.forEach(function(t){h2h2[t.name]={pt:0,gp:0,gc:0};});
-      MATCHES.filter(function(m){return m.group===grp&&m.phase==='group';}).forEach(function(m){
-        var p=tempP2[m.id]; if(!p) return;
-        var hT=same.find(function(t){return t.name===m.home;}), aT=same.find(function(t){return t.name===m.away;});
-        if(!hT||!aT) return;
-        h2h2[m.home].gp+=+p.h; h2h2[m.home].gc+=+p.a;
-        h2h2[m.away].gp+=+p.a; h2h2[m.away].gc+=+p.h;
-        if(+p.h>+p.a) h2h2[m.home].pt+=3; else if(+p.h<+p.a) h2h2[m.away].pt+=3; else{h2h2[m.home].pt++;h2h2[m.away].pt++;}
+      // Dividir em subgrupos por SG e GP iguais
+      var subGrps2 = [];
+      tg.forEach(function(t) {
+        var found = subGrps2.find(function(sg){ return (t.gp-t.gc)===(sg[0].gp-sg[0].gc) && t.gp===sg[0].gp; });
+        if (found) found.push(t); else subGrps2.push([t]);
       });
-      for(var i=0;i<same.length-1;i++) for(var j=i+1;j<same.length;j++){
-        var a=same[i],b=same[j],ha=h2h2[a.name],hb=h2h2[b.name];
-        if(ha.pt!==hb.pt||(ha.gp-ha.gc)!==(hb.gp-hb.gc)||ha.gp!==hb.gp) continue;
-        var pk=[a.name,b.name].sort().join('|');
-        if(!fpPairs.find(function(p){return p.key===pk;})) fpPairs.push({key:pk,a:a,b:b});
-      }
+      subGrps2.forEach(function(same) {
+        if (same.length < 2) return;
+        var h2h2 = {}; same.forEach(function(t){h2h2[t.name]={pt:0,gp:0,gc:0};});
+        MATCHES.filter(function(m){return m.group===grp&&m.phase==='group';}).forEach(function(m){
+          var p=tempP2[m.id]; if(!p) return;
+          var hT=same.find(function(t){return t.name===m.home;}), aT=same.find(function(t){return t.name===m.away;});
+          if(!hT||!aT) return;
+          h2h2[m.home].gp+=+p.h; h2h2[m.home].gc+=+p.a;
+          h2h2[m.away].gp+=+p.a; h2h2[m.away].gc+=+p.h;
+          if(+p.h>+p.a) h2h2[m.home].pt+=3; else if(+p.h<+p.a) h2h2[m.away].pt+=3; else{h2h2[m.home].pt++;h2h2[m.away].pt++;}
+        });
+        for(var i=0;i<same.length-1;i++) for(var j=i+1;j<same.length;j++){
+          var a=same[i],b=same[j],ha=h2h2[a.name],hb=h2h2[b.name];
+          if(ha.pt!==hb.pt||(ha.gp-ha.gc)!==(hb.gp-hb.gc)||ha.gp!==hb.gp) continue;
+          var pk=[a.name,b.name].sort().join('|');
+          if(!fpPairs.find(function(p){return p.key===pk;})) fpPairs.push({key:pk,a:a,b:b});
+        }
+      });
     });
     openFPModal(grp, fpPairs, tempP2, s2);
   });
