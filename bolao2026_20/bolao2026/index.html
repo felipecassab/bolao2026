@@ -239,6 +239,8 @@ body{display:flex;flex-direction:column}
 .fairplay-btn.selected{background:#7eb8f5;color:var(--navy);border-color:#7eb8f5;font-weight:700;}
 /* PENALTY */
 .penalty-selector{margin-top:6px;padding:8px 10px;background:rgba(245,197,24,0.08);border:1px solid rgba(245,197,24,0.2);border-radius:var(--radius-sm);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.match-row.pen-pending{border-left:3px solid rgba(245,197,24,0.6);padding-left:8px;border-radius:4px 0 0 4px;}
+.pen-warning{font-size:10px;color:var(--gold);letter-spacing:0.5px;display:flex;align-items:center;gap:3px;margin-top:2px;}
 .penalty-label{font-size:11px;color:var(--gold);font-weight:600;flex-shrink:0;}
 .penalty-btn{padding:5px 12px;border-radius:50px;border:1px solid rgba(255,255,255,0.15);background:transparent;color:var(--light);font-size:12px;cursor:pointer;}
 .penalty-btn.selected{background:var(--gold);color:var(--navy);border-color:var(--gold);font-weight:700;}
@@ -1729,6 +1731,15 @@ function setPenalty(matchId, winner) {
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
   if (!state.palpites[state.user][matchId]) state.palpites[state.user][matchId] = {};
   state.palpites[state.user][matchId].pen = winner;
+  // Remover indicador pen-pending do match-row
+  var matchRowEl = document.getElementById('p_'+matchId+'_h');
+  if (matchRowEl) {
+    var rowEl = matchRowEl.closest('.match-row');
+    if (rowEl) rowEl.classList.remove('pen-pending');
+  }
+  // Remover aviso visual
+  var warningEl = document.querySelector('.pen-warning[data-match="' + matchId + '"]');
+  if (warningEl) warningEl.remove();
   // Update buttons visually
   var penDiv = document.getElementById('pen_' + matchId);
   if (penDiv) {
@@ -1770,6 +1781,31 @@ function updateTeamInDOM(matchId, side, team) {
   updateFlagById(matchId, side, team);
 }
 
+function clearTeamInDOM(matchId, side) {
+  // Restaurar placeholder original do match
+  var matchData = MATCHES.find(function(m){return m.id===matchId;});
+  var placeholder = matchData ? (side==='h' ? matchData.home : matchData.away) : '';
+  var flagWrap = document.getElementById('flag_' + side + '_' + matchId);
+  if (flagWrap) {
+    flagWrap.innerHTML = '<span style="font-size:16px;">🏳️</span>';
+    var teamDiv = flagWrap.parentElement;
+    if (teamDiv) {
+      var nameSpan = teamDiv.querySelector('.team-name');
+      if (nameSpan) nameSpan.textContent = placeholder || '';
+    }
+  }
+  // Só limpar inputs se não houver placar salvo para este jogo
+  var savedP = state.user && state.palpites[state.user] && state.palpites[state.user][matchId];
+  if (!savedP) {
+    var ih = document.getElementById('p_'+matchId+'_h');
+    var ia = document.getElementById('p_'+matchId+'_a');
+    if (ih) ih.value = '';
+    if (ia) ia.value = '';
+    var penDiv = document.getElementById('pen_'+matchId);
+    if (penDiv) penDiv.innerHTML = '';
+  }
+}
+
 function propagateKnockout(changedMatchId) {
   // Build full tempP from saved state + current DOM inputs
   var savedP = state.user ? (state.palpites[state.user] || {}) : {};
@@ -1785,13 +1821,15 @@ function propagateKnockout(changedMatchId) {
   // Update ALL knockout match displays
   MATCHES.filter(function(m){return m.phase==='knockout';}).forEach(function(m){
     var rt = resolvedTeams[m.id];
-    if (!rt) return;
-    var inp = document.getElementById('p_'+m.id+'_h');
-    if (!inp) return;
-    var matchRow = inp.closest('.match-row');
-    if (!matchRow) return;
+    if (!rt) {
+      clearTeamInDOM(m.id, 'h');
+      clearTeamInDOM(m.id, 'a');
+      return;
+    }
     if (rt.home) updateTeamInDOM(m.id, 'h', rt.home);
+    else clearTeamInDOM(m.id, 'h');
     if (rt.away) updateTeamInDOM(m.id, 'a', rt.away);
+    else clearTeamInDOM(m.id, 'a');
   });
 }
 
@@ -2390,7 +2428,9 @@ function renderMatches() {
       const dis = locked?'disabled':'';
       const canViewMatch = isPastDeadline() && Object.keys(state.users).length > 0;
       const matchClick = canViewMatch ? `onclick="viewMatchPalpites('${m.id}')" style="cursor:pointer;"` : '';
-      html += `<div class="match-row" ${matchClick}>
+      // Verificar se é empate knockout sem pênaltis definidos
+      const isPenPending = m.phase==='knockout' && !locked && p && p.h !== undefined && p.a !== undefined && +p.h === +p.a && !p.pen;
+      html += `<div class="match-row${isPenPending ? ' pen-pending' : ''}" ${matchClick}>
         <div class="team"><span id="flag_h_${m.id}">${flagImg(dispFH)}</span><span class="team-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:90px;">${dispHome}</span></div>
         <div class="score-inputs">
           <input class="score-inp" type="number" min="0" max="20" id="p_${m.id}_h" value="${p?.h??''}" placeholder="-" ${dis}/>
@@ -2404,6 +2444,7 @@ function renderMatches() {
           <span class="status-pill ${statusClass}">${statusLabel}</span>
           <span style="font-size:11px;color:var(--gray);">${m.city||''}</span>
           ${m.phase==='knockout' && MATCH_NUMBERS[m.id] ? `<span style="font-size:11px;color:var(--gray);opacity:0.6;">· Match ${MATCH_NUMBERS[m.id]}</span>` : ''}
+          ${isPenPending ? `<span class="pen-warning">⚠️ Pênaltis não definidos</span>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           ${res?`<span style="font-size:12px;color:var(--gray);">Oficial: <b style="color:var(--gold);font-family:'Barlow Condensed';font-size:15px;">${res.h}:${res.a}</b></span>`:''}
@@ -2531,9 +2572,16 @@ function renderMatches() {
       // Update team names in next phases WITHOUT re-rendering
       MATCHES.filter(function(x){return x.phase==='knockout';}).forEach(function(x){
         var rt = resolvedTeams[x.id];
-        if (!rt) return;
+        if (!rt) {
+          // Sem resolvedTeams = times dependem de placar apagado → limpar
+          clearTeamInDOM(x.id, 'h');
+          clearTeamInDOM(x.id, 'a');
+          return;
+        }
         if (rt.home) updateTeamInDOM(x.id, 'h', rt.home);
+        else clearTeamInDOM(x.id, 'h');
         if (rt.away) updateTeamInDOM(x.id, 'a', rt.away);
+        else clearTeamInDOM(x.id, 'a');
       });
 
       // Show/hide penalty selector for THIS match only (no full re-render)
@@ -2569,19 +2617,63 @@ function renderMatches() {
       }
     }
     function onKoBlur(e) {
-      // Aguardar um tick para ver se o foco foi para um botão de pênaltis
       setTimeout(function() {
         var focused = document.activeElement;
-        if (focused && focused.classList.contains('penalty-btn')) return; // ignorar
+        if (focused && focused.classList.contains('penalty-btn')) return;
         onKoInput();
       }, 80);
     }
-    if (ih) { ih.addEventListener('blur', onKoBlur); }
-    if (ia) { ia.addEventListener('blur', onKoBlur); }
+    function onKoLiveInput() {
+      // Mostrar/esconder pênaltis imediatamente ao digitar, sem re-renderizar o bracket
+      var thisH = document.getElementById('p_'+m.id+'_h');
+      var thisA = document.getElementById('p_'+m.id+'_a');
+      if (!thisH || !thisA) return;
+      var hv = thisH.value, av = thisA.value;
+      if (hv === '' || av === '') return; // aguardar os dois preenchidos
+      var savedP2 = state.user ? (state.palpites[state.user] || {}) : {};
+      var existingPen = thisH.closest('.card-body') ? thisH.closest('.card-body').querySelector('.penalty-selector') : null;
+      var matchData = MATCHES.find(function(x){return x.id===m.id;});
+      var rt2 = resolvedTeams[m.id];
+      var homeName = (rt2 && rt2.home) ? rt2.home.name : (matchData ? matchData.home : '');
+      var awayName = (rt2 && rt2.away) ? rt2.away.name : (matchData ? matchData.away : '');
+      var savedPen = savedP2[m.id] ? savedP2[m.id].pen : '';
+      var matchRowLive = thisH.closest('.match-row');
+      if (+hv === +av) {
+        if (!existingPen) {
+          var penHtml = '<div class="penalty-selector">' +
+            '<span class="penalty-label">🥅 Pênaltis:</span>' +
+            '<button class="penalty-btn' + (savedPen==='H'?' selected':'') + '" onclick="setPenalty(\'' + m.id + '\',\'H\')">' + homeName + '</button>' +
+            '<button class="penalty-btn' + (savedPen==='A'?' selected':'') + '" onclick="setPenalty(\'' + m.id + '\',\'A\')">' + awayName + '</button>' +
+            '</div>';
+          var penPlaceholder = document.getElementById('pen_' + m.id);
+          if (penPlaceholder) penPlaceholder.innerHTML = penHtml;
+        }
+        // Adicionar pen-pending se pênaltis ainda não definidos
+        if (!savedPen && matchRowLive) matchRowLive.classList.add('pen-pending');
+      } else {
+        if (existingPen) existingPen.remove();
+        var penPlaceholder2 = document.getElementById('pen_' + m.id);
+        if (penPlaceholder2) penPlaceholder2.innerHTML = '';
+        // Remover pen-pending
+        if (matchRowLive) matchRowLive.classList.remove('pen-pending');
+      }
+    }
+    if (ih) { ih.addEventListener('blur', onKoBlur); ih.addEventListener('input', onKoLiveInput); }
+    if (ia) { ia.addEventListener('blur', onKoBlur); ia.addEventListener('input', onKoLiveInput); }
   });
 
   // Progress counter
-  const filled = MATCHES.filter(m=>{ const h=document.getElementById('p_'+m.id+'_h')?.value; const a=document.getElementById('p_'+m.id+'_a')?.value; return h!==''&&a!==''; }).length;
+  const filled = MATCHES.filter(m=>{
+    const h=document.getElementById('p_'+m.id+'_h')?.value;
+    const a=document.getElementById('p_'+m.id+'_a')?.value;
+    if (h===''||a==='') return false;
+    // Jogo knockout empatado exige pênaltis definidos para ser considerado completo
+    if (m.phase==='knockout' && +h===+a) {
+      const savedP = state.user && state.palpites[state.user] && state.palpites[state.user][m.id];
+      if (!savedP || !savedP.pen) return false;
+    }
+    return true;
+  }).length;
   const savedQA = state.user?(state.palpites[state.user]?._qa||{}):{};
   const filledEx = EXTRA_QS.filter(q=>savedQA[q.id]?.answer?.trim()).length;
   const allDone = filled===MATCHES.length && filledEx===EXTRA_QS.length;
@@ -2705,7 +2797,15 @@ async function saveDraft() {
   // Always sync to Firebase
   try {
     await saveGlobal();
-    const count = Object.keys(draft).filter(k => k !== '_qa' && k !== '_fp').length;
+    const count = Object.keys(draft).filter(k => {
+      if (k === '_qa' || k === '_fp') return false;
+      const matchData = MATCHES.find(function(m){return m.id===k;});
+      if (!matchData) return false;
+      const val = draft[k];
+      // Knockout empatado sem pênaltis não conta como completo
+      if (matchData.phase==='knockout' && val && val.h!==undefined && val.a!==undefined && +val.h===+val.a && !val.pen) return false;
+      return true;
+    }).length;
     showToast(`💾 Rascunho salvo! ${count} de ${MATCHES.length} jogos preenchidos.`);
   } catch(e) {
     showToast('💾 Salvo localmente (sem conexão)', true);
