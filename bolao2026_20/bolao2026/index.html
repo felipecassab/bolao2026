@@ -1220,6 +1220,11 @@ function doUpdateGroupStandings(group) {
     var a = document.getElementById('p_'+m.id+'_a');
     if (h && a && h.value !== '' && a.value !== '') tempP[m.id] = {h:+h.value, a:+a.value};
   });
+  // Atualizar cache global para FP3
+  if (state.user) {
+    if (!state._groupDomCache) state._groupDomCache = {};
+    Object.assign(state._groupDomCache, tempP);
+  }
   var existing = (state.user && state.palpites[state.user]) ? state.palpites[state.user] : {};
   var merged = Object.assign({}, existing, tempP);
   // Replace standings block (no listener re-attachment needed)
@@ -2627,10 +2632,15 @@ function renderMatches() {
     const ia = document.getElementById('p_'+m.id+'_a');
     if (ih && ia && ih.value!=='' && ia.value!=='') domP[m.id]={h:+ih.value,a:+ia.value};
   });
+  // Manter cache global dos valores de grupos para FP3
+  if (state.user) {
+    if (!state._groupDomCache) state._groupDomCache = {};
+    Object.assign(state._groupDomCache, domP);
+  }
   // Build resolved teams using saved palpites only (DOM values captured on blur/save)
   const userP = state.user ? (state.palpites[state.user] || {}) : {};
-  // Palpites completos (salvo + DOM atual) para cálculos de terceiros
-  const userPFull = Object.assign({}, userP, domP);
+  // Palpites completos (salvo + cache DOM) para cálculos de terceiros
+  const userPFull = Object.assign({}, userP, state._groupDomCache || {}, domP);
   buildResolvedTeams(userP);
   const groups = {};
   MATCHES.forEach(m=>{ if(!groups[m.group]) groups[m.group]=[]; groups[m.group].push(m); });
