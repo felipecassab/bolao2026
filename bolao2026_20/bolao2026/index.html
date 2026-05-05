@@ -1071,6 +1071,44 @@ function calcGroupStandings(group, userPalpites) {
   return teamList;
 }
 
+function renderThirdsStandings(userPalpites) {
+  var groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+  var thirds = groups.map(function(g) {
+    var s = calcGroupStandings(g, userPalpites);
+    if (!s[2] || s[2].j < 3) return null;
+    return Object.assign({}, s[2], {group:g});
+  }).filter(Boolean);
+  if (thirds.length === 0) return '';
+  sortThirds(thirds, userPalpites);
+
+  var html = '<div class="classif-wrap" style="margin-top:10px;">';
+  html += '<div class="classif-title">MELHORES TERCEIROS COLOCADOS</div>';
+  html += '<table class="classif-table"><thead><tr>';
+  html += '<th style="width:40%;">Seleção</th><th>PT</th><th>J</th><th>V</th><th>E</th><th>D</th><th>GP</th><th>GC</th><th>SG</th>';
+  html += '</tr></thead><tbody>';
+
+  thirds.forEach(function(t, i) {
+    var sg = t.gp - t.gc;
+    var sgColor = sg > 0 ? 'var(--green)' : sg < 0 ? 'var(--red)' : 'var(--gray)';
+    var qualified = i < 8;
+    // Linha separadora entre 8º e 9º
+    var borderTop = i === 8 ? 'border-top:2px solid rgba(244,67,54,0.4);' : '';
+    html += '<tr style="' + borderTop + '">';
+    html += '<td><span class="classif-pos ' + (qualified ? 'q' : 'out') + '">' + (i+1) + '</span>';
+    html += '<img src="https://flagcdn.com/w20/' + t.flag + '.png" style="width:16px;height:11px;border-radius:1px;vertical-align:middle;margin-right:4px;" onerror="this.style.display=&quot;none&quot;"/>';
+    html += t.name;
+    html += '<span style="font-size:10px;color:var(--gray);margin-left:4px;">(Gr.' + t.group + ')</span>';
+    html += '</td>';
+    html += '<td>' + t.pt + '</td><td>' + t.j + '</td><td>' + t.v + '</td><td>' + t.e + '</td><td>' + t.d + '</td>';
+    html += '<td>' + t.gp + '</td><td>' + t.gc + '</td>';
+    html += '<td style="color:' + sgColor + ';">' + (sg>0?'+':'') + sg + '</td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  return html;
+}
+
 function renderGroupStandings(group, userPalpites) {
   const s = calcGroupStandings(group, userPalpites);
   let html = '<div class="classif-wrap" id="classif_' + group + '">';
@@ -2719,6 +2757,10 @@ function renderMatches() {
     if (g === 'L' && !locked && state.user) {
       var p3 = state.palpites[state.user] || {};
       var fpNeeded3 = getThirdsFPNeeded(userPFull);
+      // Tabela dos melhores terceiros
+      html += '<div class="card" style="margin-bottom:14px;"><div class="card-body">';
+      html += renderThirdsStandings(userPFull);
+      html += '</div></div>';
       if (fpNeeded3.length >= 2) {
         var fp3 = p3._fp3 || [];
         var allChosen3 = fpNeeded3.every(function(t){ return fp3.indexOf(t.name) !== -1; });
