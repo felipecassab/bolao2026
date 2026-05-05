@@ -2777,16 +2777,16 @@ function renderMatches() {
   const savedQA = state.user?(state.palpites[state.user]?._qa||{}):{};
   const filledEx = EXTRA_QS.filter(q=>savedQA[q.id]?.answer?.trim()).length;
   const allDone = filled===MATCHES.length && filledEx===EXTRA_QS.length;
-  // Mostrar banner de campeão quando todos os palpites forem preenchidos pela primeira vez
+  // Mostrar banner de campeão quando todos os palpites forem preenchidos
   if (filled===MATCHES.length && !locked) {
-    var wasComplete = window._bolaoWasComplete || false;
-    if (!wasComplete) {
-      window._bolaoWasComplete = true;
-      var champ = getChampionFromPalpites(state.user ? state.palpites[state.user] : null);
-      if (champ) setTimeout(function(){ showChampionBanner(champ); }, 400);
+    var champ = getChampionFromPalpites(state.user ? state.palpites[state.user] : null);
+    var champName = champ ? champ.name : '';
+    var bannerKey = 'bolao_banner_shown_' + (state.user||'') + '_' + champName;
+    var alreadyShown = localStorage.getItem(bannerKey);
+    if (!alreadyShown && champName) {
+      localStorage.setItem(bannerKey, '1');
+      setTimeout(function(){ showChampionBanner(champ); }, 400);
     }
-  } else {
-    window._bolaoWasComplete = false;
   }
   const mc = filled===MATCHES.length?'var(--green)':filled>0?'#f5a623':'var(--gray)';
   const ec = filledEx===EXTRA_QS.length?'var(--green)':filledEx>0?'#f5a623':'var(--gray)';
