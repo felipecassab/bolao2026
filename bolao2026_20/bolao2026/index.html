@@ -2459,6 +2459,25 @@ function getChampionFromPalpites(userPalpites) {
   return rt[winner] || null;
 }
 
+function updatePenPending() {
+  // Atualiza pen-pending em todos os jogos knockout lendo o DOM real
+  MATCHES.forEach(function(m) {
+    if (m.phase !== 'knockout') return;
+    var row = document.querySelector('.match-row[data-mid="' + m.id + '"]');
+    var ih = document.getElementById('p_' + m.id + '_h');
+    var ia = document.getElementById('p_' + m.id + '_a');
+    var warn = document.getElementById('pen-warn-' + m.id);
+    if (!row || !ih || !ia) return;
+    var hv = ih.value, av = ia.value;
+    var p = state.user && state.palpites[state.user] && state.palpites[state.user][m.id];
+    var pen = p ? p.pen : null;
+    // Pending se: ambos preenchidos, iguais, e sem pênaltis definidos
+    var pending = hv !== '' && av !== '' && +hv === +av && !pen;
+    row.classList.toggle('pen-pending', pending);
+    if (warn) warn.style.display = pending ? 'flex' : 'none';
+  });
+}
+
 function flagImg(code, cls='flag') {
   if (code==='un') return '<span style="font-size:16px;">🏳️</span>';
   return `<img class="${cls}" src="https://flagcdn.com/w40/${code}.png" onerror="this.style.display=&quot;none&quot;"/>`;
@@ -2488,14 +2507,10 @@ function renderMatches() {
       const canViewMatch = isPastDeadline() && Object.keys(state.users).length > 0;
       const matchClick = canViewMatch ? `onclick="viewMatchPalpites('${m.id}')" style="cursor:pointer;"` : '';
       // Verificar se é empate knockout sem pênaltis definidos
-      // isPenPending: lê DOM ou palpite salvo (o que estiver disponível)
-      const _domH = document.getElementById('p_'+m.id+'_h');
-      const _domA = document.getElementById('p_'+m.id+'_a');
-      const _hv = _domH ? _domH.value : (p?.h ?? '');
-      const _av = _domA ? _domA.value : (p?.a ?? '');
-      const _pen = p?.pen;
-      const isPenPending = m.phase==='knockout' && !locked && _hv!=='' && _av!=='' && +_hv===+_av && !_pen;
-      html += `<div class="match-row${isPenPending ? ' pen-pending' : ''}" ${matchClick}>
+      // isPenPending: apenas estado salvo (DOM não existe ainda no render)
+      const isPenPending = m.phase==='knockout' && !locked && p &&
+        p.h !== undefined && p.a !== undefined && +p.h === +p.a && !p.pen;
+      html += `<div class="match-row${isPenPending ? ' pen-pending' : ''}" data-mid="${m.id}" ${matchClick}>
         <div class="team"><span id="flag_h_${m.id}">${flagImg(dispFH)}</span><span class="team-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:90px;">${dispHome}</span></div>
         <div class="score-inputs">
           <input class="score-inp" type="number" min="0" max="20" id="p_${m.id}_h" value="${p?.h??''}" placeholder="-" ${dis}/>
@@ -2509,7 +2524,7 @@ function renderMatches() {
           <span class="status-pill ${statusClass}">${statusLabel}</span>
           <span style="font-size:11px;color:var(--gray);">${m.city||''}</span>
           ${m.phase==='knockout' && MATCH_NUMBERS[m.id] ? `<span style="font-size:11px;color:var(--gray);opacity:0.6;">· Match ${MATCH_NUMBERS[m.id]}</span>` : ''}
-          ${isPenPending ? `<span class="pen-warning">⚠️ Pênaltis não definidos</span>` : ''}
+          <span class="pen-warning" id="pen-warn-${m.id}" style="display:${isPenPending?'flex':'none'}">⚠️ Pênaltis não definidos</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           ${res?`<span style="font-size:12px;color:var(--gray);">Oficial: <b style="color:var(--gold);font-family:'Barlow Condensed';font-size:15px;">${res.h}:${res.a}</b></span>`:''}
@@ -2703,6 +2718,8 @@ function renderMatches() {
       var awayName = (rt2 && rt2.away) ? rt2.away.name : (matchData ? matchData.away : '');
       var savedPen = savedP2[m.id] ? savedP2[m.id].pen : '';
       var matchRowLive = thisH.closest('.match-row');
+      // Atualizar pen-pending imediatamente
+      setTimeout(updatePenPending, 0);
       if (+hv === +av) {
         if (!existingPen) {
           var penHtml = '<div class="penalty-selector">' +
@@ -2745,6 +2762,9 @@ function renderMatches() {
   // (banner do campeão é disparado apenas no syncDraft)
   const mc = filled===MATCHES.length?'var(--green)':filled>0?'#f5a623':'var(--gray)';
   const ec = filledEx===EXTRA_QS.length?'var(--green)':filledEx>0?'#f5a623':'var(--gray)';
+  // Atualizar pen-pending com valores reais do DOM
+  setTimeout(updatePenPending, 0);
+
   document.getElementById('progress-counter').innerHTML = locked?'' :
     `<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
       <span style="color:${mc};font-weight:600;font-size:13px;">⚽ ${filled}/${MATCHES.length} jogos</span>
