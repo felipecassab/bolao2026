@@ -2436,7 +2436,8 @@ function showChampionBanner(team) {
   } else {
     flagEl.innerHTML = '🏆';
   }
-  nameEl.textContent = team.name || '';
+  if (!team || !team.name) return; // nunca abrir sem campeão definido
+  nameEl.textContent = team.name;
   banner.style.display = 'flex';
 
   // Confetes simples
@@ -2777,16 +2778,26 @@ function renderMatches() {
   const savedQA = state.user?(state.palpites[state.user]?._qa||{}):{};
   const filledEx = EXTRA_QS.filter(q=>savedQA[q.id]?.answer?.trim()).length;
   const allDone = filled===MATCHES.length && filledEx===EXTRA_QS.length;
-  // Mostrar banner de campeão quando todos os palpites forem preenchidos
-  if (filled===MATCHES.length && !locked) {
-    var champ = getChampionFromPalpites(state.user ? state.palpites[state.user] : null);
+  // Mostrar banner de campeão: só se logado, prazo aberto, aba palpites ativa e todos preenchidos
+  var onPalpitesNow = document.getElementById('page-palpites')?.classList.contains('active');
+  if (state.user && !locked && onPalpitesNow && filled === MATCHES.length) {
+    var champ = getChampionFromPalpites(state.palpites[state.user]);
     var champName = champ ? champ.name : '';
-    var bannerKey = 'bolao_banner_shown_' + (state.user||'') + '_' + champName;
-    var alreadyShown = localStorage.getItem(bannerKey);
-    if (!alreadyShown && champName) {
-      localStorage.setItem(bannerKey, '1');
-      setTimeout(function(){ showChampionBanner(champ); }, 400);
+    if (champName) {
+      var bannerKey = 'bolao_banner_shown_' + state.user + '_' + champName;
+      if (!localStorage.getItem(bannerKey)) {
+        localStorage.setItem(bannerKey, '1');
+        setTimeout(function(){ showChampionBanner(champ); }, 400);
+      }
     }
+  } else if (state.user) {
+    // Palpites incompletos — resetar flag para mostrar banner ao completar de novo
+    var keysToRemove = [];
+    for (var ki = 0; ki < localStorage.length; ki++) {
+      var lk = localStorage.key(ki);
+      if (lk && lk.startsWith('bolao_banner_shown_' + state.user + '_')) keysToRemove.push(lk);
+    }
+    keysToRemove.forEach(function(k){ localStorage.removeItem(k); });
   }
   const mc = filled===MATCHES.length?'var(--green)':filled>0?'#f5a623':'var(--gray)';
   const ec = filledEx===EXTRA_QS.length?'var(--green)':filledEx>0?'#f5a623':'var(--gray)';
