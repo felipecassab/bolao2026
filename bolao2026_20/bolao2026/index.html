@@ -1269,21 +1269,60 @@ function getGroupWinner(group, pos, userPalpites) {
   return s[pos];
 }
 
-function getBest8Thirds(userPalpites) {
-  var groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
-  var thirds = groups.map(function(g) {
-    var s = calcGroupStandings(g, userPalpites);
-    if (!s[2] || s[2].j < 3) return null; // need all 3 games
-    return Object.assign({}, s[2], {group:g});
-  }).filter(Boolean);
-  if (thirds.length < 8) return [];
+function sortThirds(thirds, userPalpites) {
+  // Ordenar terceiros: pts → SG → GP → Fair Play (se definido) → Ranking FIFA
+  var fp = userPalpites && userPalpites._fp3 ? userPalpites._fp3 : [];
   thirds.sort(function(a,b) {
     if (b.pt !== a.pt) return b.pt - a.pt;
     var sgA=a.gp-a.gc, sgB=b.gp-b.gc;
     if (sgB !== sgA) return sgB - sgA;
     if (b.gp !== a.gp) return b.gp - a.gp;
+    // Fair Play dos terceiros (_fp3 = array de nomes ordenados pelo usuário)
+    var iA = fp.indexOf(a.name), iB = fp.indexOf(b.name);
+    if (iA !== -1 && iB !== -1) return iA - iB;
+    if (iA !== -1) return -1;
+    if (iB !== -1) return 1;
     return (FIFA_RANKING[a.name]||99)-(FIFA_RANKING[b.name]||99);
   });
+  return thirds;
+}
+
+function getThirdsFPNeeded(userPalpites) {
+  // Retorna as seleções empatadas que cruzam a fronteira da 8ª posição
+  var groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+  var thirds = groups.map(function(g) {
+    var s = calcGroupStandings(g, userPalpites);
+    if (!s[2] || s[2].j < 3) return null;
+    return Object.assign({}, s[2], {group:g});
+  }).filter(Boolean);
+  if (thirds.length < 9) return []; // precisa de pelo menos 9 para haver fronteira
+  sortThirds(thirds, userPalpites);
+  // Verificar se 8ª e 9ª estão empatadas em pts, SG e GP
+  var t8 = thirds[7], t9 = thirds[8];
+  if (!t8 || !t9) return [];
+  if (t8.pt !== t9.pt) return [];
+  if ((t8.gp-t8.gc) !== (t9.gp-t9.gc)) return [];
+  if (t8.gp !== t9.gp) return [];
+  // Há empate na fronteira — pegar todos empatados nessa faixa
+  var tied = thirds.filter(function(t) {
+    return t.pt === t8.pt && (t.gp-t.gc) === (t8.gp-t8.gc) && t.gp === t8.gp;
+  });
+  // Só precisa de Fair Play se o grupo empatado cruza a fronteira
+  var tiedInTop8 = tied.filter(function(t){ return thirds.indexOf(t) < 8; });
+  var tiedOutTop8 = tied.filter(function(t){ return thirds.indexOf(t) >= 8; });
+  if (tiedInTop8.length === 0 || tiedOutTop8.length === 0) return [];
+  return tied;
+}
+
+function getBest8Thirds(userPalpites) {
+  var groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+  var thirds = groups.map(function(g) {
+    var s = calcGroupStandings(g, userPalpites);
+    if (!s[2] || s[2].j < 3) return null;
+    return Object.assign({}, s[2], {group:g});
+  }).filter(Boolean);
+  if (thirds.length < 8) return [];
+  sortThirds(thirds, userPalpites);
   return thirds.slice(0,8);
 }
 
@@ -1299,13 +1338,7 @@ function buildResolvedTeams(userPalpites) {
       if (!s[2] || s[2].j === 0) return null;
       return Object.assign({}, s[2], {group: g});
     }).filter(Boolean);
-    result.sort(function(a,b) {
-      if (b.pt !== a.pt) return b.pt - a.pt;
-      var sgA=a.gp-a.gc, sgB=b.gp-b.gc;
-      if (sgB !== sgA) return sgB - sgA;
-      if (b.gp !== a.gp) return b.gp - a.gp;
-      return (FIFA_RANKING[a.name]||99)-(FIFA_RANKING[b.name]||99);
-    });
+    sortThirds(result, userPalpites);
     return result;
   })();
 
@@ -1470,6 +1503,72 @@ function fpMoveBlock(blockIdx, idx, move) {
   ctx.fp.length = 0; newFp.forEach(function(n){ctx.fp.push(n);});
   setFairPlayRanking(ctx.group, newFp);
   ctx.renderAllBlocks();
+}
+
+function openFP3Modal() {
+  var modal = document.getElementById('fp-modal');
+  var pairsDiv = document.getElementById('fp-modal-pairs');
+  var modalTitle = modal ? modal.querySelector('.fp-modal-title') : null;
+  var modalSub = modal ? modal.querySelector('.fp-modal-sub') : null;
+  if (!modal || !pairsDiv) return;
+
+  var userPalpites = state.user ? (state.palpites[state.user] || {}) : {};
+  var fpNeeded3 = getThirdsFPNeeded(userPalpites);
+  if (!fpNeeded3.length) return;
+
+  if (modalTitle) modalTitle.textContent = 'Fair Play — Melhores Terceiros';
+  if (modalSub) modalSub.textContent = 'Empate na fronteira da 8ª posição. Ordene as seleções por Fair Play (1º = melhor comportamento):';
+
+  var fp3 = userPalpites._fp3 || [];
+  var order = [];
+  fp3.forEach(function(name) {
+    if (fpNeeded3.find(function(t){return t.name===name;}) && !order.includes(name)) order.push(name);
+  });
+  if (order.length === 0) fpNeeded3.forEach(function(t){order.push(t.name);});
+
+  var posLabels = fpNeeded3.map(function(_, i){ return (i+1)+'º'; });
+  var posColors = ['p1','p2','p3','p4','p5','p6'];
+
+  // Expor contexto para fpMoveBlock
+  _fpModalContext = {
+    blocks: [{startPos:0, teams:fpNeeded3, _order:order}],
+    fp: fp3,
+    group: '_fp3_special',
+    userPalpites: userPalpites,
+    renderAllBlocks: renderFP3Blocks
+  };
+
+  function renderFP3Blocks() {
+    var html = '<div class="fp-rank-header">USE AS SETAS PARA ORDENAR</div>';
+    html += '<div class="fp-rank-list" id="fp-rank-list-0">';
+    order.forEach(function(name, idx) {
+      var team = fpNeeded3.find(function(t){return t.name===name;});
+      if (!team) return;
+      var posLabel = posLabels[idx] || (idx+1)+'º';
+      var posColor = posColors[idx] || 'p4';
+      html += '<div class="fp-rank-item" data-block="0" data-name="'+name+'" data-idx="'+idx+'">';
+      html += '<span class="fp-rank-pos '+posColor+'">'+posLabel+'</span>';
+      html += '<img class="fp-rank-flag" src="https://flagcdn.com/w20/'+team.flag+'.png" onerror="this.style.display=&quot;none&quot;"/>';
+      html += '<span class="fp-rank-name">'+name+'</span>';
+      html += '<div class="fp-rank-arrows">';
+      html += '<button class="fp-rank-arrow"'+(idx>0?' onclick="fpMoveBlock(0,'+idx+',-1)"':' disabled')+'>▲</button>';
+      html += '<button class="fp-rank-arrow"'+(idx<order.length-1?' onclick="fpMoveBlock(0,'+idx+',1)"':' disabled')+'>▼</button>';
+      html += '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    html += '<div class="fp-rank-hint">A ordem define quem ocupa a 8ª vaga do mata-mata</div>';
+    pairsDiv.innerHTML = html;
+    // Salvar automaticamente
+    setFairPlayThirds(order.slice());
+  }
+
+  // Sobrescrever fpMoveBlock para este contexto
+  _fpModalContext.renderAllBlocks = renderFP3Blocks;
+  _fpModalContext.blocks[0]._order = order;
+
+  renderFP3Blocks();
+  modal.style.display = 'flex';
 }
 
 function openFPModal(group, pairs, userPalpites, fullStandings) {
@@ -1684,6 +1783,21 @@ function setFairPlay(group, teamA, teamB, winner) {
   } catch(e) {}
   // Re-render standings
   updateGroupStandings(group);
+}
+
+function setFairPlayThirds(orderedNames) {
+  if (!state.user || isPastDeadline()) return;
+  if (!state.palpites[state.user]) state.palpites[state.user] = {};
+  state.palpites[state.user]._fp3 = orderedNames.slice();
+  try {
+    var draft = JSON.parse(localStorage.getItem('bolao_draft_' + state.user) || '{}');
+    draft._fp3 = orderedNames.slice();
+    localStorage.setItem('bolao_draft_' + state.user, JSON.stringify(draft));
+  } catch(e) {}
+  // Re-propagar bracket com nova ordem
+  var p = Object.assign({}, state.palpites[state.user]);
+  buildResolvedTeams(p);
+  renderMatches();
 }
 
 function setFairPlayRanking(group, orderedNames) {
@@ -2586,6 +2700,34 @@ function renderMatches() {
     }
     html += '</div></div>';
   });
+  // ── Bloco Fair Play dos melhores terceiros (entre grupos e mata-mata) ──
+  if (!locked && state.user) {
+    var p3 = state.palpites[state.user] || {};
+    var fpNeeded3 = getThirdsFPNeeded(p3);
+    if (fpNeeded3.length >= 2) {
+      var fp3 = p3._fp3 || [];
+      var allChosen3 = fpNeeded3.every(function(t){ return fp3.indexOf(t.name) !== -1; });
+      if (allChosen3) {
+        html += '<div class="card" style="margin-bottom:14px;"><div class="card-body">';
+        html += '<button style="display:block;width:100%;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid rgba(0,200,83,0.4);background:rgba(0,200,83,0.12);color:var(--green);font-size:13px;font-family:\'Barlow Condensed\',sans-serif;font-weight:700;cursor:pointer;letter-spacing:0.8px;text-align:center;" onclick="openFP3Modal()">✓ FAIR PLAY DOS TERCEIROS DEFINIDO</button>';
+      } else {
+        html += '<div class="card" style="margin-bottom:14px;"><div class="card-body">';
+        html += '<button style="display:block;width:100%;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid rgba(245,197,24,0.5);background:rgba(245,197,24,0.15);color:#f5c518;font-size:13px;font-family:\'Barlow Condensed\',sans-serif;font-weight:700;cursor:pointer;letter-spacing:0.8px;text-align:center;animation:pulse 2s infinite;" onclick="openFP3Modal()">⚠️ AÇÃO NECESSÁRIA — DEFINIR FAIR PLAY DOS TERCEIROS</button>';
+      }
+      html += '<div style="font-size:11px;color:var(--gray);margin:8px 0 4px;font-family:\'Barlow Condensed\';font-weight:700;letter-spacing:0.5px;">SELEÇÕES EMPATADAS NA FRONTEIRA DA 8ª POSIÇÃO:</div>';
+      fpNeeded3.forEach(function(t) {
+        var pos3 = fp3.indexOf(t.name);
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">';
+        html += pos3 !== -1 ? '<span style="font-size:11px;color:#7eb8f5;font-weight:700;width:20px;">'+(pos3+1)+'º</span>' : '<span style="font-size:11px;color:var(--gray);width:20px;">—</span>';
+        html += '<img src="https://flagcdn.com/w20/'+t.flag+'.png" style="width:18px;height:12px;border-radius:1px;" onerror="this.style.display=\'none\'">';
+        html += '<span style="font-size:13px;font-family:\'Barlow Condensed\';font-weight:600;color:var(--light);">'+t.name+'</span>';
+        html += '<span style="font-size:11px;color:var(--gray);margin-left:auto;">'+t.pt+'pts · SG:'+(t.gp-t.gc)+'</span>';
+        html += '</div>';
+      });
+      html += '</div></div>';
+    }
+  }
+
   document.getElementById('matches-container').innerHTML = html;
 
   // Event delegation for fairplay trigger buttons
@@ -2848,7 +2990,7 @@ async function syncDraft() {
   });
   // Substituir completamente — não merge — para respeitar apagamentos
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
-  const preserved2 = { _savedAt: state.palpites[state.user]._savedAt, _qa: state.palpites[state.user]._qa, _fp: state.palpites[state.user]._fp };
+  const preserved2 = { _savedAt: state.palpites[state.user]._savedAt, _qa: state.palpites[state.user]._qa, _fp: state.palpites[state.user]._fp, _fp3: state.palpites[state.user]._fp3 };
   Object.keys(state.palpites[state.user]).forEach(k => { delete state.palpites[state.user][k]; });
   Object.assign(state.palpites[state.user], preserved2, temp);
   // Save local draft too
