@@ -1288,15 +1288,25 @@ function sortThirds(thirds, userPalpites) {
 }
 
 function getThirdsFPNeeded(userPalpites) {
+  // Mesclar palpites salvos com valores atuais do DOM
+  var merged = Object.assign({}, userPalpites);
+  MATCHES.filter(function(m){return m.phase==='group';}).forEach(function(m) {
+    var ih = document.getElementById('p_'+m.id+'_h');
+    var ia = document.getElementById('p_'+m.id+'_a');
+    if (ih && ia && ih.value !== '' && ia.value !== '') {
+      merged[m.id] = {h:+ih.value, a:+ia.value};
+    }
+  });
+
   // Retorna as seleções empatadas que cruzam a fronteira da 8ª posição
   var groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
   var thirds = groups.map(function(g) {
-    var s = calcGroupStandings(g, userPalpites);
+    var s = calcGroupStandings(g, merged);
     if (!s[2] || s[2].j < 3) return null;
     return Object.assign({}, s[2], {group:g});
   }).filter(Boolean);
   if (thirds.length < 9) return []; // precisa de pelo menos 9 para haver fronteira
-  sortThirds(thirds, userPalpites);
+  sortThirds(thirds, merged);
   // Verificar se 8ª e 9ª estão empatadas em pts, SG e GP
   var t8 = thirds[7], t9 = thirds[8];
   if (!t8 || !t9) return [];
