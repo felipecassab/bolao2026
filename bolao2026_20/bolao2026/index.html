@@ -1706,15 +1706,11 @@ function setPenalty(matchId, winner) {
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
   if (!state.palpites[state.user][matchId]) state.palpites[state.user][matchId] = {};
   state.palpites[state.user][matchId].pen = winner;
-  // Remover indicador pen-pending do match-row
-  var matchRowEl = document.getElementById('p_'+matchId+'_h');
-  if (matchRowEl) {
-    var rowEl = matchRowEl.closest('.match-row');
-    if (rowEl) rowEl.classList.remove('pen-pending');
-  }
-  // Remover aviso visual
-  var warningEl = document.querySelector('.pen-warning[data-match="' + matchId + '"]');
-  if (warningEl) warningEl.remove();
+  // Remover indicador pen-pending e aviso
+  var rowEl2 = document.querySelector('.match-row[data-mid="' + matchId + '"]');
+  if (rowEl2) rowEl2.classList.remove('pen-pending');
+  var warnEl2 = document.getElementById('pen-warn-' + matchId);
+  if (warnEl2) warnEl2.style.display = 'none';
   // Update buttons visually
   var penDiv = document.getElementById('pen_' + matchId);
   if (penDiv) {
@@ -2711,7 +2707,9 @@ function renderMatches() {
       var hv = thisH.value, av = thisA.value;
       if (hv === '' || av === '') return; // aguardar os dois preenchidos
       var savedP2 = state.user ? (state.palpites[state.user] || {}) : {};
-      var existingPen = thisH.closest('.card-body') ? thisH.closest('.card-body').querySelector('.penalty-selector') : null;
+      // Buscar seletor de pênaltis apenas no pen_ deste jogo específico
+      var penPlaceholderEl = document.getElementById('pen_' + m.id);
+      var existingPen = penPlaceholderEl ? penPlaceholderEl.querySelector('.penalty-selector') : null;
       var matchData = MATCHES.find(function(x){return x.id===m.id;});
       var rt2 = resolvedTeams[m.id];
       var homeName = (rt2 && rt2.home) ? rt2.home.name : (matchData ? matchData.home : '');
