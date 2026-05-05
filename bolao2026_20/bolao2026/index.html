@@ -2939,18 +2939,23 @@ function loadDraft() {
   try {
     const data = JSON.parse(draft);
     if (!state.palpites[state.user]) state.palpites[state.user] = {};
-    // Use timestamp to decide: local draft wins if saved MORE RECENTLY than last Firebase sync
+    // Comparar timestamp do localStorage com o do Firebase
     const fbTime = state.palpites[state.user]._savedAt || null;
-    const localIsNewer = !fbTime || new Date(draftTime) > new Date(fbTime);
+    const localIsNewer = !fbTime || new Date(draftTime) >= new Date(fbTime);
     if (localIsNewer) {
       // Substituição completa — não merge — para respeitar apagamentos
-      const preserved = { _savedAt: state.palpites[state.user]._savedAt };
+      // Preservar _savedAt do Firebase para manter referência de tempo
+      const fbSavedAt = state.palpites[state.user]._savedAt;
       Object.keys(state.palpites[state.user]).forEach(k => {
         delete state.palpites[state.user][k];
       });
-      Object.assign(state.palpites[state.user], preserved, data);
+      Object.assign(state.palpites[state.user], data);
+      // Manter _savedAt do Firebase para evitar re-aplicação do draft antigo
+      if (fbSavedAt) state.palpites[state.user]._savedAt = fbSavedAt;
+      // Sincronizar Firebase com os dados do localStorage (apagamentos incluídos)
+      saveGlobal().catch(function(){});
     } else {
-      // Firebase is newer — discard stale local draft
+      // Firebase é mais recente — descartar rascunho local desatualizado
       localStorage.removeItem('bolao_draft_' + state.user);
       localStorage.removeItem('bolao_draft_time_' + state.user);
     }
