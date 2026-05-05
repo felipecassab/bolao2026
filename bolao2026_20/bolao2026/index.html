@@ -1444,6 +1444,34 @@ function renderPenaltySelector(matchId, homeName, awayName, locked, p) {
     '</div>';
 }
 
+// Função global para mover item no ranking de Fair Play (chamada por onclick inline)
+var _fpModalContext = null; // referência ao contexto atual do modal
+
+function fpMoveBlock(blockIdx, idx, move) {
+  if (!_fpModalContext) return;
+  var ctx = _fpModalContext;
+  var block = ctx.blocks[blockIdx];
+  if (!block || !block._order) return;
+  var newIdx = idx + move;
+  if (newIdx < 0 || newIdx >= block._order.length) return;
+  // Trocar posições
+  var tmp = block._order[idx];
+  block._order[idx] = block._order[newIdx];
+  block._order[newIdx] = tmp;
+  // Salvar no fp global
+  var newFp = ctx.fp.filter(function(n){
+    return !block.teams.find(function(t){return t.name===n;});
+  });
+  block._order.forEach(function(name, i){
+    newFp.splice(block.startPos + i, 0, name);
+  });
+  if (!ctx.userPalpites._fp) ctx.userPalpites._fp = {};
+  ctx.userPalpites._fp[ctx.group] = newFp;
+  ctx.fp.length = 0; newFp.forEach(function(n){ctx.fp.push(n);});
+  setFairPlayRanking(ctx.group, newFp);
+  ctx.renderAllBlocks();
+}
+
 function openFPModal(group, pairs, userPalpites, fullStandings) {
   var modal = document.getElementById('fp-modal');
   var pairsDiv = document.getElementById('fp-modal-pairs');
@@ -1522,6 +1550,13 @@ function openFPModal(group, pairs, userPalpites, fullStandings) {
   var posColorMap = ['p1','p2','p3','p4'];
   var posLabelMap = ['1º','2º','3º','4º'];
 
+  // Expor contexto para fpMoveBlock global
+  _fpModalContext = {
+    blocks: blocks, fp: fp, group: group,
+    userPalpites: userPalpites,
+    renderAllBlocks: function(){ renderAllBlocks(); }
+  };
+
   function renderAllBlocks() {
     var html = '';
     blocks.forEach(function(block, blockIdx) {
@@ -1538,7 +1573,7 @@ function openFPModal(group, pairs, userPalpites, fullStandings) {
 
       if (teamsInBlock.length >= 3) {
         // ── MODO RANKING (3+ times no bloco) ──
-        // Manter ordem em variável persistente por bloco
+        // Ordem persistente por bloco
         if (!block._order) {
           block._order = [];
           fp.forEach(function(name) {
@@ -1547,8 +1582,9 @@ function openFPModal(group, pairs, userPalpites, fullStandings) {
           if (block._order.length === 0) teamsInBlock.forEach(function(t){block._order.push(t.name);});
         }
         var blockOrder = block._order;
+        var bLen = blockOrder.length;
 
-        html += '<div class="fp-rank-header">&#8597; ARRASTE OU USE AS SETAS PARA ORDENAR</div>';
+        html += '<div class="fp-rank-header">USE AS SETAS PARA ORDENAR</div>';
         html += '<div class="fp-rank-list" id="fp-rank-list-' + blockIdx + '">';
 
         blockOrder.forEach(function(name, idx) {
@@ -1557,15 +1593,16 @@ function openFPModal(group, pairs, userPalpites, fullStandings) {
           var realPos = startPos + idx;
           var posLabel = posLabelMap[realPos] || (realPos+1)+'º';
           var posColor = posColorMap[realPos] || 'p4';
-          html += '<div class="fp-rank-item" draggable="true" data-block="' + blockIdx + '" data-name="' + name + '" data-idx="' + idx + '">';
+          var canUp = idx > 0;
+          var canDown = idx < bLen - 1;
+          html += '<div class="fp-rank-item" data-block="' + blockIdx + '" data-name="' + name + '" data-idx="' + idx + '">';
           html += '<span class="fp-rank-pos ' + posColor + '">' + posLabel + '</span>';
           html += '<img class="fp-rank-flag" src="https://flagcdn.com/w20/' + team.flag + '.png" onerror="this.style.display=&quot;none&quot;"/>';
           html += '<span class="fp-rank-name">' + name + '</span>';
           html += '<div class="fp-rank-arrows">';
-          html += '<button class="fp-rank-arrow" data-block="' + blockIdx + '" data-move="-1" data-idx="' + idx + '"' + (idx===0?' disabled':'') + '>▲</button>';
-          html += '<button class="fp-rank-arrow" data-block="' + blockIdx + '" data-move="1" data-idx="' + idx + '"' + (idx===blockOrder.length-1?' disabled':'') + '>▼</button>';
+          html += '<button class="fp-rank-arrow"' + (canUp ? ' onclick="fpMoveBlock(' + blockIdx + ',' + idx + ',-1)"' : ' disabled') + '>▲</button>';
+          html += '<button class="fp-rank-arrow"' + (canDown ? ' onclick="fpMoveBlock(' + blockIdx + ',' + idx + ',1)"' : ' disabled') + '>▼</button>';
           html += '</div>';
-          html += '<span class="fp-rank-handle">&#8942;&#8942;</span>';
           html += '</div>';
         });
         html += '</div>';
@@ -1611,143 +1648,7 @@ function openFPModal(group, pairs, userPalpites, fullStandings) {
       });
     });
 
-    // ── Listeners setas (ranking) ─────────────────────────────────
-    pairsDiv.querySelectorAll('.fp-rank-arrow').forEach(function(btn) {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        var blockIdx = parseInt(btn.getAttribute('data-block'));
-        var idx = parseInt(btn.getAttribute('data-idx'));
-        var move = parseInt(btn.getAttribute('data-move'));
-        var block = blocks[blockIdx];
-        // Reconstruir ordem atual do bloco a partir do fp
-        var blockOrder = [];
-        fp.forEach(function(name) {
-          if (block.teams.find(function(t){return t.name===name;}) && !blockOrder.includes(name)) blockOrder.push(name);
-        });
-        if (blockOrder.length === 0) block.teams.forEach(function(t){blockOrder.push(t.name);});
-        var newIdx = idx + move;
-        if (newIdx < 0 || newIdx >= blockOrder.length) return;
-        var tmp = blockOrder[idx]; blockOrder[idx] = blockOrder[newIdx]; blockOrder[newIdx] = tmp;
-        // Merge no fp global preservando outros blocos
-        var otherNames = fp.filter(function(n){return !block.teams.find(function(t){return t.name===n;});});
-        // Reposicionar: inserir blockOrder nas posições corretas
-        var newFp = fp.slice();
-        // Remover times do bloco do fp
-        newFp = newFp.filter(function(n){return !block.teams.find(function(t){return t.name===n;});});
-        // Inserir na posição correta (startPos)
-        blockOrder.forEach(function(name, i){ newFp.splice(block.startPos + i, 0, name); });
-        // Atualizar estado
-        if (!userPalpites._fp) userPalpites._fp = {};
-        userPalpites._fp[group] = newFp;
-        fp.length = 0; newFp.forEach(function(n){fp.push(n);});
-        setFairPlayRanking(group, newFp);
-        renderAllBlocks();
-      });
-    });
-
-    // ── Drag and drop com touch no HANDLE (mobile) ──────────────
-    blocks.forEach(function(block, blockIdx) {
-      if (block.teams.length < 3) return;
-      var listEl = pairsDiv.querySelector('#fp-rank-list-' + blockIdx);
-      if (!listEl) return;
-      var dragSrcIdx = null;
-      var touchSrcIdx = null;
-      var touchDragging = false;
-
-      function getBlockOrder() {
-        var bo = [];
-        fp.forEach(function(name) {
-          if (block.teams.find(function(t){return t.name===name;}) && !bo.includes(name)) bo.push(name);
-        });
-        if (bo.length === 0) block.teams.forEach(function(t){bo.push(t.name);});
-        return bo;
-      }
-
-      function applySwap(fromIdx, toIdx) {
-        if (fromIdx === null || fromIdx === toIdx || fromIdx === undefined || toIdx === undefined) return;
-        var bo = getBlockOrder();
-        if (fromIdx >= bo.length || toIdx >= bo.length) return;
-        var moved = bo.splice(fromIdx, 1)[0];
-        bo.splice(toIdx, 0, moved);
-        var newFp = fp.filter(function(n){return !block.teams.find(function(t){return t.name===n;});});
-        bo.forEach(function(name, i){ newFp.splice(block.startPos + i, 0, name); });
-        if (!userPalpites._fp) userPalpites._fp = {};
-        userPalpites._fp[group] = newFp;
-        fp.length = 0; newFp.forEach(function(n){fp.push(n);});
-        setFairPlayRanking(group, newFp);
-        renderAllBlocks();
-      }
-
-      // Mouse drag no item inteiro
-      var items = listEl.querySelectorAll('.fp-rank-item');
-      items.forEach(function(item) {
-        item.setAttribute('draggable', 'true');
-        item.addEventListener('dragstart', function(e) {
-          dragSrcIdx = parseInt(item.getAttribute('data-idx'));
-          item.classList.add('dragging');
-          e.dataTransfer.effectAllowed = 'move';
-        });
-        item.addEventListener('dragend', function() {
-          item.classList.remove('dragging');
-          listEl.querySelectorAll('.fp-rank-item').forEach(function(i){i.classList.remove('drag-over');});
-        });
-        item.addEventListener('dragover', function(e) {
-          e.preventDefault();
-          listEl.querySelectorAll('.fp-rank-item').forEach(function(i){i.classList.remove('drag-over');});
-          item.classList.add('drag-over');
-        });
-        item.addEventListener('drop', function(e) {
-          e.preventDefault();
-          applySwap(dragSrcIdx, parseInt(item.getAttribute('data-idx')));
-          dragSrcIdx = null;
-        });
-      });
-
-      // Touch drag APENAS no handle (6 pontinhos)
-      var handles = listEl.querySelectorAll('.fp-rank-handle');
-      handles.forEach(function(handle) {
-        handle.addEventListener('touchstart', function(e) {
-          var item = handle.closest('.fp-rank-item');
-          touchSrcIdx = parseInt(item.getAttribute('data-idx'));
-          touchDragging = true;
-          item.classList.add('dragging');
-          e.stopPropagation();
-        }, {passive: true});
-
-        handle.addEventListener('touchmove', function(e) {
-          if (!touchDragging) return;
-          e.preventDefault();
-          e.stopPropagation();
-          var touch = e.touches[0];
-          // Esconder o item arrastado momentaneamente para detectar o alvo sob o dedo
-          var draggedItem = listEl.querySelector('.fp-rank-item[data-idx="' + touchSrcIdx + '"]');
-          if (draggedItem) draggedItem.style.pointerEvents = 'none';
-          var el = document.elementFromPoint(touch.clientX, touch.clientY);
-          if (draggedItem) draggedItem.style.pointerEvents = '';
-          listEl.querySelectorAll('.fp-rank-item').forEach(function(i){i.classList.remove('drag-over');});
-          var target = el ? el.closest('.fp-rank-item') : null;
-          if (target && parseInt(target.getAttribute('data-idx')) !== touchSrcIdx) {
-            target.classList.add('drag-over');
-          }
-        }, {passive: false});
-
-        handle.addEventListener('touchend', function(e) {
-          if (!touchDragging) return;
-          touchDragging = false;
-          e.stopPropagation();
-          var touch = e.changedTouches[0];
-          var draggedItem = listEl.querySelector('.fp-rank-item[data-idx="' + touchSrcIdx + '"]');
-          if (draggedItem) { draggedItem.classList.remove('dragging'); draggedItem.style.pointerEvents = 'none'; }
-          var el = document.elementFromPoint(touch.clientX, touch.clientY);
-          if (draggedItem) draggedItem.style.pointerEvents = '';
-          listEl.querySelectorAll('.fp-rank-item').forEach(function(i){i.classList.remove('drag-over');});
-          var target = el ? el.closest('.fp-rank-item') : null;
-          var targetIdx = target ? parseInt(target.getAttribute('data-idx')) : null;
-          applySwap(touchSrcIdx, targetIdx);
-          touchSrcIdx = null;
-        }, {passive: true});
-      });
-    });
+    // (setas usam onclick inline — fpMoveBlock)
   }
 
   renderAllBlocks();
