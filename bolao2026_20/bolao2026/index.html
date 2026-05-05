@@ -1645,12 +1645,14 @@ function openFPModal(group, pairs, userPalpites, fullStandings) {
       });
     });
 
-    // ── Drag and drop com touch support (mobile) ────────────────
+    // ── Drag and drop com touch no HANDLE (mobile) ──────────────
     blocks.forEach(function(block, blockIdx) {
       if (block.teams.length < 3) return;
       var listEl = pairsDiv.querySelector('#fp-rank-list-' + blockIdx);
       if (!listEl) return;
       var dragSrcIdx = null;
+      var touchSrcIdx = null;
+      var touchDragging = false;
 
       function getBlockOrder() {
         var bo = [];
@@ -1662,8 +1664,9 @@ function openFPModal(group, pairs, userPalpites, fullStandings) {
       }
 
       function applySwap(fromIdx, toIdx) {
-        if (fromIdx === null || fromIdx === toIdx) return;
+        if (fromIdx === null || fromIdx === toIdx || fromIdx === undefined || toIdx === undefined) return;
         var bo = getBlockOrder();
+        if (fromIdx >= bo.length || toIdx >= bo.length) return;
         var moved = bo.splice(fromIdx, 1)[0];
         bo.splice(toIdx, 0, moved);
         var newFp = fp.filter(function(n){return !block.teams.find(function(t){return t.name===n;});});
@@ -1675,9 +1678,9 @@ function openFPModal(group, pairs, userPalpites, fullStandings) {
         renderAllBlocks();
       }
 
+      // Mouse drag no item inteiro
       var items = listEl.querySelectorAll('.fp-rank-item');
       items.forEach(function(item) {
-        // ── Mouse drag ──
         item.setAttribute('draggable', 'true');
         item.addEventListener('dragstart', function(e) {
           dragSrcIdx = parseInt(item.getAttribute('data-idx'));
@@ -1698,34 +1701,49 @@ function openFPModal(group, pairs, userPalpites, fullStandings) {
           applySwap(dragSrcIdx, parseInt(item.getAttribute('data-idx')));
           dragSrcIdx = null;
         });
+      });
 
-        // ── Touch drag (mobile) ──
-        var touchSrcIdx = null;
-        item.addEventListener('touchstart', function(e) {
+      // Touch drag APENAS no handle (6 pontinhos)
+      var handles = listEl.querySelectorAll('.fp-rank-handle');
+      handles.forEach(function(handle) {
+        handle.addEventListener('touchstart', function(e) {
+          var item = handle.closest('.fp-rank-item');
           touchSrcIdx = parseInt(item.getAttribute('data-idx'));
+          touchDragging = true;
           item.classList.add('dragging');
+          e.stopPropagation();
         }, {passive: true});
-        item.addEventListener('touchmove', function(e) {
+
+        handle.addEventListener('touchmove', function(e) {
+          if (!touchDragging) return;
           e.preventDefault();
+          e.stopPropagation();
           var touch = e.touches[0];
-          item.style.opacity = '0';
+          // Esconder o item arrastado momentaneamente para detectar o alvo sob o dedo
+          var draggedItem = listEl.querySelector('.fp-rank-item[data-idx="' + touchSrcIdx + '"]');
+          if (draggedItem) draggedItem.style.pointerEvents = 'none';
           var el = document.elementFromPoint(touch.clientX, touch.clientY);
-          item.style.opacity = '';
+          if (draggedItem) draggedItem.style.pointerEvents = '';
           listEl.querySelectorAll('.fp-rank-item').forEach(function(i){i.classList.remove('drag-over');});
           var target = el ? el.closest('.fp-rank-item') : null;
-          if (target && target !== item) target.classList.add('drag-over');
-        }, {passive: false});
-        item.addEventListener('touchend', function(e) {
-          item.classList.remove('dragging');
-          var touch = e.changedTouches[0];
-          item.style.opacity = '0';
-          var el = document.elementFromPoint(touch.clientX, touch.clientY);
-          item.style.opacity = '';
-          listEl.querySelectorAll('.fp-rank-item').forEach(function(i){i.classList.remove('drag-over');});
-          var target = el ? el.closest('.fp-rank-item') : null;
-          if (target && target !== item) {
-            applySwap(touchSrcIdx, parseInt(target.getAttribute('data-idx')));
+          if (target && parseInt(target.getAttribute('data-idx')) !== touchSrcIdx) {
+            target.classList.add('drag-over');
           }
+        }, {passive: false});
+
+        handle.addEventListener('touchend', function(e) {
+          if (!touchDragging) return;
+          touchDragging = false;
+          e.stopPropagation();
+          var touch = e.changedTouches[0];
+          var draggedItem = listEl.querySelector('.fp-rank-item[data-idx="' + touchSrcIdx + '"]');
+          if (draggedItem) { draggedItem.classList.remove('dragging'); draggedItem.style.pointerEvents = 'none'; }
+          var el = document.elementFromPoint(touch.clientX, touch.clientY);
+          if (draggedItem) draggedItem.style.pointerEvents = '';
+          listEl.querySelectorAll('.fp-rank-item').forEach(function(i){i.classList.remove('drag-over');});
+          var target = el ? el.closest('.fp-rank-item') : null;
+          var targetIdx = target ? parseInt(target.getAttribute('data-idx')) : null;
+          applySwap(touchSrcIdx, targetIdx);
           touchSrcIdx = null;
         }, {passive: true});
       });
