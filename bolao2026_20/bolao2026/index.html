@@ -717,6 +717,18 @@ body{display:flex;flex-direction:column}
   </div>
 </div>
 
+<!-- CHAMPION BANNER -->
+<div id="champion-banner" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(5,15,30,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;">
+  <div id="champion-banner-inner" style="background:linear-gradient(160deg,#0d2144 0%,#091628 100%);border:1px solid rgba(245,197,24,0.3);border-radius:20px;padding:32px 24px;max-width:360px;width:100%;text-align:center;position:relative;overflow:hidden;">
+    <canvas id="confetti-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;"></canvas>
+    <div style="font-size:13px;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:2px;color:var(--gold);margin-bottom:16px;">🏆 PALPITES COMPLETOS!</div>
+    <div id="champ-flag" style="font-size:72px;margin-bottom:8px;line-height:1;"></div>
+    <div id="champ-name" style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:32px;color:#fff;margin-bottom:6px;letter-spacing:0.5px;"></div>
+    <div style="font-size:14px;color:var(--gray);margin-bottom:24px;">é o seu palpite para <span style="color:var(--gold);font-weight:700;">Campeã do Mundo</span></div>
+    <button onclick="document.getElementById('champion-banner').style.display='none'" style="width:100%;padding:13px;background:linear-gradient(135deg,#f5c518,#e0a800);color:#0a1628;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;letter-spacing:1px;border:none;border-radius:10px;cursor:pointer;">VAMOS LÁ! 🚀</button>
+  </div>
+</div>
+
 <!-- FAIR PLAY MODAL -->
 <div id="fp-modal" class="fp-modal-overlay" style="display:none;">
   <div class="fp-modal">
@@ -2400,6 +2412,76 @@ function takeSnapshot() {
 // ═══════════════════════════════════════════════════════════════════
 const MATCH_NUMBERS = {"r32_1": 73, "r32_2": 74, "r32_3": 75, "r32_4": 76, "r32_5": 77, "r32_6": 78, "r32_7": 79, "r32_8": 80, "r32_9": 81, "r32_10": 82, "r32_11": 83, "r32_12": 84, "r32_13": 85, "r32_14": 86, "r32_15": 87, "r32_16": 88, "r16_1": 89, "r16_2": 90, "r16_3": 91, "r16_4": 92, "r16_5": 93, "r16_6": 94, "r16_7": 95, "r16_8": 96, "qf_1": 97, "qf_2": 98, "qf_3": 99, "qf_4": 100, "sf_1": 101, "sf_2": 102, "third": 103, "final": 104};
 
+function showChampionBanner(team) {
+  var banner = document.getElementById('champion-banner');
+  var flagEl = document.getElementById('champ-flag');
+  var nameEl = document.getElementById('champ-name');
+  if (!banner || !flagEl || !nameEl || !team) return;
+
+  // Flag
+  if (team.flag && team.flag !== 'un') {
+    flagEl.innerHTML = '<img src="https://flagcdn.com/w160/' + team.flag + '.png" style="width:100px;height:auto;border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,0.5);"/>';
+  } else {
+    flagEl.innerHTML = '🏆';
+  }
+  nameEl.textContent = team.name || '';
+  banner.style.display = 'flex';
+
+  // Confetes simples
+  var canvas = document.getElementById('confetti-canvas');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth;
+  canvas.height = canvas.offsetHeight;
+  var particles = [];
+  var colors = ['#f5c518','#7eb8f5','#ffffff','#e0a800','#3b82f6','#fbbf24'];
+  for (var i = 0; i < 80; i++) {
+    particles.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height - canvas.height,
+      r: Math.random() * 5 + 3,
+      d: Math.random() * 2 + 1,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      tilt: Math.random() * 10 - 10,
+      tiltAngle: 0,
+      tiltSpeed: Math.random() * 0.1 + 0.05
+    });
+  }
+  var angle = 0;
+  var animId;
+  function drawConfetti() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    angle += 0.01;
+    particles.forEach(function(p) {
+      p.tiltAngle += p.tiltSpeed;
+      p.y += p.d;
+      p.tilt = Math.sin(p.tiltAngle) * 12;
+      if (p.y > canvas.height) { p.y = -10; p.x = Math.random() * canvas.width; }
+      ctx.beginPath();
+      ctx.lineWidth = p.r;
+      ctx.strokeStyle = p.color;
+      ctx.moveTo(p.x + p.tilt + p.r / 2, p.y);
+      ctx.lineTo(p.x + p.tilt, p.y + p.tilt + p.r / 2);
+      ctx.stroke();
+    });
+    animId = requestAnimationFrame(drawConfetti);
+  }
+  drawConfetti();
+  // Parar após 5 segundos
+  setTimeout(function() { cancelAnimationFrame(animId); ctx.clearRect(0, 0, canvas.width, canvas.height); }, 5000);
+}
+
+function getChampionFromPalpites(userPalpites) {
+  if (!userPalpites) return null;
+  var finalP = userPalpites['final'];
+  if (!finalP || finalP.h === undefined || finalP.a === undefined) return null;
+  var rt = resolvedTeams['final'];
+  if (!rt) return null;
+  var winner = +finalP.h > +finalP.a ? 'home' : +finalP.a > +finalP.h ? 'away' : (finalP.pen === 'H' ? 'home' : finalP.pen === 'A' ? 'away' : null);
+  if (!winner) return null;
+  return rt[winner] || null;
+}
+
 function flagImg(code, cls='flag') {
   if (code==='un') return '<span style="font-size:16px;">🏳️</span>';
   return `<img class="${cls}" src="https://flagcdn.com/w40/${code}.png" onerror="this.style.display=&quot;none&quot;"/>`;
@@ -2429,7 +2511,13 @@ function renderMatches() {
       const canViewMatch = isPastDeadline() && Object.keys(state.users).length > 0;
       const matchClick = canViewMatch ? `onclick="viewMatchPalpites('${m.id}')" style="cursor:pointer;"` : '';
       // Verificar se é empate knockout sem pênaltis definidos
-      const isPenPending = m.phase==='knockout' && !locked && p && p.h !== undefined && p.a !== undefined && +p.h === +p.a && !p.pen;
+      // isPenPending: lê DOM ou palpite salvo (o que estiver disponível)
+      const _domH = document.getElementById('p_'+m.id+'_h');
+      const _domA = document.getElementById('p_'+m.id+'_a');
+      const _hv = _domH ? _domH.value : (p?.h ?? '');
+      const _av = _domA ? _domA.value : (p?.a ?? '');
+      const _pen = p?.pen;
+      const isPenPending = m.phase==='knockout' && !locked && _hv!=='' && _av!=='' && +_hv===+_av && !_pen;
       html += `<div class="match-row${isPenPending ? ' pen-pending' : ''}" ${matchClick}>
         <div class="team"><span id="flag_h_${m.id}">${flagImg(dispFH)}</span><span class="team-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:90px;">${dispHome}</span></div>
         <div class="score-inputs">
@@ -2677,6 +2765,17 @@ function renderMatches() {
   const savedQA = state.user?(state.palpites[state.user]?._qa||{}):{};
   const filledEx = EXTRA_QS.filter(q=>savedQA[q.id]?.answer?.trim()).length;
   const allDone = filled===MATCHES.length && filledEx===EXTRA_QS.length;
+  // Mostrar banner de campeão quando todos os palpites forem preenchidos pela primeira vez
+  if (filled===MATCHES.length && !locked) {
+    var wasComplete = window._bolaoWasComplete || false;
+    if (!wasComplete) {
+      window._bolaoWasComplete = true;
+      var champ = getChampionFromPalpites(state.user ? state.palpites[state.user] : null);
+      if (champ) setTimeout(function(){ showChampionBanner(champ); }, 400);
+    }
+  } else {
+    window._bolaoWasComplete = false;
+  }
   const mc = filled===MATCHES.length?'var(--green)':filled>0?'#f5a623':'var(--gray)';
   const ec = filledEx===EXTRA_QS.length?'var(--green)':filledEx>0?'#f5a623':'var(--gray)';
   document.getElementById('progress-counter').innerHTML = locked?'' :
