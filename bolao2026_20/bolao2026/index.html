@@ -2778,27 +2778,7 @@ function renderMatches() {
   const savedQA = state.user?(state.palpites[state.user]?._qa||{}):{};
   const filledEx = EXTRA_QS.filter(q=>savedQA[q.id]?.answer?.trim()).length;
   const allDone = filled===MATCHES.length && filledEx===EXTRA_QS.length;
-  // Mostrar banner de campeão: só se logado, prazo aberto, aba palpites ativa e todos preenchidos
-  var onPalpitesNow = document.getElementById('page-palpites')?.classList.contains('active');
-  if (state.user && !locked && onPalpitesNow && filled === MATCHES.length) {
-    var champ = getChampionFromPalpites(state.palpites[state.user]);
-    var champName = champ ? champ.name : '';
-    if (champName) {
-      var bannerKey = 'bolao_banner_shown_' + state.user + '_' + champName;
-      if (!localStorage.getItem(bannerKey)) {
-        localStorage.setItem(bannerKey, '1');
-        setTimeout(function(){ showChampionBanner(champ); }, 400);
-      }
-    }
-  } else if (state.user) {
-    // Palpites incompletos — resetar flag para mostrar banner ao completar de novo
-    var keysToRemove = [];
-    for (var ki = 0; ki < localStorage.length; ki++) {
-      var lk = localStorage.key(ki);
-      if (lk && lk.startsWith('bolao_banner_shown_' + state.user + '_')) keysToRemove.push(lk);
-    }
-    keysToRemove.forEach(function(k){ localStorage.removeItem(k); });
-  }
+  // (banner do campeão é disparado apenas no syncDraft)
   const mc = filled===MATCHES.length?'var(--green)':filled>0?'#f5a623':'var(--gray)';
   const ec = filledEx===EXTRA_QS.length?'var(--green)':filledEx>0?'#f5a623':'var(--gray)';
   document.getElementById('progress-counter').innerHTML = locked?'' :
@@ -2931,6 +2911,24 @@ async function saveDraft() {
       return true;
     }).length;
     showToast(`💾 Rascunho salvo! ${count} de ${MATCHES.length} jogos preenchidos.`);
+    // Mostrar banner do campeão se todos os 104 palpites estiverem completos
+    if (count === MATCHES.length) {
+      var champ2 = getChampionFromPalpites(state.palpites[state.user]);
+      var champName2 = champ2 ? champ2.name : '';
+      if (champName2) {
+        var bannerKey2 = 'bolao_banner_shown_' + state.user + '_' + champName2;
+        if (!localStorage.getItem(bannerKey2)) {
+          localStorage.setItem(bannerKey2, '1');
+          setTimeout(function(){ showChampionBanner(champ2); }, 600);
+        }
+      }
+    } else {
+      // Incompleto — resetar flag para mostrar banner ao completar de novo
+      for (var ki2 = localStorage.length - 1; ki2 >= 0; ki2--) {
+        var lk2 = localStorage.key(ki2);
+        if (lk2 && lk2.startsWith('bolao_banner_shown_' + state.user + '_')) localStorage.removeItem(lk2);
+      }
+    }
   } catch(e) {
     showToast('💾 Salvo localmente (sem conexão)', true);
   }
