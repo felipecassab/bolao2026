@@ -2757,32 +2757,20 @@ function renderMatches() {
     if (g === 'L' && !locked && state.user) {
       var p3 = state.palpites[state.user] || {};
       var fpNeeded3 = getThirdsFPNeeded(userPFull);
-      // Tabela dos melhores terceiros
       html += '<div class="card" style="margin-bottom:14px;"><div class="card-body">';
-      html += renderThirdsStandings(userPFull);
-      html += '</div></div>';
+      // Botão FP acima da tabela (só se necessário)
       if (fpNeeded3.length >= 2) {
         var fp3 = p3._fp3 || [];
         var allChosen3 = fpNeeded3.every(function(t){ return fp3.indexOf(t.name) !== -1; });
         if (allChosen3) {
-          html += '<div class="card" style="margin-bottom:14px;"><div class="card-body">';
-          html += '<button style="display:block;width:100%;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid rgba(0,200,83,0.4);background:rgba(0,200,83,0.12);color:var(--green);font-size:13px;font-family:\'Barlow Condensed\',sans-serif;font-weight:700;cursor:pointer;letter-spacing:0.8px;text-align:center;" onclick="openFP3Modal()">✓ FAIR PLAY DOS TERCEIROS DEFINIDO</button>';
+          html += '<button style="display:block;width:100%;padding:10px 14px;margin-bottom:10px;border-radius:var(--radius-sm);border:1px solid rgba(0,200,83,0.4);background:rgba(0,200,83,0.12);color:var(--green);font-size:13px;font-family:\'Barlow Condensed\',sans-serif;font-weight:700;cursor:pointer;letter-spacing:0.8px;text-align:center;" onclick="openFP3Modal()">✓ FAIR PLAY DOS TERCEIROS DEFINIDO</button>';
         } else {
-          html += '<div class="card" style="margin-bottom:14px;"><div class="card-body">';
-          html += '<button style="display:block;width:100%;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid rgba(245,197,24,0.5);background:rgba(245,197,24,0.15);color:#f5c518;font-size:13px;font-family:\'Barlow Condensed\',sans-serif;font-weight:700;cursor:pointer;letter-spacing:0.8px;text-align:center;animation:pulse 2s infinite;" onclick="openFP3Modal()">⚠️ AÇÃO NECESSÁRIA — DEFINIR FAIR PLAY DOS TERCEIROS</button>';
+          html += '<button style="display:block;width:100%;padding:10px 14px;margin-bottom:10px;border-radius:var(--radius-sm);border:1px solid rgba(245,197,24,0.5);background:rgba(245,197,24,0.15);color:#f5c518;font-size:13px;font-family:\'Barlow Condensed\',sans-serif;font-weight:700;cursor:pointer;letter-spacing:0.8px;text-align:center;animation:pulse 2s infinite;" onclick="openFP3Modal()">⚠️ AÇÃO NECESSÁRIA — DEFINIR FAIR PLAY DOS TERCEIROS</button>';
         }
-        html += '<div style="font-size:11px;color:var(--gray);margin:8px 0 4px;font-family:\'Barlow Condensed\';font-weight:700;letter-spacing:0.5px;">SELEÇÕES EMPATADAS NA FRONTEIRA DA 8ª POSIÇÃO:</div>';
-        fpNeeded3.forEach(function(t) {
-          var pos3 = fp3.indexOf(t.name);
-          html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">';
-          html += pos3 !== -1 ? '<span style="font-size:11px;color:#7eb8f5;font-weight:700;width:20px;">'+(pos3+1)+'º</span>' : '<span style="font-size:11px;color:var(--gray);width:20px;">—</span>';
-          html += '<img src="https://flagcdn.com/w20/'+t.flag+'.png" style="width:18px;height:12px;border-radius:1px;" onerror="this.style.display=\'none\'">';
-          html += '<span style="font-size:13px;font-family:\'Barlow Condensed\';font-weight:600;color:var(--light);">'+t.name+'</span>';
-          html += '<span style="font-size:11px;color:var(--gray);margin-left:auto;">'+t.pt+'pts · SG:'+(t.gp-t.gc)+'</span>';
-          html += '</div>';
-        });
-        html += '</div></div>';
       }
+      // Tabela dos melhores terceiros
+      html += renderThirdsStandings(userPFull);
+      html += '</div></div>';
     }
   });
   document.getElementById('matches-container').innerHTML = html;
