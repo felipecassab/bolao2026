@@ -2719,6 +2719,15 @@ function renderMatches() {
   // ── Bloco Fair Play dos melhores terceiros (entre grupos e mata-mata) ──
   if (!locked && state.user) {
     var p3 = state.palpites[state.user] || {};
+    // DEBUG
+    var _groups3 = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+    var _thirds3 = _groups3.map(function(g){
+      var s = calcGroupStandings(g, userPFull);
+      if (!s[2]) return null;
+      return {g:g, name:s[2].name, j:s[2].j, pt:s[2].pt, sg:s[2].gp-s[2].gc, gp:s[2].gp};
+    }).filter(Boolean);
+    console.log('FP3 DEBUG - userPFull keys:', Object.keys(userPFull).length);
+    console.log('FP3 DEBUG - thirds:', JSON.stringify(_thirds3));
     var fpNeeded3 = getThirdsFPNeeded(userPFull);
     if (fpNeeded3.length >= 2) {
       var fp3 = p3._fp3 || [];
