@@ -1538,14 +1538,18 @@ function openFPModal(group, pairs, userPalpites, fullStandings) {
 
       if (teamsInBlock.length >= 3) {
         // ── MODO RANKING (3+ times no bloco) ──
+        // Manter ordem em variável persistente por bloco
+        if (!block._order) {
+          block._order = [];
+          fp.forEach(function(name) {
+            if (teamsInBlock.find(function(t){return t.name===name;}) && !block._order.includes(name)) block._order.push(name);
+          });
+          if (block._order.length === 0) teamsInBlock.forEach(function(t){block._order.push(t.name);});
+        }
+        var blockOrder = block._order;
+
         html += '<div class="fp-rank-header">&#8597; ARRASTE OU USE AS SETAS PARA ORDENAR</div>';
         html += '<div class="fp-rank-list" id="fp-rank-list-' + blockIdx + '">';
-        // Ordem atual deste bloco
-        var blockOrder = [];
-        fp.forEach(function(name) {
-          if (teamsInBlock.find(function(t){return t.name===name;}) && !blockOrder.includes(name)) blockOrder.push(name);
-        });
-        if (blockOrder.length === 0) teamsInBlock.forEach(function(t){blockOrder.push(t.name);});
 
         blockOrder.forEach(function(name, idx) {
           var team = teamsInBlock.find(function(t){return t.name===name;});
@@ -1600,10 +1604,10 @@ function openFPModal(group, pairs, userPalpites, fullStandings) {
         var teamB = btn.getAttribute('data-fp-b');
         var winner = btn.getAttribute('data-fp-winner');
         setFairPlay(grp, teamA, teamB, winner);
+        // Atualizar visual sem re-renderizar (evita perda do estado selected)
         pairsDiv.querySelectorAll('.fp-modal-btn[data-fp-a="' + teamA + '"][data-fp-b="' + teamB + '"]').forEach(function(b) {
           b.classList.toggle('selected', b.getAttribute('data-fp-winner') === winner);
         });
-        renderAllBlocks(); // re-renderiza para atualizar estado
       });
     });
 
@@ -1641,14 +1645,40 @@ function openFPModal(group, pairs, userPalpites, fullStandings) {
       });
     });
 
-    // ── Drag and drop (ranking) ───────────────────────────────────
+    // ── Drag and drop com touch support (mobile) ────────────────
     blocks.forEach(function(block, blockIdx) {
       if (block.teams.length < 3) return;
       var listEl = pairsDiv.querySelector('#fp-rank-list-' + blockIdx);
       if (!listEl) return;
       var dragSrcIdx = null;
+
+      function getBlockOrder() {
+        var bo = [];
+        fp.forEach(function(name) {
+          if (block.teams.find(function(t){return t.name===name;}) && !bo.includes(name)) bo.push(name);
+        });
+        if (bo.length === 0) block.teams.forEach(function(t){bo.push(t.name);});
+        return bo;
+      }
+
+      function applySwap(fromIdx, toIdx) {
+        if (fromIdx === null || fromIdx === toIdx) return;
+        var bo = getBlockOrder();
+        var moved = bo.splice(fromIdx, 1)[0];
+        bo.splice(toIdx, 0, moved);
+        var newFp = fp.filter(function(n){return !block.teams.find(function(t){return t.name===n;});});
+        bo.forEach(function(name, i){ newFp.splice(block.startPos + i, 0, name); });
+        if (!userPalpites._fp) userPalpites._fp = {};
+        userPalpites._fp[group] = newFp;
+        fp.length = 0; newFp.forEach(function(n){fp.push(n);});
+        setFairPlayRanking(group, newFp);
+        renderAllBlocks();
+      }
+
       var items = listEl.querySelectorAll('.fp-rank-item');
       items.forEach(function(item) {
+        // ── Mouse drag ──
+        item.setAttribute('draggable', 'true');
         item.addEventListener('dragstart', function(e) {
           dragSrcIdx = parseInt(item.getAttribute('data-idx'));
           item.classList.add('dragging');
@@ -1665,25 +1695,39 @@ function openFPModal(group, pairs, userPalpites, fullStandings) {
         });
         item.addEventListener('drop', function(e) {
           e.preventDefault();
-          var dropIdx = parseInt(item.getAttribute('data-idx'));
-          if (dragSrcIdx === null || dragSrcIdx === dropIdx) return;
-          // Reconstruir ordem do bloco
-          var blockOrder = [];
-          fp.forEach(function(name) {
-            if (block.teams.find(function(t){return t.name===name;}) && !blockOrder.includes(name)) blockOrder.push(name);
-          });
-          if (blockOrder.length === 0) block.teams.forEach(function(t){blockOrder.push(t.name);});
-          var moved = blockOrder.splice(dragSrcIdx, 1)[0];
-          blockOrder.splice(dropIdx, 0, moved);
+          applySwap(dragSrcIdx, parseInt(item.getAttribute('data-idx')));
           dragSrcIdx = null;
-          var newFp = fp.filter(function(n){return !block.teams.find(function(t){return t.name===n;});});
-          blockOrder.forEach(function(name, i){ newFp.splice(block.startPos + i, 0, name); });
-          if (!userPalpites._fp) userPalpites._fp = {};
-          userPalpites._fp[group] = newFp;
-          fp.length = 0; newFp.forEach(function(n){fp.push(n);});
-          setFairPlayRanking(group, newFp);
-          renderAllBlocks();
         });
+
+        // ── Touch drag (mobile) ──
+        var touchSrcIdx = null;
+        item.addEventListener('touchstart', function(e) {
+          touchSrcIdx = parseInt(item.getAttribute('data-idx'));
+          item.classList.add('dragging');
+        }, {passive: true});
+        item.addEventListener('touchmove', function(e) {
+          e.preventDefault();
+          var touch = e.touches[0];
+          item.style.opacity = '0';
+          var el = document.elementFromPoint(touch.clientX, touch.clientY);
+          item.style.opacity = '';
+          listEl.querySelectorAll('.fp-rank-item').forEach(function(i){i.classList.remove('drag-over');});
+          var target = el ? el.closest('.fp-rank-item') : null;
+          if (target && target !== item) target.classList.add('drag-over');
+        }, {passive: false});
+        item.addEventListener('touchend', function(e) {
+          item.classList.remove('dragging');
+          var touch = e.changedTouches[0];
+          item.style.opacity = '0';
+          var el = document.elementFromPoint(touch.clientX, touch.clientY);
+          item.style.opacity = '';
+          listEl.querySelectorAll('.fp-rank-item').forEach(function(i){i.classList.remove('drag-over');});
+          var target = el ? el.closest('.fp-rank-item') : null;
+          if (target && target !== item) {
+            applySwap(touchSrcIdx, parseInt(target.getAttribute('data-idx')));
+          }
+          touchSrcIdx = null;
+        }, {passive: true});
       });
     });
   }
