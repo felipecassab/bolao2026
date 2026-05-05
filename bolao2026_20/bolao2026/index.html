@@ -482,9 +482,6 @@ body{display:flex;flex-direction:column}
   <button class="nav-btn" id="nav-ranking" onclick="showPage('ranking',this)">
     <svg viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>Ranking
   </button>
-  <button class="nav-btn" id="nav-premiacao" onclick="showPage('premiacao',this)">
-    <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Premiação
-  </button>
   <button class="nav-btn active" id="nav-palpites" onclick="showPage('palpites',this)">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8l2 4 4 1-3 3 1 4-4-2-4 2 1-4-3-3 4-1z"/></svg>Palpites
   </button>
@@ -493,6 +490,9 @@ body{display:flex;flex-direction:column}
   </button>
   <button class="nav-btn" id="nav-historico" onclick="showPage('historico',this)">
     <svg viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Histórico
+  </button>
+  <button class="nav-btn" id="nav-premiacao" onclick="showPage('premiacao',this)">
+    <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Premiação
   </button>
   <button class="nav-btn" id="nav-regras" onclick="showPage('regras',this)">
     <svg viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Regras
@@ -3643,6 +3643,8 @@ async function saveEditName() {
   if (!name) { errEl.textContent='Informe um nome.'; errEl.style.display='block'; return; }
   if (name.length < 2) { errEl.textContent='Nome muito curto.'; errEl.style.display='block'; return; }
   state.users[state.user].name = name;
+  state.users[state.user].apelido = name;
+  state.users[state.user].nome = name;
   await saveGlobal();
   updateHeader();
   document.getElementById('profile-name-display').textContent = name;
