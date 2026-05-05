@@ -2719,16 +2719,21 @@ function renderMatches() {
   // ── Bloco Fair Play dos melhores terceiros (entre grupos e mata-mata) ──
   if (!locked && state.user) {
     var p3 = state.palpites[state.user] || {};
-    // DEBUG
+    // DEBUG VISUAL
     var _groups3 = ['A','B','C','D','E','F','G','H','I','J','K','L'];
     var _thirds3 = _groups3.map(function(g){
       var s = calcGroupStandings(g, userPFull);
       if (!s[2]) return null;
       return {g:g, name:s[2].name, j:s[2].j, pt:s[2].pt, sg:s[2].gp-s[2].gc, gp:s[2].gp};
     }).filter(Boolean);
-    console.log('FP3 DEBUG - userPFull keys:', Object.keys(userPFull).length);
-    console.log('FP3 DEBUG - thirds:', JSON.stringify(_thirds3));
     var fpNeeded3 = getThirdsFPNeeded(userPFull);
+    // Mostrar painel de debug
+    html += '<div class="card" style="margin-bottom:14px;border:2px solid #f5c518;"><div class="card-body" style="font-size:11px;font-family:monospace;color:var(--light);">';
+    html += '<div style="color:#f5c518;font-weight:bold;margin-bottom:6px;">DEBUG FP3 — keys userPFull: ' + Object.keys(userPFull).length + ' | fpNeeded3: ' + fpNeeded3.length + '</div>';
+    _thirds3.forEach(function(t){
+      html += '<div>Gr.' + t.g + ' 3º: ' + t.name + ' j=' + t.j + ' pt=' + t.pt + ' sg=' + t.sg + ' gp=' + t.gp + '</div>';
+    });
+    html += '</div></div>';
     if (fpNeeded3.length >= 2) {
       var fp3 = p3._fp3 || [];
       var allChosen3 = fpNeeded3.every(function(t){ return fp3.indexOf(t.name) !== -1; });
