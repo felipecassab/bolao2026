@@ -2455,6 +2455,35 @@ function getChampionFromPalpites(userPalpites) {
   return rt[winner] || null;
 }
 
+function reopenPenaltySelector(mid) {
+  var penDiv = document.getElementById('pen_' + mid);
+  if (!penDiv) return;
+  if (penDiv.querySelector('.penalty-selector')) return;
+  var md = MATCHES.find(function(m){return m.id===mid;});
+  var rt = resolvedTeams[mid];
+  var hName = (rt && rt.home) ? rt.home.name : (md ? md.home : '');
+  var aName = (rt && rt.away) ? rt.away.name : (md ? md.away : '');
+  var p = state.user && state.palpites[state.user] && state.palpites[state.user][mid];
+  var sp = p ? p.pen : '';
+  var container = document.createElement('div');
+  container.className = 'penalty-selector';
+  var lbl = document.createElement('span');
+  lbl.className = 'penalty-label';
+  lbl.textContent = 'Penaltis:';
+  var btnH = document.createElement('button');
+  btnH.className = 'penalty-btn' + (sp==='H' ? ' selected' : '');
+  btnH.textContent = hName;
+  btnH.onclick = function(){ setPenalty(mid, 'H'); };
+  var btnA = document.createElement('button');
+  btnA.className = 'penalty-btn' + (sp==='A' ? ' selected' : '');
+  btnA.textContent = aName;
+  btnA.onclick = function(){ setPenalty(mid, 'A'); };
+  container.appendChild(lbl);
+  container.appendChild(btnH);
+  container.appendChild(btnA);
+  penDiv.appendChild(container);
+}
+
 function updatePenPending() {
   // Atualiza pen-pending em todos os jogos knockout lendo o DOM real
   MATCHES.forEach(function(m) {
@@ -2520,7 +2549,7 @@ function renderMatches() {
           <span class="status-pill ${statusClass}">${statusLabel}</span>
           <span style="font-size:11px;color:var(--gray);">${m.city||''}</span>
           ${m.phase==='knockout' && MATCH_NUMBERS[m.id] ? `<span style="font-size:11px;color:var(--gray);opacity:0.6;">· Match ${MATCH_NUMBERS[m.id]}</span>` : ''}
-          <span class="pen-warning" id="pen-warn-${m.id}" style="display:${isPenPending?'flex':'none'}">⚠️ Pênaltis não definidos</span>
+          <span class="pen-warning" id="pen-warn-${m.id}" style="display:${isPenPending?'flex':'none'};cursor:pointer;" onclick="reopenPenaltySelector('${m.id}')">⚠️ Toque para definir pênaltis</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           ${res?`<span style="font-size:12px;color:var(--gray);">Oficial: <b style="color:var(--gold);font-family:'Barlow Condensed';font-size:15px;">${res.h}:${res.a}</b></span>`:''}
