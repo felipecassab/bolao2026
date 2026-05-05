@@ -2420,7 +2420,19 @@ function showChampionBanner(team) {
 
   // Flag
   if (team.flag && team.flag !== 'un') {
-    flagEl.innerHTML = '<img src="https://flagcdn.com/w160/' + team.flag + '.png" style="width:100px;height:auto;border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,0.5);"/>';
+    // Mostrar emoji imediatamente como placeholder
+    var code = team.flag.toUpperCase();
+    var emoji = String.fromCodePoint(0x1F1E6 + code.charCodeAt(0) - 65) +
+                String.fromCodePoint(0x1F1E6 + code.charCodeAt(1) - 65);
+    flagEl.style.fontSize = '80px';
+    flagEl.innerHTML = emoji;
+    // Tentar carregar imagem — se carregar, substituir
+    var img = new Image();
+    img.onload = function() {
+      flagEl.style.fontSize = '';
+      flagEl.innerHTML = '<img src="' + img.src + '" style="width:110px;height:auto;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.6);"/>';
+    };
+    img.src = 'https://flagcdn.com/w160/' + team.flag + '.png';
   } else {
     flagEl.innerHTML = '🏆';
   }
@@ -2832,9 +2844,11 @@ async function syncDraft() {
       if (existing?.pen && +h === +a) temp[m.id].pen = existing.pen;
     }
   });
-  // Merge with existing saved palpites (don't overwrite what was already saved)
+  // Substituir completamente — não merge — para respeitar apagamentos
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
-  Object.assign(state.palpites[state.user], temp);
+  const preserved2 = { _savedAt: state.palpites[state.user]._savedAt, _qa: state.palpites[state.user]._qa, _fp: state.palpites[state.user]._fp };
+  Object.keys(state.palpites[state.user]).forEach(k => { delete state.palpites[state.user][k]; });
+  Object.assign(state.palpites[state.user], preserved2, temp);
   // Save local draft too
   localStorage.setItem('bolao_draft_' + state.user, JSON.stringify(state.palpites[state.user]));
   localStorage.setItem('bolao_draft_time_' + state.user, new Date().toISOString());
@@ -2929,9 +2943,12 @@ function loadDraft() {
     const fbTime = state.palpites[state.user]._savedAt || null;
     const localIsNewer = !fbTime || new Date(draftTime) > new Date(fbTime);
     if (localIsNewer) {
-      Object.entries(data).forEach(([id, val]) => {
-        state.palpites[state.user][id] = val;
+      // Substituição completa — não merge — para respeitar apagamentos
+      const preserved = { _savedAt: state.palpites[state.user]._savedAt };
+      Object.keys(state.palpites[state.user]).forEach(k => {
+        delete state.palpites[state.user][k];
       });
+      Object.assign(state.palpites[state.user], preserved, data);
     } else {
       // Firebase is newer — discard stale local draft
       localStorage.removeItem('bolao_draft_' + state.user);
