@@ -1288,36 +1288,23 @@ function sortThirds(thirds, userPalpites) {
 }
 
 function getThirdsFPNeeded(userPalpites) {
-  // Mesclar palpites salvos com valores atuais do DOM
-  var merged = Object.assign({}, userPalpites);
-  MATCHES.filter(function(m){return m.phase==='group';}).forEach(function(m) {
-    var ih = document.getElementById('p_'+m.id+'_h');
-    var ia = document.getElementById('p_'+m.id+'_a');
-    if (ih && ia && ih.value !== '' && ia.value !== '') {
-      merged[m.id] = {h:+ih.value, a:+ia.value};
-    }
-  });
-
   // Retorna as seleções empatadas que cruzam a fronteira da 8ª posição
   var groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
   var thirds = groups.map(function(g) {
-    var s = calcGroupStandings(g, merged);
+    var s = calcGroupStandings(g, userPalpites);
     if (!s[2] || s[2].j < 3) return null;
     return Object.assign({}, s[2], {group:g});
   }).filter(Boolean);
-  if (thirds.length < 9) return []; // precisa de pelo menos 9 para haver fronteira
-  sortThirds(thirds, merged);
-  // Verificar se 8ª e 9ª estão empatadas em pts, SG e GP
+  if (thirds.length < 9) return [];
+  sortThirds(thirds, userPalpites);
   var t8 = thirds[7], t9 = thirds[8];
   if (!t8 || !t9) return [];
   if (t8.pt !== t9.pt) return [];
   if ((t8.gp-t8.gc) !== (t9.gp-t9.gc)) return [];
   if (t8.gp !== t9.gp) return [];
-  // Há empate na fronteira — pegar todos empatados nessa faixa
   var tied = thirds.filter(function(t) {
     return t.pt === t8.pt && (t.gp-t.gc) === (t8.gp-t8.gc) && t.gp === t8.gp;
   });
-  // Só precisa de Fair Play se o grupo empatado cruza a fronteira
   var tiedInTop8 = tied.filter(function(t){ return thirds.indexOf(t) < 8; });
   var tiedOutTop8 = tied.filter(function(t){ return thirds.indexOf(t) >= 8; });
   if (tiedInTop8.length === 0 || tiedOutTop8.length === 0) return [];
@@ -2633,8 +2620,17 @@ function flagImg(code, cls='flag') {
 }
 function renderMatches() {
   const locked = isPastDeadline();
+  // Capturar valores atuais do DOM ANTES de destruir (para FP3)
+  const domP = {};
+  MATCHES.filter(m=>m.phase==='group').forEach(m=>{
+    const ih = document.getElementById('p_'+m.id+'_h');
+    const ia = document.getElementById('p_'+m.id+'_a');
+    if (ih && ia && ih.value!=='' && ia.value!=='') domP[m.id]={h:+ih.value,a:+ia.value};
+  });
   // Build resolved teams using saved palpites only (DOM values captured on blur/save)
   const userP = state.user ? (state.palpites[state.user] || {}) : {};
+  // Palpites completos (salvo + DOM atual) para cálculos de terceiros
+  const userPFull = Object.assign({}, userP, domP);
   buildResolvedTeams(userP);
   const groups = {};
   MATCHES.forEach(m=>{ if(!groups[m.group]) groups[m.group]=[]; groups[m.group].push(m); });
@@ -2713,7 +2709,7 @@ function renderMatches() {
   // ── Bloco Fair Play dos melhores terceiros (entre grupos e mata-mata) ──
   if (!locked && state.user) {
     var p3 = state.palpites[state.user] || {};
-    var fpNeeded3 = getThirdsFPNeeded(p3);
+    var fpNeeded3 = getThirdsFPNeeded(userPFull);
     if (fpNeeded3.length >= 2) {
       var fp3 = p3._fp3 || [];
       var allChosen3 = fpNeeded3.every(function(t){ return fp3.indexOf(t.name) !== -1; });
