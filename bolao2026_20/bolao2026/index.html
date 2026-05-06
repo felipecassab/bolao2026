@@ -466,7 +466,12 @@ body{display:flex;flex-direction:column}
         <button onclick="adminLogout()" style="font-size:12px;color:var(--gray);background:transparent;border:none;cursor:pointer;">Sair</button>
       </div>
       <div class="tabs" id="admin-tabs" style="overflow-x:auto;flex-wrap:nowrap;"></div>
+      <div id="admin-fp3-block"></div>
       <div id="admin-games"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px;">
+        <p style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:1px;">PERGUNTAS EXTRAS</p>
+      </div>
+      <div class="card"><div class="card-body" id="admin-extras"></div></div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px;">
         <p style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:1px;">PARTICIPANTES</p>
         <button onclick="exportPalpites()" style="padding:6px 14px;background:rgba(0,200,83,0.12);color:var(--green);border:1px solid rgba(0,200,83,0.3);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📊 Exportar Excel</button>
@@ -1057,8 +1062,9 @@ function calcGroupStandings(group, userPalpites) {
     // Step 3b: overall goals scored
     if (b.gp !== a.gp) return b.gp - a.gp;
 
-    // Step 3c: fair play (user choice)
-    const fp = (userPalpites && userPalpites._fp && userPalpites._fp[group]) || [];
+    // Step 3c: fair play (user choice or admin choice)
+    const fp = (userPalpites && userPalpites._fp && userPalpites._fp[group]) ||
+               (userPalpites && userPalpites._fpAdmin && userPalpites._fpAdmin[group]) || [];
     const fpA = fp.indexOf(a.name), fpB = fp.indexOf(b.name);
     if (fpA !== -1 && fpB !== -1) return fpA - fpB; // lower index = better fair play
     if (fpA !== -1) return -1;
@@ -1364,6 +1370,201 @@ function getBest8Thirds(userPalpites) {
   if (thirds.length < 8) return [];
   sortThirds(thirds, userPalpites);
   return thirds.slice(0,8);
+}
+
+// ── Resolved teams baseado nos RESULTADOS REAIS (admin) ────────────
+var resolvedTeamsReal = {};
+
+function buildResolvedTeamsFromResults() {
+  resolvedTeamsReal = {};
+  var results = state.results;
+  if (!results || !Object.keys(results).length) return;
+
+  // Usar resultados reais como "palpites" para calcGroupStandings
+  // Incluir _fpAdmin para desempate por Fair Play
+  var realP = Object.assign({}, results);
+  if (results._fpAdmin) realP._fp = results._fpAdmin;
+
+  // ── Melhores terceiros usando resultados reais ────────────────────
+  var allThirdsReal = (function() {
+    var groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+    var result = groups.map(function(g) {
+      // Só considerar grupo completo (3 jogos com resultado)
+      var gMatches = MATCHES.filter(function(m){return m.group===g&&m.phase==='group';});
+      var played = gMatches.filter(function(m){return results[m.id];}).length;
+      if (played < 6) return null; // grupo incompleto
+      var s = calcGroupStandings(g, realP);
+      if (!s[2] || s[2].j === 0) return null;
+      return Object.assign({}, s[2], {group: g});
+    }).filter(Boolean);
+    // Usar Ranking FIFA para desempate, ou _fp3admin se definido pelo admin
+    var fp3admin = state.results._fp3admin || [];
+    result.sort(function(a,b) {
+      if (b.pt !== a.pt) return b.pt - a.pt;
+      var sgA=a.gp-a.gc, sgB=b.gp-b.gc;
+      if (sgB !== sgA) return sgB - sgA;
+      if (b.gp !== a.gp) return b.gp - a.gp;
+      // Fair Play definido pelo admin
+      var iA = fp3admin.indexOf(a.name), iB = fp3admin.indexOf(b.name);
+      if (iA !== -1 && iB !== -1) return iA - iB;
+      if (iA !== -1) return -1;
+      if (iB !== -1) return 1;
+      return (FIFA_RANKING[a.name]||99)-(FIFA_RANKING[b.name]||99);
+    });
+    return result;
+  })();
+
+  // ── Annexo C: distribuir 8 melhores terceiros ────────────────────
+  var slotMatchIds = ['r32_7','r32_13','r32_9','r32_2','r32_10','r32_5','r32_15','r32_8'];
+  var best8Groups = allThirdsReal.slice(0,8).map(function(t){return t.group;}).sort().join('');
+  var assignment = FIFA_THIRD_COMBINATIONS[best8Groups] || null;
+  var thirdBySlotReal = {};
+  if (assignment) {
+    slotMatchIds.forEach(function(mid, i) {
+      var grp = assignment[i];
+      var t = allThirdsReal.find(function(x){return x.group===grp;});
+      if (t) thirdBySlotReal[mid] = t;
+    });
+  }
+
+  // ── Bracket dos 32-avos ──────────────────────────────────────────
+  var bracket = [
+    {id:'r32_1',  hg:'A',hp:1, ag:'B',ap:1},
+    {id:'r32_2',  hg:'E',hp:0, ag:null},
+    {id:'r32_3',  hg:'F',hp:0, ag:'C',ap:1},
+    {id:'r32_4',  hg:'C',hp:0, ag:'F',ap:1},
+    {id:'r32_5',  hg:'I',hp:0, ag:null},
+    {id:'r32_6',  hg:'E',hp:1, ag:'I',ap:1},
+    {id:'r32_7',  hg:'A',hp:0, ag:null},
+    {id:'r32_8',  hg:'L',hp:0, ag:null},
+    {id:'r32_9',  hg:'D',hp:0, ag:null},
+    {id:'r32_10', hg:'G',hp:0, ag:null},
+    {id:'r32_11', hg:'K',hp:1, ag:'L',ap:1},
+    {id:'r32_12', hg:'H',hp:0, ag:'J',ap:1},
+    {id:'r32_13', hg:'B',hp:0, ag:null},
+    {id:'r32_14', hg:'J',hp:0, ag:'H',ap:1},
+    {id:'r32_15', hg:'K',hp:0, ag:null},
+    {id:'r32_16', hg:'D',hp:1, ag:'G',ap:1},
+  ];
+
+  bracket.forEach(function(b) {
+    var entry = {};
+    // Time da casa
+    if (b.hg) {
+      var gMatches = MATCHES.filter(function(m){return m.group===b.hg&&m.phase==='group';});
+      var played = gMatches.filter(function(m){return results[m.id];}).length;
+      if (played === 6) {
+        var s = calcGroupStandings(b.hg, realP);
+        var t = s[b.hp];
+        if (t) entry.home = {name:t.name, flag:t.flag};
+      }
+    }
+    // Time visitante
+    if (b.ag != null) {
+      var gMatches2 = MATCHES.filter(function(m){return m.group===b.ag&&m.phase==='group';});
+      var played2 = gMatches2.filter(function(m){return results[m.id];}).length;
+      if (played2 === 6) {
+        var s2 = calcGroupStandings(b.ag, realP);
+        var t2 = s2[b.ap];
+        if (t2) entry.away = {name:t2.name, flag:t2.flag};
+      }
+    } else {
+      // Terceiro colocado via Anexo C
+      var t3 = thirdBySlotReal[b.id];
+      if (t3) entry.away = {name:t3.name, flag:t3.flag};
+    }
+    if (entry.home || entry.away) resolvedTeamsReal[b.id] = entry;
+  });
+
+  // ── Propagação do mata-mata usando resultados reais ──────────────
+  function krealWinner(matchId) {
+    var res = results[matchId];
+    if (!res) return null;
+    var rt = resolvedTeamsReal[matchId];
+    if (!rt) return null;
+    if (res.h > res.a) return rt.home||null;
+    if (res.a > res.h) return rt.away||null;
+    if (res.pen==='H') return rt.home||null;
+    if (res.pen==='A') return rt.away||null;
+    return null;
+  }
+  function krealLoser(matchId) {
+    var res = results[matchId];
+    if (!res) return null;
+    var rt = resolvedTeamsReal[matchId];
+    if (!rt) return null;
+    if (res.h > res.a) return rt.away||null;
+    if (res.a > res.h) return rt.home||null;
+    if (res.pen==='H') return rt.away||null;
+    if (res.pen==='A') return rt.home||null;
+    return null;
+  }
+
+  var r16 = [
+    {id:'r16_1',hm:'r32_2',am:'r32_5'},
+    {id:'r16_2',hm:'r32_1',am:'r32_3'},
+    {id:'r16_3',hm:'r32_4',am:'r32_6'},
+    {id:'r16_4',hm:'r32_7',am:'r32_8'},
+    {id:'r16_5',hm:'r32_11',am:'r32_12'},
+    {id:'r16_6',hm:'r32_9',am:'r32_10'},
+    {id:'r16_7',hm:'r32_14',am:'r32_16'},
+    {id:'r16_8',hm:'r32_13',am:'r32_15'},
+  ];
+  r16.forEach(function(b) {
+    var h = krealWinner(b.hm), a = krealWinner(b.am);
+    var entry = {};
+    if (h) entry.home = h;
+    if (a) entry.away = a;
+    if (h||a) resolvedTeamsReal[b.id] = entry;
+  });
+
+  var qf = [
+    {id:'qf_1',hm:'r16_1',am:'r16_2'},
+    {id:'qf_2',hm:'r16_3',am:'r16_4'},
+    {id:'qf_3',hm:'r16_5',am:'r16_6'},
+    {id:'qf_4',hm:'r16_7',am:'r16_8'},
+  ];
+  qf.forEach(function(b) {
+    var h = krealWinner(b.hm), a = krealWinner(b.am);
+    var entry = {};
+    if (h) entry.home = h;
+    if (a) entry.away = a;
+    if (h||a) resolvedTeamsReal[b.id] = entry;
+  });
+
+  var sf = [
+    {id:'sf_1',hm:'qf_1',am:'qf_2'},
+    {id:'sf_2',hm:'qf_3',am:'qf_4'},
+  ];
+  sf.forEach(function(b) {
+    var h = krealWinner(b.hm), a = krealWinner(b.am);
+    var entry = {};
+    if (h) entry.home = h;
+    if (a) entry.away = a;
+    if (h||a) resolvedTeamsReal[b.id] = entry;
+  });
+
+  // 3º lugar
+  var thirdH = krealLoser('sf_1'), thirdA = krealLoser('sf_2');
+  var thirdEntry = {};
+  if (thirdH) thirdEntry.home = thirdH;
+  if (thirdA) thirdEntry.away = thirdA;
+  if (thirdH||thirdA) resolvedTeamsReal['third'] = thirdEntry;
+
+  // Final
+  var finH = krealWinner('sf_1'), finA = krealWinner('sf_2');
+  var finEntry = {};
+  if (finH) finEntry.home = finH;
+  if (finA) finEntry.away = finA;
+  if (finH||finA) resolvedTeamsReal['final'] = finEntry;
+
+  // Salvar nomes reais dos times nos resultados (para calcBonusPts)
+  Object.keys(resolvedTeamsReal).forEach(function(mid) {
+    var rt = resolvedTeamsReal[mid];
+    if (!state.results[mid]) return;
+    if (rt.home) state.results[mid].homeTeam = rt.home.name;
+    if (rt.away) state.results[mid].awayTeam = rt.away.name;
+  });
 }
 
 function buildResolvedTeams(userPalpites) {
@@ -1712,13 +1913,16 @@ function openFPModal(group, pairs, userPalpites, fullStandings) {
 
       if (teamsInBlock.length >= 3) {
         // ── MODO RANKING (3+ times no bloco) ──
-        // Ordem persistente por bloco
-        if (!block._order) {
+        // Ordem persistente por bloco — sempre verificar se contém todos os times
+        if (!block._order || !teamsInBlock.every(function(t){ return block._order.includes(t.name); })) {
           block._order = [];
           fp.forEach(function(name) {
             if (teamsInBlock.find(function(t){return t.name===name;}) && !block._order.includes(name)) block._order.push(name);
           });
-          if (block._order.length === 0) teamsInBlock.forEach(function(t){block._order.push(t.name);});
+          // Adicionar times que faltam
+          teamsInBlock.forEach(function(t){
+            if (!block._order.includes(t.name)) block._order.push(t.name);
+          });
         }
         var blockOrder = block._order;
         var bLen = blockOrder.length;
@@ -2304,6 +2508,8 @@ function updateFAB() {
 }
 
 function renderAll() {
+  buildResolvedTeamsFromResults();
+  renderAdminFP3Block();
   updateFAB();
   // Only render matches if no inputs are currently filled (user not actively typing)
   const hasFilledInput = MATCHES.some(m => {
@@ -2313,6 +2519,7 @@ function renderAll() {
   if (!hasFilledInput) renderMatches();
   renderRanking();
   renderHistorico();
+  renderAdminExtras();
   updateDeadlinePill();
   updateAdminBadge();
 }
@@ -3396,6 +3603,152 @@ function doLogout() {
   }, 150);
 }
 
+// ── Perguntas Extras — Admin ────────────────────────────────────────
+
+function normalizeStr(s) {
+  if (!s) return '';
+  return s.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function matchScore(answer, correct) {
+  var a = normalizeStr(answer);
+  var c = normalizeStr(correct);
+  if (!a || !c) return 0;
+  if (a === c) return 1; // exato
+  if (a.includes(c) || c.includes(a)) return 0.9; // contém
+  // Verificar se todas as palavras da resposta correta estão na resposta do usuário
+  var cWords = c.split(' ').filter(Boolean);
+  var aWords = a.split(' ').filter(Boolean);
+  var allMatch = cWords.every(function(w){ return aWords.some(function(aw){ return aw.includes(w) || w.includes(aw); }); });
+  if (allMatch) return 0.8;
+  // Pelo menos uma palavra em comum
+  var anyMatch = cWords.some(function(w){ return w.length > 3 && aWords.some(function(aw){ return aw.includes(w) || w.includes(aw); }); });
+  if (anyMatch) return 0.5; // incerto
+  return 0;
+}
+
+function getMatchStatus(score) {
+  if (score >= 0.8) return 'correct';
+  if (score >= 0.4) return 'uncertain';
+  return 'wrong';
+}
+
+function renderAdminExtras() {
+  var el = document.getElementById('admin-extras');
+  if (!el) return;
+  var answers = state.results._qaAnswers || {}; // {qid: {correct: 'Neymar', overrides: {uid: true/false}}}
+
+  var html = '';
+  EXTRA_QS.forEach(function(q) {
+    var ans = answers[q.id] || {};
+    var correctAnswer = ans.correct || '';
+    var overrides = ans.overrides || {};
+
+    html += '<div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.06);">';
+    html += '<div style="font-size:12px;color:var(--gold);font-weight:700;margin-bottom:4px;">'+q.label+'. '+q.q+'</div>';
+
+    // Input da resposta correta
+    html += '<div style="display:flex;gap:8px;margin-bottom:10px;">';
+    html += '<input type="text" id="admin-qa-'+q.id+'" value="'+correctAnswer.replace(/"/g,'&quot;')+'" placeholder="Resposta correta..." style="flex:1;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:var(--light);font-size:13px;font-family:\'Barlow Condensed\';"/>';
+    html += '<button onclick="adminProcessExtra(\''+q.id+'\')" style="padding:8px 14px;background:var(--gold);color:var(--navy);border:none;border-radius:8px;font-family:\'Barlow Condensed\';font-weight:900;font-size:13px;cursor:pointer;">PROCESSAR</button>';
+    html += '</div>';
+
+    // Lista de respostas dos participantes
+    if (correctAnswer) {
+      var participants = Object.entries(state.users).filter(function(e){ return e[1].status !== 'pending' && !e[1]._deleted; });
+      if (participants.length) {
+        html += '<div style="display:flex;flex-direction:column;gap:4px;">';
+        participants.forEach(function(entry) {
+          var uid = entry[0], u = entry[1];
+          var name = u.apelido || u.nome || u.name || uid;
+          var userAns = state.palpites[uid]?._qa?.[q.id]?.answer || '';
+          if (!userAns) return;
+          // Determinar status
+          var override = overrides[uid];
+          var score = matchScore(userAns, correctAnswer);
+          var auto = getMatchStatus(score);
+          var status = override !== undefined ? (override ? 'correct' : 'wrong') : auto;
+          var isUncertain = auto === 'uncertain' && override === undefined;
+
+          var bgColor = status === 'correct' ? 'rgba(0,200,83,0.1)' : status === 'wrong' ? 'rgba(244,67,54,0.1)' : 'rgba(245,197,24,0.1)';
+          var borderColor = status === 'correct' ? 'rgba(0,200,83,0.3)' : status === 'wrong' ? 'rgba(244,67,54,0.3)' : 'rgba(245,197,24,0.3)';
+          var icon = status === 'correct' ? '✓' : status === 'wrong' ? '✗' : '?';
+          var iconColor = status === 'correct' ? 'var(--green)' : status === 'wrong' ? 'var(--red)' : '#f5c518';
+
+          html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;background:'+bgColor+';border:1px solid '+borderColor+';">';
+          html += '<span style="color:'+iconColor+';font-weight:900;font-size:14px;width:16px;">'+icon+'</span>';
+          html += '<span style="flex:1;font-size:13px;font-family:\'Barlow Condensed\';color:var(--light);">'+name+'</span>';
+          html += '<span style="font-size:12px;color:var(--gray);font-style:italic;margin-right:8px;">'+userAns+'</span>';
+          // Botões de override
+          html += '<button onclick="adminExtraOverride(\''+q.id+'\',\''+uid+'\',true)" style="padding:3px 8px;border-radius:4px;border:none;background:'+(status==='correct'&&override===true?'var(--green)':'rgba(0,200,83,0.2)')+';color:var(--green);font-size:11px;cursor:pointer;margin-right:2px;">✓</button>';
+          html += '<button onclick="adminExtraOverride(\''+q.id+'\',\''+uid+'\',false)" style="padding:3px 8px;border-radius:4px;border:none;background:'+(status==='wrong'&&override===false?'var(--red)':'rgba(244,67,54,0.2)')+';color:var(--red);font-size:11px;cursor:pointer;">✗</button>';
+          html += '</div>';
+        });
+        html += '</div>';
+        // Botão confirmar
+        html += '<button onclick="adminConfirmExtra(\''+q.id+'\')" style="width:100%;margin-top:8px;padding:8px;background:rgba(126,184,245,0.15);border:1px solid rgba(126,184,245,0.3);color:#7eb8f5;border-radius:8px;font-family:\'Barlow Condensed\';font-weight:700;font-size:13px;cursor:pointer;letter-spacing:0.5px;">✓ CONFIRMAR E ATRIBUIR PONTOS</button>';
+      }
+    }
+    html += '</div>';
+  });
+
+  el.innerHTML = html || '<p style="font-size:13px;color:var(--gray);">Carregando...</p>';
+}
+
+async function adminProcessExtra(qid) {
+  var input = document.getElementById('admin-qa-'+qid);
+  if (!input || !input.value.trim()) { showToast('Digite a resposta correta', true); return; }
+  var correct = input.value.trim();
+  if (!state.results._qaAnswers) state.results._qaAnswers = {};
+  if (!state.results._qaAnswers[qid]) state.results._qaAnswers[qid] = {};
+  state.results._qaAnswers[qid].correct = correct;
+  state.results._qaAnswers[qid].overrides = state.results._qaAnswers[qid].overrides || {};
+  await saveGlobal();
+  renderAdminExtras();
+  showToast('Respostas processadas! Revise e confirme.');
+}
+
+async function adminExtraOverride(qid, uid, value) {
+  if (!state.results._qaAnswers) state.results._qaAnswers = {};
+  if (!state.results._qaAnswers[qid]) state.results._qaAnswers[qid] = {};
+  if (!state.results._qaAnswers[qid].overrides) state.results._qaAnswers[qid].overrides = {};
+  // Toggle: se já tem o mesmo valor, remover (volta pro automático)
+  if (state.results._qaAnswers[qid].overrides[uid] === value) {
+    delete state.results._qaAnswers[qid].overrides[uid];
+  } else {
+    state.results._qaAnswers[qid].overrides[uid] = value;
+  }
+  await saveGlobal();
+  renderAdminExtras();
+}
+
+async function adminConfirmExtra(qid) {
+  var ans = state.results._qaAnswers && state.results._qaAnswers[qid];
+  if (!ans || !ans.correct) { showToast('Processe a resposta primeiro', true); return; }
+  var overrides = ans.overrides || {};
+  var correct = ans.correct;
+  var count = 0;
+  Object.keys(state.palpites).forEach(function(uid) {
+    var userAns = state.palpites[uid]?._qa?.[qid]?.answer;
+    if (!userAns) return;
+    var override = overrides[uid];
+    var score = matchScore(userAns, correct);
+    var isCorrect = override !== undefined ? override : (getMatchStatus(score) === 'correct');
+    if (!state.palpites[uid]._qa) return;
+    if (!state.palpites[uid]._qa[qid]) return;
+    state.palpites[uid]._qa[qid].correct = isCorrect;
+    if (isCorrect) count++;
+  });
+  await saveGlobal();
+  renderAdminExtras();
+  renderRanking();
+  showToast(count + ' participante(s) com ponto atribuído! ✓');
+}
+
 function adminLogout() {
   adminAuthed=false;
   localStorage.removeItem('bolao_admin');
@@ -3406,8 +3759,106 @@ function adminLogout() {
 }
 function renderAdminPage() {
   if (!adminAuthed) { document.getElementById('admin-login-view').style.display='block'; document.getElementById('admin-main-view').style.display='none'; }
-  else { renderAdminTabs(); renderAdminGames(); renderAdminParticipants(); }
+  else { renderAdminTabs(); renderAdminGames(); renderAdminFP3Block(); renderAdminExtras(); renderAdminParticipants(); }
 }
+function getThirdsFPNeededAdmin() {
+  var results = state.results;
+  var realP = Object.assign({}, results);
+  var groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+  var thirds = groups.map(function(g) {
+    var gMatches = MATCHES.filter(function(m){return m.group===g&&m.phase==='group';});
+    if (gMatches.filter(function(m){return results[m.id];}).length < 6) return null;
+    var s = calcGroupStandings(g, realP);
+    if (!s[2] || s[2].j === 0) return null;
+    return Object.assign({}, s[2], {group:g});
+  }).filter(Boolean);
+  if (thirds.length < 9) return [];
+  var fp3admin = results._fp3admin || [];
+  thirds.sort(function(a,b) {
+    if (b.pt !== a.pt) return b.pt - a.pt;
+    var sgA=a.gp-a.gc, sgB=b.gp-b.gc;
+    if (sgB !== sgA) return sgB - sgA;
+    if (b.gp !== a.gp) return b.gp - a.gp;
+    var iA=fp3admin.indexOf(a.name), iB=fp3admin.indexOf(b.name);
+    if (iA !== -1 && iB !== -1) return iA - iB;
+    if (iA !== -1) return -1;
+    if (iB !== -1) return 1;
+    return (FIFA_RANKING[a.name]||99)-(FIFA_RANKING[b.name]||99);
+  });
+  var t8 = thirds[7], t9 = thirds[8];
+  if (!t8 || !t9) return [];
+  if (t8.pt !== t9.pt) return [];
+  if ((t8.gp-t8.gc) !== (t9.gp-t9.gc)) return [];
+  if (t8.gp !== t9.gp) return [];
+  var tied = thirds.filter(function(t) {
+    return t.pt===t8.pt && (t.gp-t.gc)===(t8.gp-t8.gc) && t.gp===t8.gp;
+  });
+  var tiedIn  = tied.filter(function(t){ return thirds.indexOf(t) < 8; });
+  var tiedOut = tied.filter(function(t){ return thirds.indexOf(t) >= 8; });
+  if (!tiedIn.length || !tiedOut.length) return [];
+  return tied;
+}
+
+function renderAdminFP3Block() {
+  var container = document.getElementById('admin-fp3-block');
+  if (!container) return;
+  var needed = getThirdsFPNeededAdmin();
+  if (!needed.length) { container.innerHTML = ''; return; }
+  var fp3admin = state.results._fp3admin || [];
+  var allChosen = needed.every(function(t){ return fp3admin.indexOf(t.name) !== -1; });
+  var btnStyle = allChosen
+    ? 'background:rgba(0,200,83,0.12);border:1px solid rgba(0,200,83,0.4);color:var(--green);'
+    : 'background:rgba(245,197,24,0.15);border:1px solid rgba(245,197,24,0.5);color:#f5c518;animation:pulse 2s infinite;';
+  var btnText = allChosen ? '✓ FAIR PLAY DOS TERCEIROS DEFINIDO' : '⚠️ DEFINIR FAIR PLAY DOS TERCEIROS';
+
+  var html = '<div class="card" style="margin-bottom:12px;"><div class="card-body">';
+  html += '<div style="font-size:11px;color:var(--gray);font-family:\'Barlow Condensed\';font-weight:700;letter-spacing:0.5px;margin-bottom:8px;">EMPATE NA FRONTEIRA DA 8ª POSIÇÃO — MELHORES TERCEIROS</div>';
+  // Lista com setas
+  html += '<div id="admin-fp3-list">';
+  var order = [];
+  fp3admin.forEach(function(name){ if (needed.find(function(t){return t.name===name;})) order.push(name); });
+  needed.forEach(function(t){ if (!order.includes(t.name)) order.push(t.name); });
+  order.forEach(function(name, idx) {
+    var team = needed.find(function(t){return t.name===name;});
+    if (!team) return;
+    var posColors = ['color:#f5c518','color:#aab8c2','color:#cd7f32','color:var(--gray)','color:var(--gray)','color:var(--gray)'];
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);">';
+    html += '<span style="font-family:\'Barlow Condensed\';font-weight:900;font-size:18px;width:28px;'+posColors[idx]+'">'+(idx+1)+'º</span>';
+    html += '<img src="https://flagcdn.com/w20/'+team.flag+'.png" style="width:18px;height:12px;border-radius:1px;" onerror="this.style.display=\'none\'">';
+    html += '<span style="flex:1;font-size:14px;font-family:\'Barlow Condensed\';font-weight:700;color:var(--light);">'+name+'</span>';
+    html += '<span style="font-size:11px;color:var(--gray);">'+team.pt+'pts · SG:'+(team.gp-team.gc)+'</span>';
+    html += '<div style="display:flex;flex-direction:column;gap:2px;">';
+    html += '<button onclick="adminFP3Move('+idx+',-1)" style="width:28px;height:22px;border-radius:4px;border:none;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);cursor:pointer;font-size:10px;"'+(idx===0?' disabled':'')+'>▲</button>';
+    html += '<button onclick="adminFP3Move('+idx+',1)" style="width:28px;height:22px;border-radius:4px;border:none;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);cursor:pointer;font-size:10px;"'+(idx===order.length-1?' disabled':'')+'>▼</button>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+  html += '<button onclick="adminSaveFP3()" style="display:block;width:100%;padding:10px;margin-top:10px;border-radius:var(--radius-sm);'+btnStyle+'font-size:13px;font-family:\'Barlow Condensed\';font-weight:700;cursor:pointer;letter-spacing:0.8px;text-align:center;">'+btnText+'</button>';
+  html += '</div></div>';
+  container.innerHTML = html;
+  // Guardar ordem atual para adminFP3Move
+  window._adminFP3Order = order;
+}
+
+function adminFP3Move(idx, move) {
+  var order = window._adminFP3Order || [];
+  var newIdx = idx + move;
+  if (newIdx < 0 || newIdx >= order.length) return;
+  var tmp = order[idx]; order[idx] = order[newIdx]; order[newIdx] = tmp;
+  window._adminFP3Order = order;
+  state.results._fp3admin = order.slice();
+  renderAdminFP3Block();
+}
+
+async function adminSaveFP3() {
+  state.results._fp3admin = (window._adminFP3Order || []).slice();
+  await saveGlobal();
+  buildResolvedTeamsFromResults();
+  renderAdminFP3Block();
+  renderRanking();
+  showToast('Fair Play dos terceiros salvo! ✓');
+}
+
 function renderAdminTabs() {
   const groups=[...new Set(MATCHES.map(m=>m.group))];
   document.getElementById('admin-tabs').innerHTML=groups.map(g=>{
@@ -3422,38 +3873,200 @@ function adminSelectGroup(g,btn) {
   btn.classList.add('active'); renderAdminGames();
 }
 function renderAdminGames() {
-  const games=MATCHES.filter(m=>m.group===adminGroup);
-  document.getElementById('admin-games').innerHTML=games.map(m=>{
+  const games = MATCHES.filter(m => m.group === adminGroup);
+  const isGroupPhase = games.length > 0 && games[0].phase === 'group';
+
+  // Verificar se há empate que requer Fair Play no grupo atual
+  let fpAdminBlock = '';
+  if (isGroupPhase) {
+    const allPlayed = games.every(m => state.results[m.id]);
+    if (allPlayed) {
+      const realP = Object.assign({}, state.results);
+      if (state.results._fpAdmin) realP._fp = state.results._fpAdmin;
+      const s = calcGroupStandings(adminGroup, realP);
+      // Detectar pares ainda empatados (precisam de FP)
+      const fpNeededAdmin = [];
+      const ptGroups = {};
+      s.forEach(function(t){ if(!ptGroups[t.pt]) ptGroups[t.pt]=[]; ptGroups[t.pt].push(t); });
+      Object.values(ptGroups).forEach(function(tg) {
+        if (tg.length < 2) return;
+        var subGrps = [];
+        tg.forEach(function(t) {
+          var found = subGrps.find(function(sg){ return (t.gp-t.gc)===(sg[0].gp-sg[0].gc) && t.gp===sg[0].gp; });
+          if (found) found.push(t); else subGrps.push([t]);
+        });
+        subGrps.forEach(function(same) {
+          if (same.length < 2) return;
+          var h2h2 = {}; same.forEach(function(t){h2h2[t.name]={pt:0,gp:0,gc:0};});
+          games.forEach(function(m){
+            var p=state.results[m.id]; if(!p) return;
+            var hT=same.find(function(t){return t.name===m.home;}), aT=same.find(function(t){return t.name===m.away;});
+            if(!hT||!aT) return;
+            h2h2[m.home].gp+=+p.h; h2h2[m.home].gc+=+p.a;
+            h2h2[m.away].gp+=+p.a; h2h2[m.away].gc+=+p.h;
+            if(+p.h>+p.a) h2h2[m.home].pt+=3; else if(+p.h<+p.a) h2h2[m.away].pt+=3; else{h2h2[m.home].pt++;h2h2[m.away].pt++;}
+          });
+          for(var i=0;i<same.length-1;i++) for(var j=i+1;j<same.length;j++){
+            var a=same[i],b=same[j],ha=h2h2[a.name],hb=h2h2[b.name];
+            if(ha.pt!==hb.pt||(ha.gp-ha.gc)!==(hb.gp-hb.gc)||ha.gp!==hb.gp) continue;
+            if(!fpNeededAdmin.find(function(p){return (p.a.name===a.name&&p.b.name===b.name)||(p.a.name===b.name&&p.b.name===a.name);}))
+              fpNeededAdmin.push({a:a,b:b});
+          }
+        });
+      });
+
+      if (fpNeededAdmin.length > 0) {
+        // Coletar times únicos empatados
+        var tiedTeams = [];
+        fpNeededAdmin.forEach(function(pair){
+          if (!tiedTeams.find(function(t){return t.name===pair.a.name;})) tiedTeams.push(pair.a);
+          if (!tiedTeams.find(function(t){return t.name===pair.b.name;})) tiedTeams.push(pair.b);
+        });
+        var fpAdmin = (state.results._fpAdmin && state.results._fpAdmin[adminGroup]) || [];
+        var allChosen = tiedTeams.every(function(t){ return fpAdmin.indexOf(t.name) !== -1; });
+        // Ordem atual
+        var order = [];
+        fpAdmin.forEach(function(name){ if (tiedTeams.find(function(t){return t.name===name;})) order.push(name); });
+        tiedTeams.forEach(function(t){ if (!order.includes(t.name)) order.push(t.name); });
+        window._adminGroupFP = window._adminGroupFP || {};
+        window._adminGroupFP[adminGroup] = order;
+
+        var btnStyle = allChosen
+          ? 'background:rgba(0,200,83,0.12);border:1px solid rgba(0,200,83,0.4);color:var(--green);'
+          : 'background:rgba(245,197,24,0.15);border:1px solid rgba(245,197,24,0.5);color:#f5c518;animation:pulse 2s infinite;';
+        var btnText = allChosen ? '✓ FAIR PLAY DO GRUPO DEFINIDO' : '⚠️ DEFINIR FAIR PLAY DO GRUPO ' + adminGroup;
+
+        fpAdminBlock = '<div class="card" style="margin-bottom:12px;"><div class="card-body">';
+        fpAdminBlock += '<div style="font-size:11px;color:var(--gray);font-family:\'Barlow Condensed\';font-weight:700;letter-spacing:0.5px;margin-bottom:8px;">EMPATE — DEFINIR ORDEM POR FAIR PLAY:</div>';
+        order.forEach(function(name, idx) {
+          var team = tiedTeams.find(function(t){return t.name===name;});
+          if (!team) return;
+          fpAdminBlock += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);">';
+          fpAdminBlock += '<span style="font-family:\'Barlow Condensed\';font-weight:900;font-size:18px;width:24px;color:var(--gold);">'+(idx+1)+'º</span>';
+          fpAdminBlock += '<img src="https://flagcdn.com/w20/'+team.flag+'.png" style="width:18px;height:12px;border-radius:1px;" onerror="this.style.display=\'none\'">';
+          fpAdminBlock += '<span style="flex:1;font-size:14px;font-family:\'Barlow Condensed\';font-weight:700;color:var(--light);">'+name+'</span>';
+          fpAdminBlock += '<div style="display:flex;flex-direction:column;gap:2px;">';
+          fpAdminBlock += '<button onclick="adminGroupFPMove(\''+adminGroup+'\','+idx+',-1)" style="width:28px;height:22px;border-radius:4px;border:none;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);cursor:pointer;font-size:10px;"'+(idx===0?' disabled':'')+'>▲</button>';
+          fpAdminBlock += '<button onclick="adminGroupFPMove(\''+adminGroup+'\','+idx+',1)" style="width:28px;height:22px;border-radius:4px;border:none;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);cursor:pointer;font-size:10px;"'+(idx===order.length-1?' disabled':'')+'>▼</button>';
+          fpAdminBlock += '</div></div>';
+        });
+        fpAdminBlock += '<button onclick="adminSaveGroupFP(\''+adminGroup+'\')" style="display:block;width:100%;padding:10px;margin-top:10px;border-radius:var(--radius-sm);'+btnStyle+'font-size:13px;font-family:\'Barlow Condensed\';font-weight:700;cursor:pointer;letter-spacing:0.8px;text-align:center;">'+btnText+'</button>';
+        fpAdminBlock += '</div></div>';
+      }
+    }
+  }
+
+  document.getElementById('admin-games').innerHTML = fpAdminBlock + games.map(m => {
     const res=state.results[m.id];
+    const isKO = m.phase==='knockout';
+    const isDrawResult = res && +res.h===+res.a;
+    const penH = res?.pen==='H';
+    const penA = res?.pen==='A';
+    // Badge de resultado
+    let badge = res ? `<span class="badge badge-gold">${res.h}:${res.a}${res.pen?' (pen: '+(res.pen==='H'?m.home:m.away)+')':''} ✓</span>` : '<span class="badge badge-gray">Pendente</span>';
+    // Seletor de pênaltis (mostrar se KO e placar atual empatado)
+    const hVal = document.getElementById?.('ar_'+m.id+'_h')?.value ?? (res?.h??'');
+    const aVal = document.getElementById?.('ar_'+m.id+'_a')?.value ?? (res?.a??'');
+    const showPen = isKO && res && isDrawResult;
+    const penSelector = showPen ? `
+      <div style="margin-top:8px;padding:8px 10px;background:rgba(245,197,24,0.08);border:1px solid rgba(245,197,24,0.2);border-radius:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:12px;color:var(--gold);font-weight:700;">🥅 Vencedor nos pênaltis:</span>
+        <button onclick="adminSetPen('${m.id}','H')" style="padding:5px 12px;border-radius:50px;border:1px solid ${penH?'#7eb8f5':'rgba(255,255,255,0.15)'};background:${penH?'#7eb8f5':'transparent'};color:${penH?'var(--navy)':'var(--light)'};font-size:13px;font-family:'Barlow Condensed';font-weight:700;cursor:pointer;">${m.home}</button>
+        <button onclick="adminSetPen('${m.id}','A')" style="padding:5px 12px;border-radius:50px;border:1px solid ${penA?'#7eb8f5':'rgba(255,255,255,0.15)'};background:${penA?'#7eb8f5':'transparent'};color:${penA?'var(--navy)':'var(--light)'};font-size:13px;font-family:'Barlow Condensed';font-weight:700;cursor:pointer;">${m.away}</button>
+      </div>` : '';
     return `<div class="card" style="margin-bottom:8px;"><div class="card-body">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
         ${flagImg(m.fH)} <span style="font-size:13px;font-weight:500;flex:1;">${m.home}</span>
         <span style="color:var(--gray);font-size:12px;">×</span>
         <span style="font-size:13px;font-weight:500;flex:1;text-align:right;">${m.away}</span> ${flagImg(m.fA)}
-        ${res?`<span class="badge badge-gold">${res.h}:${res.a} ✓</span>`:'<span class="badge badge-gray">Pendente</span>'}
+        ${badge}
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
-        <input class="admin-input" type="number" min="0" max="20" id="ar_${m.id}_h" value="${res?.h??''}" placeholder="0"/>
+        <input class="admin-input" type="number" min="0" max="20" id="ar_${m.id}_h" value="${res?.h??''}" placeholder="0" oninput="adminCheckPen('${m.id}')"/>
         <span style="color:var(--gray);font-size:18px;font-weight:600;">:</span>
-        <input class="admin-input" type="number" min="0" max="20" id="ar_${m.id}_a" value="${res?.a??''}" placeholder="0"/>
+        <input class="admin-input" type="number" min="0" max="20" id="ar_${m.id}_a" value="${res?.a??''}" placeholder="0" oninput="adminCheckPen('${m.id}')"/>
         <button onclick="adminSave('${m.id}')" style="flex:1;padding:10px;background:var(--gold);color:var(--navy);border:none;border-radius:8px;font-family:'Barlow Condensed';font-weight:900;font-size:15px;cursor:pointer;">${res?'ATUALIZAR':'CONFIRMAR'}</button>
         ${res?`<button onclick="adminClear('${m.id}')" style="padding:10px 12px;background:rgba(244,67,54,0.12);color:var(--red);border:1px solid rgba(244,67,54,0.3);border-radius:8px;font-size:13px;cursor:pointer;">✕</button>`:''}
       </div>
+      ${penSelector}
+      <div id="admin-pen-${m.id}"></div>
     </div></div>`;
   }).join('');
 }
+
+function adminGroupFPMove(group, idx, move) {
+  if (!window._adminGroupFP) window._adminGroupFP = {};
+  var order = window._adminGroupFP[group] || [];
+  var newIdx = idx + move;
+  if (newIdx < 0 || newIdx >= order.length) return;
+  var tmp = order[idx]; order[idx] = order[newIdx]; order[newIdx] = tmp;
+  window._adminGroupFP[group] = order;
+  if (!state.results._fpAdmin) state.results._fpAdmin = {};
+  state.results._fpAdmin[group] = order.slice();
+  renderAdminGames();
+}
+
+async function adminSaveGroupFP(group) {
+  if (!state.results._fpAdmin) state.results._fpAdmin = {};
+  state.results._fpAdmin[group] = (window._adminGroupFP && window._adminGroupFP[group]) || [];
+  await saveGlobal();
+  buildResolvedTeamsFromResults();
+  renderAdminGames();
+  renderRanking();
+  showToast('Fair Play do Grupo ' + group + ' salvo! ✓');
+}
+
+function adminCheckPen(id) {
+  // Mostrar seletor de pênaltis ao vivo quando admin digita empate em jogo KO
+  const m = MATCHES.find(function(x){return x.id===id;});
+  if (!m || m.phase !== 'knockout') return;
+  const ih = document.getElementById('ar_'+id+'_h');
+  const ia = document.getElementById('ar_'+id+'_a');
+  const penDiv = document.getElementById('admin-pen-'+id);
+  if (!ih || !ia || !penDiv) return;
+  const hv = ih.value, av = ia.value;
+  if (hv !== '' && av !== '' && +hv === +av) {
+    const res = state.results[id];
+    const penH = res?.pen === 'H';
+    const penA = res?.pen === 'A';
+    penDiv.innerHTML = `<div style="margin-top:8px;padding:8px 10px;background:rgba(245,197,24,0.08);border:1px solid rgba(245,197,24,0.2);border-radius:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="font-size:12px;color:var(--gold);font-weight:700;">🥅 Vencedor nos pênaltis:</span>
+      <button onclick="adminSetPen('${id}','H')" style="padding:5px 12px;border-radius:50px;border:1px solid ${penH?'#7eb8f5':'rgba(255,255,255,0.15)'};background:${penH?'#7eb8f5':'transparent'};color:${penH?'var(--navy)':'var(--light)'};font-size:13px;font-family:'Barlow Condensed';font-weight:700;cursor:pointer;">${m.home}</button>
+      <button onclick="adminSetPen('${id}','A')" style="padding:5px 12px;border-radius:50px;border:1px solid ${penA?'#7eb8f5':'rgba(255,255,255,0.15)'};background:${penA?'#7eb8f5':'transparent'};color:${penA?'var(--navy)':'var(--light)'};font-size:13px;font-family:'Barlow Condensed';font-weight:700;cursor:pointer;">${m.away}</button>
+    </div>`;
+  } else {
+    penDiv.innerHTML = '';
+  }
+}
+
+async function adminSetPen(id, winner) {
+  if (!state.results[id]) return;
+  state.results[id].pen = winner;
+  await saveGlobal();
+  buildResolvedTeamsFromResults();
+  showToast('Pênaltis registrado! ✓');
+  renderAdminGames(); renderRanking();
+}
+
 async function adminSave(id) {
   const h=document.getElementById('ar_'+id+'_h')?.value;
   const a=document.getElementById('ar_'+id+'_a')?.value;
   if(h===''||a==='') { showToast('Preencha os dois placares',true); return; }
+  const m = MATCHES.find(function(x){return x.id===id;});
+  const isKO = m && m.phase==='knockout';
+  // Preservar pen se já estava definido e placar ainda é empate
+  const oldPen = (state.results[id]?.pen && +h===+a) ? state.results[id].pen : undefined;
   state.results[id]={h:+h,a:+a};
+  if (oldPen) state.results[id].pen = oldPen;
   await saveGlobal();
-  showToast('Resultado salvo! ✓'); renderAdminTabs(); renderAdminGames(); renderRanking();
+  buildResolvedTeamsFromResults();
+  showToast('Resultado salvo! ✓'); renderAdminTabs(); renderAdminGames(); renderAdminFP3Block(); renderRanking();
 }
 async function adminClear(id) {
   delete state.results[id];
   await saveGlobal();
-  showToast('Resultado removido'); renderAdminTabs(); renderAdminGames(); renderRanking();
+  buildResolvedTeamsFromResults();
+  showToast('Resultado removido'); renderAdminTabs(); renderAdminGames(); renderAdminFP3Block(); renderRanking();
 }
 function renderAdminParticipants() {
   const users = Object.entries(state.users);
