@@ -2232,6 +2232,19 @@ async function loadState() {
         }
       } catch(e) {}
       if (state.users[u]) {
+        const usrBk = state.users[u];
+        if (usrBk.status === 'pending') {
+          localStorage.removeItem('bolao_user');
+          openModal('login');
+          showErr('login', 'Seu cadastro está aguardando aprovação da Comissão.');
+          return;
+        }
+        if (usrBk.status === 'rejected') {
+          localStorage.removeItem('bolao_user');
+          openModal('login');
+          showErr('login', 'Seu cadastro foi recusado. Entre em contato com a Comissão.');
+          return;
+        }
         state.user = u;
         updateHeader();
         renderAll();
