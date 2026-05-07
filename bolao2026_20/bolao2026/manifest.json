@@ -1,12 +1,14 @@
 {
-  "name": "Bolão Amigos da Jaqueira",
-  "short_name": "Bolão Jaqueira",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#6abf3a",
-  "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
-  ]
-}
+    "name": "Bolão Copa 2026",
+    "short_name": "Bolão 2026",
+    "description": "Bolão dos Amigos da A.A.A. XI de Agosto - Mundial FIFA 2026",
+    "start_url": "./index.html",
+    "display": "standalone",
+    "background_color": "#0a1628",
+    "theme_color": "#0a1628",
+    "orientation": "portrait",
+    "icons": [
+      {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+      {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+    ]
+  }
