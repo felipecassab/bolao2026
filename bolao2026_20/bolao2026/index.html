@@ -1079,8 +1079,10 @@ function calcGroupStandings(group, userPalpites) {
 
 function renderThirdsStandings(userPalpites) {
   var groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+  // Mesclar com cache do DOM e palpites salvos para máxima cobertura
+  var merged = Object.assign({}, state.palpites[state.user] || {}, state._groupDomCache || {}, userPalpites);
   var thirds = groups.map(function(g) {
-    var s = calcGroupStandings(g, userPalpites);
+    var s = calcGroupStandings(g, merged);
     if (!s[2] || s[2].j < 3) return null;
     return Object.assign({}, s[2], {group:g});
   }).filter(Boolean);
@@ -2988,8 +2990,9 @@ function renderMatches() {
           html += '<button style="display:block;width:100%;padding:10px 14px;margin-bottom:10px;border-radius:var(--radius-sm);border:1px solid rgba(245,197,24,0.5);background:rgba(245,197,24,0.15);color:#f5c518;font-size:13px;font-family:\'Barlow Condensed\',sans-serif;font-weight:700;cursor:pointer;letter-spacing:0.8px;text-align:center;animation:pulse 2s infinite;" onclick="openFP3Modal()">⚠️ AÇÃO NECESSÁRIA — DEFINIR FAIR PLAY DOS TERCEIROS</button>';
         }
       }
-      // Tabela dos melhores terceiros
-      html += renderThirdsStandings(userPFull);
+      // Tabela dos melhores terceiros — usar palpites salvos + cache acumulado
+      var thirdsP = Object.assign({}, userP, state._groupDomCache || {}, domP);
+      html += renderThirdsStandings(thirdsP);
       html += '</div></div>';
     }
   });
