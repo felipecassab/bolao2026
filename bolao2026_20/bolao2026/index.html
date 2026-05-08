@@ -4596,12 +4596,33 @@ function adminViewPalpites(wpp) {
         else { pts='0pts'; ptsColor='var(--gray)'; }
       }
       const score = mp ? `<b style="font-size:16px;font-family:'Barlow Condensed',sans-serif;">${mp.h}:${mp.a}${mp.pen?' (pen)':''}</b>` : '<span style="color:var(--gray);">–</span>';
+      // Determinar campeão previsto
+      let champLine = '';
+      if (m.id === 'final' && mp && mp.h !== undefined && mp.a !== undefined) {
+        let champName = '', champFlag = '';
+        if (+mp.h > +mp.a) { champName = homeName; champFlag = homeFlag; }
+        else if (+mp.a > +mp.h) { champName = awayName; champFlag = awayFlag; }
+        else if (mp.pen === 'H') { champName = homeName; champFlag = homeFlag; }
+        else if (mp.pen === 'A') { champName = awayName; champFlag = awayFlag; }
+        if (champName) {
+          champLine = `<div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 12px;background:rgba(245,197,24,0.08);border-top:1px solid rgba(245,197,24,0.15);">
+            <span style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:0.5px;">🏆 CAMPEÃ PREVISTA:</span>
+            ${flagImg(champFlag)}
+            <span style="font-size:13px;font-weight:700;color:var(--gold);font-family:'Barlow Condensed',sans-serif;">${champName}</span>
+          </div>`;
+        } else {
+          // Empate sem pênaltis definido
+          champLine = `<div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 12px;background:rgba(244,67,54,0.08);border-top:1px solid rgba(244,67,54,0.2);">
+            <span style="font-size:11px;color:var(--red);font-weight:700;letter-spacing:0.5px;">⚠️ CAMPEÃ NÃO DEFINIDA — pênaltis não preenchidos</span>
+          </div>`;
+        }
+      }
       html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">
         <span style="font-size:12px;flex:1;">${flagImg(homeFlag)} ${homeName}</span>
         <span style="font-size:12px;margin:0 8px;text-align:center;">${score}</span>
         <span style="font-size:12px;flex:1;text-align:right;">${awayName} ${flagImg(awayFlag)}</span>
         ${pts ? `<span style="font-size:11px;font-weight:700;color:${ptsColor};margin-left:8px;min-width:40px;text-align:right;">${pts}</span>` : '<span style="min-width:40px;"></span>'}
-      </div>`;
+      </div>${champLine}`;
     });
 
     html += '</div></div>';
