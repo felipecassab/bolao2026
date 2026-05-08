@@ -2071,7 +2071,7 @@ function setFairPlayRanking(group, orderedNames) {
   updateGroupStandings(group);
 }
 
-function setPenalty(matchId, winner) {
+async function setPenalty(matchId, winner) {
   if (!state.user || isLocked()) return;
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
   if (!state.palpites[state.user][matchId]) state.palpites[state.user][matchId] = {};
@@ -2111,8 +2111,8 @@ function setPenalty(matchId, winner) {
   var now = new Date().toISOString();
   localStorage.setItem('bolao_draft_' + state.user, JSON.stringify(draft));
   localStorage.setItem('bolao_draft_time_' + state.user, now);
-  // Sincronizar pen no Firebase silenciosamente
-  saveGlobal().catch(function(){});
+  // Salvar no Firebase — aguardar para garantir persistência
+  try { await saveGlobal(); } catch(e) {}
   // Propagate winner to next phases
   propagateKnockout(matchId);
 }
