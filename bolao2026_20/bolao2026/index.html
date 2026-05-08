@@ -2070,6 +2070,13 @@ function setPenalty(matchId, winner) {
   if (!state.user || isLocked()) return;
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
   if (!state.palpites[state.user][matchId]) state.palpites[state.user][matchId] = {};
+  // Salvar também h e a do DOM para garantir persistência completa
+  var ih = document.getElementById('p_'+matchId+'_h');
+  var ia = document.getElementById('p_'+matchId+'_a');
+  if (ih && ia && ih.value !== '' && ia.value !== '') {
+    state.palpites[state.user][matchId].h = +ih.value;
+    state.palpites[state.user][matchId].a = +ia.value;
+  }
   state.palpites[state.user][matchId].pen = winner;
   // Remover indicador pen-pending e aviso
   var rowEl2 = document.querySelector('.match-row[data-mid="' + matchId + '"]');
