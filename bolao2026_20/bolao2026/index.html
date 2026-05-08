@@ -3358,10 +3358,9 @@ async function saveDraft() {
     const a = document.getElementById('p_'+m.id+'_a')?.value;
     if (h !== '' && a !== '') {
       draft[m.id] = {h:+h, a:+a};
-      // Preserve penalty — verificar state E localStorage
+      // Preserve penalty — pegar do state (fonte mais confiável)
       const existingState = state.palpites[state.user]?.[m.id];
-      const existingDraft = (() => { try { return JSON.parse(localStorage.getItem('bolao_draft_' + state.user)||'{}')[m.id]; } catch(e){} })();
-      const pen = (existingState?.pen) || (existingDraft?.pen) || null;
+      const pen = existingState?.pen || null;
       if (pen && +h===+a) draft[m.id].pen = pen;
     }
   });
@@ -3423,42 +3422,44 @@ async function saveDraft() {
 function loadDraft() {
   if (!state.user) return;
   const draft = localStorage.getItem('bolao_draft_' + state.user);
-  const draftTime = localStorage.getItem('bolao_draft_time_' + state.user);
-  if (!draft || !draftTime) return;
+  if (!draft) return;
   try {
-    const data = JSON.parse(draft);
+    const local = JSON.parse(draft);
     if (!state.palpites[state.user]) state.palpites[state.user] = {};
-    const fbTime = state.palpites[state.user]._savedAt || null;
-    const localIsNewer = !fbTime || new Date(draftTime) >= new Date(fbTime);
-    if (localIsNewer) {
-      // localStorage é mais recente — substituir completamente
-      const fbSavedAt = state.palpites[state.user]._savedAt;
-      Object.keys(state.palpites[state.user]).forEach(k => {
-        delete state.palpites[state.user][k];
-      });
-      Object.assign(state.palpites[state.user], data);
-      if (fbSavedAt) state.palpites[state.user]._savedAt = fbSavedAt;
-      saveGlobal().catch(function(){});
-    } else {
-      // Firebase é mais recente — mas fazer merge para não perder jogos
-      // que estão no localStorage e não estão no Firebase
-      var fbPalpites = state.palpites[state.user];
-      var merged = false;
-      MATCHES.forEach(function(m) {
-        // Se o jogo não está no Firebase mas está no localStorage, adicionar
-        if (!fbPalpites[m.id] && data[m.id] && data[m.id].h !== undefined && data[m.id].a !== undefined) {
-          fbPalpites[m.id] = data[m.id];
-          merged = true;
+    const fb = state.palpites[state.user];
+    let changed = false;
+
+    // Merge por jogo: para cada jogo no localStorage,
+    // se o Firebase não tem esse jogo OU o localStorage tem pen e Firebase não tem,
+    // atualizar o Firebase com os dados do localStorage
+    MATCHES.forEach(function(m) {
+      const lp = local[m.id];
+      const fp = fb[m.id];
+      if (!lp || lp.h === undefined || lp.a === undefined) return;
+      if (!fp || fp.h === undefined || fp.a === undefined) {
+        // Firebase não tem esse jogo — adicionar do localStorage
+        fb[m.id] = Object.assign({}, lp);
+        changed = true;
+      } else {
+        // Ambos têm — merge: pen do localStorage prevalece se Firebase não tem
+        if (lp.pen && !fp.pen) {
+          fb[m.id] = Object.assign({}, fp, {pen: lp.pen});
+          changed = true;
         }
-      });
-      if (merged) {
-        // Salvar o merge no Firebase
-        saveGlobal().catch(function(){});
       }
-      // Descartar localStorage desatualizado
-      localStorage.removeItem('bolao_draft_' + state.user);
-      localStorage.removeItem('bolao_draft_time_' + state.user);
+    });
+
+    // Metadados: _fp, _fp3, _qa do localStorage se Firebase não tem
+    ['_fp', '_fp3', '_qa'].forEach(function(k) {
+      if (local[k] && !fb[k]) { fb[k] = local[k]; changed = true; }
+    });
+
+    if (changed) {
+      saveGlobal().catch(function(){});
     }
+    // Limpar localStorage após merge
+    localStorage.removeItem('bolao_draft_' + state.user);
+    localStorage.removeItem('bolao_draft_time_' + state.user);
   } catch(e) {}
 }
 
