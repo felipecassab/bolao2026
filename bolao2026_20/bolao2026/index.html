@@ -3352,16 +3352,28 @@ function clearPalpites() {
 async function saveDraft() {
   if (!state.user) { openModal('login'); return; }
   if (isLocked()) { showToast(isSubmitted()?'Palpites já enviados!':'Prazo encerrado!', true); return; }
+
+  // Começar com TUDO que está no state (inclui jogos fora do DOM)
+  const existing = state.palpites[state.user] || {};
   const draft = {};
+  MATCHES.forEach(m => {
+    const sp = existing[m.id];
+    if (sp && sp.h !== undefined && sp.a !== undefined) {
+      draft[m.id] = Object.assign({}, sp); // copia incluindo pen
+    }
+  });
+
+  // Sobrescrever com valores atuais do DOM (mais recentes que o state)
   MATCHES.forEach(m => {
     const h = document.getElementById('p_'+m.id+'_h')?.value;
     const a = document.getElementById('p_'+m.id+'_a')?.value;
-    if (h !== '' && a !== '') {
+    if (h !== undefined && a !== undefined && h !== '' && a !== '') {
+      const pen = draft[m.id]?.pen || null;
       draft[m.id] = {h:+h, a:+a};
-      // Preserve penalty — pegar do state (fonte mais confiável)
-      const existingState = state.palpites[state.user]?.[m.id];
-      const pen = existingState?.pen || null;
       if (pen && +h===+a) draft[m.id].pen = pen;
+    } else if (h === '' && a === '') {
+      // Explicitamente apagado no DOM
+      delete draft[m.id];
     }
   });
   // Preserve extras (_qa) and fair play (_fp)
