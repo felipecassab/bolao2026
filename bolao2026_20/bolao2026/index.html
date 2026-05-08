@@ -2089,12 +2089,14 @@ function setPenalty(matchId, winner) {
     var winnerBtn = winner === 'H' ? btns[0] : btns[1];
     if (winnerBtn) winnerBtn.classList.add('selected');
   }
-  // Save to draft silently
+  // Save to draft silently — localStorage + Firebase
   var draft = {};
   try { draft = JSON.parse(localStorage.getItem('bolao_draft_' + state.user) || '{}'); } catch(e) {}
   if (!draft[matchId]) draft[matchId] = {};
   draft[matchId].pen = winner;
   localStorage.setItem('bolao_draft_' + state.user, JSON.stringify(draft));
+  // Sincronizar pen no Firebase silenciosamente
+  saveGlobal().catch(function(){});
   // Propagate winner to next phases
   propagateKnockout(matchId);
 }
