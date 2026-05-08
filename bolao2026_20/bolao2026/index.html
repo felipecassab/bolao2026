@@ -2993,8 +2993,7 @@ function renderMatches() {
           })()}
         </div>
       </div>`;
-      html += renderPenaltySelector(m.id, dispHome, dispAway, locked, p);
-      html += '<div id="pen_' + m.id + '"></div>';
+      html += '<div id="pen_' + m.id + '">' + renderPenaltySelector(m.id, dispHome, dispAway, locked, p) + '</div>';
     });
     // Add standings for group phase
     if (g.length === 1) {
