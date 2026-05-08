@@ -713,10 +713,10 @@ body{display:flex;flex-direction:column}
 
 <!-- ADMIN PALPITES VIEWER MODAL -->
 <div id="admin-viewer-modal" style="display:none;position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,0.85);overflow-y:auto;">
-  <div style="max-width:700px;margin:20px auto;padding:16px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <h2 id="admin-viewer-title" style="font-family:'Barlow Condensed',sans-serif;font-size:22px;color:var(--gold);"></h2>
-      <button onclick="closeAdminViewer()" style="padding:6px 14px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;color:var(--light);font-size:14px;cursor:pointer;">✕ Fechar</button>
+  <div style="max-width:700px;margin:0 auto;padding:0 16px 24px;">
+    <div style="position:sticky;top:0;z-index:10;background:rgba(10,22,40,0.97);padding:14px 0;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:16px;">
+      <h2 id="admin-viewer-title" style="font-family:'Barlow Condensed',sans-serif;font-size:20px;color:var(--gold);margin:0;"></h2>
+      <button onclick="closeAdminViewer()" style="padding:10px 20px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);border-radius:10px;color:var(--light);font-size:15px;font-weight:700;cursor:pointer;min-width:90px;">✕ Fechar</button>
     </div>
     <div id="admin-viewer-body"></div>
   </div>
@@ -1202,7 +1202,7 @@ function renderGroupStandings(group, userPalpites) {
     });
   });
 
-  if (fpNeeded.length > 0 && !isPastDeadline()) {
+  if (fpNeeded.length > 0 && !isLocked()) {
     // Only show if all 6 group matches have been filled in
     var groupMatchesFilled = groupMatches2.every(function(m) {
       var p = userPalpites[m.id];
@@ -2005,7 +2005,7 @@ function closeFPModal() {
 }
 
 function setFairPlay(group, teamA, teamB, winner) {
-  if (!state.user || isPastDeadline()) return;
+  if (!state.user || isLocked()) return;
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
   if (!state.palpites[state.user]._fp) state.palpites[state.user]._fp = {};
   var fp = state.palpites[state.user]._fp[group] || [];
@@ -2032,7 +2032,7 @@ function setFairPlay(group, teamA, teamB, winner) {
 }
 
 function setFairPlayThirds(orderedNames) {
-  if (!state.user || isPastDeadline()) return;
+  if (!state.user || isLocked()) return;
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
   state.palpites[state.user]._fp3 = orderedNames.slice();
   try {
@@ -2048,7 +2048,7 @@ function setFairPlayThirds(orderedNames) {
 
 function setFairPlayRanking(group, orderedNames) {
   // Salva a ordem completa no _fp do grupo
-  if (!state.user || isPastDeadline()) return;
+  if (!state.user || isLocked()) return;
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
   if (!state.palpites[state.user]._fp) state.palpites[state.user]._fp = {};
   state.palpites[state.user]._fp[group] = orderedNames.slice();
@@ -2062,7 +2062,7 @@ function setFairPlayRanking(group, orderedNames) {
 }
 
 function setPenalty(matchId, winner) {
-  if (!state.user || isPastDeadline()) return;
+  if (!state.user || isLocked()) return;
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
   if (!state.palpites[state.user][matchId]) state.palpites[state.user][matchId] = {};
   state.palpites[state.user][matchId].pen = winner;
@@ -2071,11 +2071,16 @@ function setPenalty(matchId, winner) {
   if (rowEl2) rowEl2.classList.remove('pen-pending');
   var warnEl2 = document.getElementById('pen-warn-' + matchId);
   if (warnEl2) warnEl2.style.display = 'none';
-  // Update buttons visually
+  // Update buttons visually — ambos sempre clicáveis
   var penDiv = document.getElementById('pen_' + matchId);
   if (penDiv) {
     var btns = penDiv.querySelectorAll('.penalty-btn');
-    btns.forEach(function(btn) { btn.classList.remove('selected'); });
+    btns.forEach(function(btn) {
+      btn.classList.remove('selected');
+      btn.disabled = false;
+      btn.style.opacity = '';
+      btn.style.cursor = 'pointer';
+    });
     var winnerBtn = winner === 'H' ? btns[0] : btns[1];
     if (winnerBtn) winnerBtn.classList.add('selected');
   }
@@ -2350,6 +2355,10 @@ function uColor(wpp) { const u=state.users[wpp]; return u?.color||COLORS[0]; }
 function uColorT(wpp) { const u=state.users[wpp]; return u?.colorT||COLORS_T[0]; }
 function uName(uid) { const u=state.users[uid]; return u?.apelido || u?.nome || u?.name || uid; }
 function isPastDeadline() { return new Date() > DEADLINE; }
+function isSubmitted() {
+  return !!(state.user && state.palpites[state.user]?._submitted);
+}
+function isLocked() { return isPastDeadline() || isSubmitted(); }
 function hashPwd(p) { let h=0; for(let i=0;i<p.length;i++) h=(Math.imul(31,h)+p.charCodeAt(i))|0; return h.toString(36); }
 function phoneMask(inp) {
   let v=inp.value.replace(/\D/g,'');
@@ -2507,14 +2516,14 @@ function updateFloatBtn(page) {
   // Show on palpites page if logged in and before deadline
   var onPalpites = page === 'palpites' || 
     document.getElementById('page-palpites')?.classList.contains('active');
-  var show = onPalpites && !!state.user && !isPastDeadline();
+  var show = onPalpites && !!state.user && !isLocked();
   btn.style.display = show ? 'flex' : 'none';
 }
 function updateFAB() {
   const fab = document.getElementById('fab-draft');
   if (!fab) return;
   const onPalpites = document.getElementById('page-palpites')?.classList.contains('active');
-  const locked = isPastDeadline();
+  const locked = isLocked();
   if (onPalpites && !locked && state.user) {
     fab.classList.add('visible');
   } else {
@@ -2884,7 +2893,7 @@ function flagImg(code, cls='flag') {
   return `<img class="${cls}" src="https://flagcdn.com/w40/${code}.png" onerror="this.style.display=&quot;none&quot;"/>`;
 }
 function renderMatches() {
-  const locked = isPastDeadline();
+  const locked = isLocked();
   // Capturar valores atuais do DOM ANTES de destruir (para FP3)
   const domP = {};
   MATCHES.filter(m=>m.phase==='group').forEach(m=>{
@@ -2904,7 +2913,10 @@ function renderMatches() {
   buildResolvedTeams(userP);
   const groups = {};
   MATCHES.forEach(m=>{ if(!groups[m.group]) groups[m.group]=[]; groups[m.group].push(m); });
-  let html = locked ? `<div style="background:rgba(244,67,54,0.1);border:1px solid rgba(244,67,54,0.3);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">🔒</span><div><p style="font-size:13px;font-weight:600;color:var(--red);">Palpites encerrados</p><p style="font-size:12px;color:var(--gray);margin-top:2px;">Prazo encerrado em 10/06 às 23h59.</p></div></div>` : '';
+  let html = locked ? (isSubmitted()
+    ? `<div style="background:rgba(0,200,83,0.08);border:1px solid rgba(0,200,83,0.3);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">✅</span><div><p style="font-size:13px;font-weight:600;color:var(--green);">Palpites enviados à Comissão</p><p style="font-size:12px;color:var(--gray);margin-top:2px;">Seus palpites foram enviados. Apenas visualização disponível.</p></div></div>`
+    : `<div style="background:rgba(244,67,54,0.1);border:1px solid rgba(244,67,54,0.3);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">🔒</span><div><p style="font-size:13px;font-weight:600;color:var(--red);">Palpites encerrados</p><p style="font-size:12px;color:var(--gray);margin-top:2px;">Prazo encerrado em 10/06 às 23h59.</p></div></div>`)
+    : '';
 
   Object.keys(groups).forEach(g=>{
     html += `<div class="card"><div class="card-header"><span class="group-label">${g.length<=1?'Grupo ':''}${g}</span></div><div class="card-body">`;
@@ -3244,23 +3256,43 @@ function renderMatches() {
 async function syncDraft() {
   if (!state.user) { openModal('login'); return; }
   if (isPastDeadline()) { showToast('Prazo encerrado!', true); return; }
-  // Read all current input values from DOM
+  if (isSubmitted()) { showToast('Palpites já enviados à Comissão!', true); return; }
+  // Começar com palpites já salvos (para não perder jogos fora do DOM)
   const temp = {};
+  const existing = state.palpites[state.user] || {};
+  Object.keys(existing).forEach(k => {
+    if (k.startsWith('_')) return;
+    if (existing[k] && existing[k].h !== undefined && existing[k].a !== undefined) {
+      temp[k] = Object.assign({}, existing[k]);
+    }
+  });
+  // Sobrescrever com valores atuais do DOM
   MATCHES.forEach(m => {
     const h = document.getElementById('p_'+m.id+'_h')?.value;
     const a = document.getElementById('p_'+m.id+'_a')?.value;
     if (h !== '' && a !== '') {
       temp[m.id] = {h:+h, a:+a};
       // Preserve penalty if set
-      const existing = state.palpites[state.user]?.[m.id];
-      if (existing?.pen && +h === +a) temp[m.id].pen = existing.pen;
+      const ex = existing[m.id];
+      if (ex?.pen && +h === +a) temp[m.id].pen = ex.pen;
+    } else if (h === '' && a === '') {
+      // Explicitamente em branco no DOM = usuário apagou
+      delete temp[m.id];
     }
   });
-  // Substituir completamente — não merge — para respeitar apagamentos
+  // Atualizar state com os palpites consolidados
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
-  const preserved2 = { _savedAt: state.palpites[state.user]._savedAt, _qa: state.palpites[state.user]._qa, _fp: state.palpites[state.user]._fp, _fp3: state.palpites[state.user]._fp3 };
-  Object.keys(state.palpites[state.user]).forEach(k => { delete state.palpites[state.user][k]; });
-  Object.assign(state.palpites[state.user], preserved2, temp);
+  // Preservar metadados
+  const preserved2 = {
+    _savedAt: state.palpites[state.user]._savedAt,
+    _qa: state.palpites[state.user]._qa,
+    _fp: state.palpites[state.user]._fp,
+    _fp3: state.palpites[state.user]._fp3
+  };
+  // Aplicar temp sobre o state existente (não apagar tudo)
+  Object.assign(state.palpites[state.user], temp);
+  // Restaurar metadados se foram sobrescritos
+  Object.assign(state.palpites[state.user], preserved2);
   // Save local draft too
   localStorage.setItem('bolao_draft_' + state.user, JSON.stringify(state.palpites[state.user]));
   localStorage.setItem('bolao_draft_time_' + state.user, new Date().toISOString());
@@ -3268,8 +3300,11 @@ async function syncDraft() {
   try {
     showToast('Sincronizando...');
     await saveGlobal();
-    const count = Object.keys(temp).length;
-    showToast('✓ ' + count + ' palpites sincronizados! Acesse de qualquer dispositivo.');
+    // Marcar como enviado — bloqueia edição
+    state.palpites[state.user]._submitted = true;
+    await saveGlobal();
+    const count = Object.keys(temp).filter(k => !k.startsWith('_')).length;
+    showToast('✅ ' + count + ' palpites enviados à Comissão!');
     renderMatches();
   } catch(e) {
     showToast('Erro ao sincronizar. Verifique sua conexão.', true);
@@ -3278,7 +3313,7 @@ async function syncDraft() {
 
 function clearPalpites() {
   if (!state.user) { openModal('login'); return; }
-  if (isPastDeadline()) { showToast('Prazo encerrado!', true); return; }
+  if (isLocked()) { showToast(isSubmitted()?'Palpites já enviados!':'Prazo encerrado!', true); return; }
   if (!confirm('Tem certeza que deseja apagar TODOS os seus palpites? Esta ação não pode ser desfeita.')) return;
   // Clear all match palpites but keep extras (_qa)
   var qa = state.palpites[state.user] && state.palpites[state.user]._qa;
@@ -3294,16 +3329,18 @@ function clearPalpites() {
 
 async function saveDraft() {
   if (!state.user) { openModal('login'); return; }
-  if (isPastDeadline()) { showToast('Prazo encerrado!', true); return; }
+  if (isLocked()) { showToast(isSubmitted()?'Palpites já enviados!':'Prazo encerrado!', true); return; }
   const draft = {};
   MATCHES.forEach(m => {
     const h = document.getElementById('p_'+m.id+'_h')?.value;
     const a = document.getElementById('p_'+m.id+'_a')?.value;
     if (h !== '' && a !== '') {
       draft[m.id] = {h:+h, a:+a};
-      // Preserve penalty if set
-      const existing = state.palpites[state.user]?.[m.id];
-      if (existing?.pen && +h===+a) draft[m.id].pen = existing.pen;
+      // Preserve penalty — verificar state E localStorage
+      const existingState = state.palpites[state.user]?.[m.id];
+      const existingDraft = (() => { try { return JSON.parse(localStorage.getItem('bolao_draft_' + state.user)||'{}')[m.id]; } catch(e){} })();
+      const pen = (existingState?.pen) || (existingDraft?.pen) || null;
+      if (pen && +h===+a) draft[m.id].pen = pen;
     }
   });
   // Preserve extras (_qa) and fair play (_fp)
@@ -4119,17 +4156,21 @@ function renderAdminParticipants() {
   // Approved participants
   if (approved.length) {
     html += `<p style="font-size:11px;color:var(--green);font-weight:700;letter-spacing:1px;margin-bottom:8px;">✓ APROVADOS (${approved.length})</p>`;
-    html += approved.map(([uid,u]) => `
+    html += approved.map(([uid,u]) => {
+      const submitted = state.palpites[uid]?._submitted;
+      return `
       <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
         <div class="avatar" style="background:${u.color||COLORS[0]};color:${u.colorT||COLORS_T[0]};">${initials(uApelido(u,uid))}</div>
         <div style="flex:1;">
-          <p style="font-size:14px;font-weight:500;">${uApelido(u,uid)}</p>
+          <p style="font-size:14px;font-weight:500;">${uApelido(u,uid)} ${submitted ? '<span style="font-size:10px;color:var(--green);font-weight:700;background:rgba(0,200,83,0.12);border:1px solid rgba(0,200,83,0.3);padding:2px 6px;border-radius:50px;">✅ ENVIADO</span>' : ''}</p>
           <p style="font-size:12px;color:var(--gray);">📱 ${uWpp(u,uid)}</p>
         </div>
         <button onclick="adminViewPalpites('${uid}')" style="padding:5px 10px;background:rgba(126,184,245,0.12);color:#7eb8f5;border:1px solid rgba(126,184,245,0.3);border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;">👁 Ver</button>
+        ${submitted ? `<button onclick="adminUnsubmit('${uid}')" style="padding:5px 10px;background:rgba(245,197,24,0.12);color:var(--gold);border:1px solid rgba(245,197,24,0.3);border-radius:8px;font-size:12px;cursor:pointer;">🔓 Desbloquear</button>` : ''}
         <button onclick="adminResetPwd('${uid}')" style="padding:5px 10px;background:transparent;border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--gray);font-size:12px;cursor:pointer;">Resetar senha</button>
         <button onclick="adminDeleteUser('${uid}','${uApelido(u,uid)}')" style="padding:5px 10px;background:transparent;border:1px solid rgba(244,67,54,0.3);border-radius:8px;color:var(--red);font-size:12px;cursor:pointer;">🗑️</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
 
   // Rejected
@@ -4194,6 +4235,16 @@ async function adminResetAllUsers() {
   showToast('Todos os participantes foram removidos.');
   renderAdminParticipants();
   renderRanking();
+}
+
+async function adminUnsubmit(uid) {
+  if (!confirm('Desbloquear palpites de ' + (state.users[uid]?.apelido||uid) + '? O participante poderá editar novamente.')) return;
+  if (state.palpites[uid]) {
+    delete state.palpites[uid]._submitted;
+  }
+  await saveGlobal();
+  renderAdminParticipants();
+  showToast('Palpites desbloqueados! ✓');
 }
 
 async function adminDeleteUser(wpp, nome) {
@@ -4451,7 +4502,7 @@ function adminViewPalpites(wpp) {
   if (!u) return;
   const p = state.palpites[wpp] || {};
 
-  document.getElementById('admin-viewer-title').textContent = '📋 Palpites de ' + u.name;
+  document.getElementById('admin-viewer-title').textContent = '📋 Palpites de ' + (u.apelido || u.nome || u.name || wpp);
   document.getElementById('admin-viewer-modal').style.display = 'block';
 
   let html = '';
