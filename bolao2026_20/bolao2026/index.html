@@ -4542,14 +4542,24 @@ function closeAdminViewer() {
   document.getElementById('admin-viewer-modal').style.display = 'none';
 }
 
-function adminViewPalpites(wpp) {
+async function adminViewPalpites(wpp) {
   if (!adminAuthed) return;
   const u = state.users[wpp];
   if (!u) return;
-  const p = state.palpites[wpp] || {};
 
+  // Buscar dados frescos do Firebase antes de mostrar
   document.getElementById('admin-viewer-title').textContent = '📋 Palpites de ' + (u.apelido || u.nome || u.name || wpp);
   document.getElementById('admin-viewer-modal').style.display = 'block';
+  document.getElementById('admin-viewer-body').innerHTML = '<p style="text-align:center;color:var(--gray);padding:20px;">Carregando...</p>';
+
+  try {
+    const fresh = await fbGet();
+    if (fresh && fresh.palpites) {
+      state.palpites = fresh.palpites;
+    }
+  } catch(e) {}
+
+  const p = state.palpites[wpp] || {};
 
   let html = '';
 
