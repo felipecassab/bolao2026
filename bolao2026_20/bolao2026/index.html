@@ -1574,9 +1574,11 @@ function buildResolvedTeamsFromResults() {
   });
 }
 
-function buildResolvedTeams(userPalpites) {
-  resolvedTeams = {};
-  if (!userPalpites) return;
+function buildResolvedTeams(userPalpites, targetObj, penFallback) {
+  var dest = targetObj || null;
+  if (!dest) { resolvedTeams = {}; dest = resolvedTeams; }
+  else { Object.keys(dest).forEach(function(k){ delete dest[k]; }); }
+  if (!userPalpites) return dest;
 
   // Get all thirds sorted by performance
   var allThirds = (function() {
@@ -1638,30 +1640,33 @@ function buildResolvedTeams(userPalpites) {
       var t3 = thirdBySlot[b.id];
       if (t3) entry.away = {name:t3.name, flag:t3.flag};
     }
-    if (entry.home || entry.away) resolvedTeams[b.id] = entry;
+    if (entry.home || entry.away) dest[b.id] = entry;
   });
 
   // Helper to get knockout winner
   function kwinner(matchId) {
     var p = userPalpites[matchId];
     if (!p || p.h===undefined || p.a===undefined) return null;
-    var rt = resolvedTeams[matchId];
+    var rt = dest[matchId];
     if (!rt) return null;
     if (+p.h > +p.a) return rt.home||null;
     if (+p.a > +p.h) return rt.away||null;
     if (p.pen==='H') return rt.home||null;
     if (p.pen==='A') return rt.away||null;
+    // Empate sem pen — usar fallback se solicitado (apenas para visualização)
+    if (penFallback) return rt.home||null;
     return null;
   }
   function kloser(matchId) {
     var p = userPalpites[matchId];
     if (!p || p.h===undefined || p.a===undefined) return null;
-    var rt = resolvedTeams[matchId];
+    var rt = dest[matchId];
     if (!rt) return null;
     if (+p.h > +p.a) return rt.away||null;
     if (+p.a > +p.h) return rt.home||null;
     if (p.pen==='H') return rt.away||null;
     if (p.pen==='A') return rt.home||null;
+    if (penFallback) return rt.away||null;
     return null;
   }
 
@@ -1677,7 +1682,7 @@ function buildResolvedTeams(userPalpites) {
   ];
   r16.forEach(function(b) {
     var h=kwinner(b.hm), a=kwinner(b.am);
-    if(h||a) resolvedTeams[b.id]={home:h,away:a};
+    if(h||a) dest[b.id]={home:h,away:a};
   });
 
   var qf = [
@@ -1688,19 +1693,19 @@ function buildResolvedTeams(userPalpites) {
   ];
   qf.forEach(function(b) {
     var h=kwinner(b.hm), a=kwinner(b.am);
-    if(h||a) resolvedTeams[b.id]={home:h,away:a};
+    if(h||a) dest[b.id]={home:h,away:a};
   });
 
   var sf = [{id:'sf_1',hm:'qf_1',am:'qf_2'},{id:'sf_2',hm:'qf_3',am:'qf_4'}];
   sf.forEach(function(b) {
     var h=kwinner(b.hm), a=kwinner(b.am);
-    if(h||a) resolvedTeams[b.id]={home:h,away:a};
+    if(h||a) dest[b.id]={home:h,away:a};
   });
 
   var h3=kloser('sf_1'), a3=kloser('sf_2');
-  if(h3||a3) resolvedTeams['third']={home:h3,away:a3};
+  if(h3||a3) dest['third']={home:h3,away:a3};
   var hf=kwinner('sf_1'), af=kwinner('sf_2');
-  if(hf||af) resolvedTeams['final']={home:hf,away:af};
+  if(hf||af) dest['final']={home:hf,away:af};
 }
 
 function renderPenaltySelector(matchId, homeName, awayName, locked, p) {
@@ -2100,8 +2105,12 @@ function setPenalty(matchId, winner) {
   var draft = {};
   try { draft = JSON.parse(localStorage.getItem('bolao_draft_' + state.user) || '{}'); } catch(e) {}
   if (!draft[matchId]) draft[matchId] = {};
+  draft[matchId].h = state.palpites[state.user][matchId].h;
+  draft[matchId].a = state.palpites[state.user][matchId].a;
   draft[matchId].pen = winner;
+  var now = new Date().toISOString();
   localStorage.setItem('bolao_draft_' + state.user, JSON.stringify(draft));
+  localStorage.setItem('bolao_draft_time_' + state.user, now);
   // Sincronizar pen no Firebase silenciosamente
   saveGlobal().catch(function(){});
   // Propagate winner to next phases
@@ -3419,23 +3428,34 @@ function loadDraft() {
   try {
     const data = JSON.parse(draft);
     if (!state.palpites[state.user]) state.palpites[state.user] = {};
-    // Comparar timestamp do localStorage com o do Firebase
     const fbTime = state.palpites[state.user]._savedAt || null;
     const localIsNewer = !fbTime || new Date(draftTime) >= new Date(fbTime);
     if (localIsNewer) {
-      // Substituição completa — não merge — para respeitar apagamentos
-      // Preservar _savedAt do Firebase para manter referência de tempo
+      // localStorage é mais recente — substituir completamente
       const fbSavedAt = state.palpites[state.user]._savedAt;
       Object.keys(state.palpites[state.user]).forEach(k => {
         delete state.palpites[state.user][k];
       });
       Object.assign(state.palpites[state.user], data);
-      // Manter _savedAt do Firebase para evitar re-aplicação do draft antigo
       if (fbSavedAt) state.palpites[state.user]._savedAt = fbSavedAt;
-      // Sincronizar Firebase com os dados do localStorage (apagamentos incluídos)
       saveGlobal().catch(function(){});
     } else {
-      // Firebase é mais recente — descartar rascunho local desatualizado
+      // Firebase é mais recente — mas fazer merge para não perder jogos
+      // que estão no localStorage e não estão no Firebase
+      var fbPalpites = state.palpites[state.user];
+      var merged = false;
+      MATCHES.forEach(function(m) {
+        // Se o jogo não está no Firebase mas está no localStorage, adicionar
+        if (!fbPalpites[m.id] && data[m.id] && data[m.id].h !== undefined && data[m.id].a !== undefined) {
+          fbPalpites[m.id] = data[m.id];
+          merged = true;
+        }
+      });
+      if (merged) {
+        // Salvar o merge no Firebase
+        saveGlobal().catch(function(){});
+      }
+      // Descartar localStorage desatualizado
       localStorage.removeItem('bolao_draft_' + state.user);
       localStorage.removeItem('bolao_draft_time_' + state.user);
     }
@@ -4541,10 +4561,9 @@ function adminViewPalpites(wpp) {
     </div>
   </div>`;
 
-  // Construir resolvedTeams para esta pessoa
+  // Construir resolvedTeams para esta pessoa sem afetar o estado global
   const viewerResolved = {};
-  buildResolvedTeams(p); // usa p (palpites do usuário visualizado)
-  Object.assign(viewerResolved, resolvedTeams);
+  buildResolvedTeams(p, viewerResolved, true); // true = usar fallback H para empates sem pen
 
   // Group matches
   const groups = {};
