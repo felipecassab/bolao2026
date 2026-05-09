@@ -3138,31 +3138,27 @@ function renderMatches() {
       var thisA = document.getElementById('p_'+m.id+'_a');
       if (!thisH || !thisA) return;
       var hv = thisH.value, av = thisA.value;
-      var existingPen = thisH.closest('.card-body')?.querySelector('.penalty-selector');
+      var penPlaceholderEl = document.getElementById('pen_' + m.id);
+      var existingPen = penPlaceholderEl ? penPlaceholderEl.querySelector('.penalty-selector') : null;
       var matchData = MATCHES.find(function(x){return x.id===m.id;});
       var rt2 = resolvedTeams[m.id];
       var homeName = (rt2 && rt2.home) ? rt2.home.name : (matchData ? matchData.home : '');
       var awayName = (rt2 && rt2.away) ? rt2.away.name : (matchData ? matchData.away : '');
-      var savedPen = savedP2[m.id] ? savedP2[m.id].pen : '';
-
+      var savedPen = state.palpites[state.user] && state.palpites[state.user][m.id] ? state.palpites[state.user][m.id].pen : '';
       if (hv !== '' && av !== '' && +hv === +av) {
-        // Show penalty selector
-        var penHtml = '<div class="penalty-selector">' +
-          '<span class="penalty-label">🥅 Pênaltis:</span>' +
-          '<button class="penalty-btn' + (savedPen==='H'?' selected':'') + '" onclick="setPenalty(\'' + m.id + '\',\'H\')">' + homeName + '</button>' +
-          '<button class="penalty-btn' + (savedPen==='A'?' selected':'') + '" onclick="setPenalty(\'' + m.id + '\',\'A\')">' + awayName + '</button>' +
-          '</div>';
-        var penPlaceholder = document.getElementById('pen_' + m.id);
-        if (existingPen) {
-          existingPen.outerHTML = penHtml;
-        } else if (penPlaceholder) {
-          penPlaceholder.innerHTML = penHtml;
+        if (!existingPen && penPlaceholderEl) {
+          penPlaceholderEl.innerHTML = '<div class="penalty-selector">' +
+            '<span class="penalty-label">🥅 Pênaltis:</span>' +
+            '<button class="penalty-btn' + (savedPen==='H'?' selected':'') + '" onclick="setPenalty(\'' + m.id + '\',\'H\')">' + homeName + '</button>' +
+            '<button class="penalty-btn' + (savedPen==='A'?' selected':'') + '" onclick="setPenalty(\'' + m.id + '\',\'A\')">' + awayName + '</button>' +
+            '</div>';
+        } else if (existingPen) {
+          var btnsEx = existingPen.querySelectorAll('.penalty-btn');
+          if (btnsEx[0]) btnsEx[0].textContent = homeName;
+          if (btnsEx[1]) btnsEx[1].textContent = awayName;
         }
       } else {
-        // Hide penalty selector
-        if (existingPen) existingPen.remove();
-        var penPlaceholder2 = document.getElementById('pen_' + m.id);
-        if (penPlaceholder2) penPlaceholder2.innerHTML = '';
+        if (penPlaceholderEl) penPlaceholderEl.innerHTML = '';
       }
     }
     function onKoBlur(e) {
