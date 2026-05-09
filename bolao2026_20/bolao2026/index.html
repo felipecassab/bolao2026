@@ -2112,7 +2112,12 @@ async function setPenalty(matchId, winner) {
   localStorage.setItem('bolao_draft_' + state.user, JSON.stringify(draft));
   localStorage.setItem('bolao_draft_time_' + state.user, now);
   // Salvar no Firebase — aguardar para garantir persistência
-  try { await saveGlobal(); } catch(e) {}
+  try {
+    await saveGlobal();
+    showToast('✓ Pênaltis salvos!');
+  } catch(e) {
+    showToast('Erro ao salvar pênaltis. Tente novamente.', true);
+  }
   // Propagate winner to next phases
   propagateKnockout(matchId);
 }
@@ -4557,7 +4562,19 @@ async function adminViewPalpites(wpp) {
 
   const p = state.palpites[wpp] || {};
 
-  let html = '';
+  // DEBUG — mostrar dados brutos da final e outros jogos com empate
+  const debugMatches = ['final','sf_1','sf_2','qf_1','qf_2','qf_3','qf_4'];
+  let debugHtml = '<div style="background:rgba(255,200,0,0.1);border:1px solid rgba(255,200,0,0.3);border-radius:8px;padding:10px;margin-bottom:12px;font-size:11px;font-family:monospace;color:var(--light);">';
+  debugHtml += '<div style="color:#f5c518;font-weight:700;margin-bottom:6px;">DEBUG — dados Firebase:</div>';
+  debugMatches.forEach(function(id) {
+    var mp = p[id];
+    if (mp && mp.h !== undefined) {
+      debugHtml += '<div>' + id + ': h=' + mp.h + ' a=' + mp.a + ' pen=' + (mp.pen||'NENHUM') + '</div>';
+    }
+  });
+  debugHtml += '</div>';
+
+  let html = debugHtml;
 
   // Stats summary
   const stats = calcPts(p);
