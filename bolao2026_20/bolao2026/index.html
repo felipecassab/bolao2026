@@ -719,7 +719,7 @@ body{display:flex;flex-direction:column}
 <!-- ADMIN PALPITES VIEWER MODAL -->
 <div id="admin-viewer-modal" style="display:none;position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,0.85);overflow-y:auto;">
   <div style="max-width:700px;margin:0 auto;padding:0 16px 24px;">
-    <div style="position:sticky;top:0;z-index:10;background:rgba(10,22,40,0.97);padding:14px 0;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:16px;">
+    <div style="position:sticky;top:0;z-index:10;background:rgba(10,22,40,0.97);padding:max(14px, env(safe-area-inset-top)) 0 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:16px;">
       <h2 id="admin-viewer-title" style="font-family:'Barlow Condensed',sans-serif;font-size:20px;color:var(--gold);margin:0;"></h2>
       <button onclick="closeAdminViewer()" style="padding:10px 20px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);border-radius:10px;color:var(--light);font-size:15px;font-weight:700;cursor:pointer;min-width:90px;">✕ Fechar</button>
     </div>
@@ -4562,19 +4562,7 @@ async function adminViewPalpites(wpp) {
 
   const p = state.palpites[wpp] || {};
 
-  // DEBUG — mostrar dados brutos da final e outros jogos com empate
-  const debugMatches = ['final','sf_1','sf_2','qf_1','qf_2','qf_3','qf_4'];
-  let debugHtml = '<div style="background:rgba(255,200,0,0.1);border:1px solid rgba(255,200,0,0.3);border-radius:8px;padding:10px;margin-bottom:12px;font-size:11px;font-family:monospace;color:var(--light);">';
-  debugHtml += '<div style="color:#f5c518;font-weight:700;margin-bottom:6px;">DEBUG — dados Firebase:</div>';
-  debugMatches.forEach(function(id) {
-    var mp = p[id];
-    if (mp && mp.h !== undefined) {
-      debugHtml += '<div>' + id + ': h=' + mp.h + ' a=' + mp.a + ' pen=' + (mp.pen||'NENHUM') + '</div>';
-    }
-  });
-  debugHtml += '</div>';
-
-  let html = debugHtml;
+  let html = '';
 
   // Stats summary
   const stats = calcPts(p);
