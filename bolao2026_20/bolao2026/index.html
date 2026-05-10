@@ -1347,8 +1347,14 @@ function getThirdsFPNeeded(userPalpites) {
   // Retorna as seleções empatadas que cruzam a fronteira da 8ª posição
   var groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
   var thirds = groups.map(function(g) {
+    var gMatches = MATCHES.filter(function(m){ return m.group === g && m.phase === 'group'; });
+    var filled = gMatches.filter(function(m){
+      var p = userPalpites[m.id];
+      return p && p.h !== undefined && p.a !== undefined;
+    }).length;
+    if (filled < 6) return null;
     var s = calcGroupStandings(g, userPalpites);
-    if (!s[2] || s[2].j < 3) return null;
+    if (!s[2]) return null;
     return Object.assign({}, s[2], {group:g});
   }).filter(Boolean);
   if (thirds.length < 9) return [];
