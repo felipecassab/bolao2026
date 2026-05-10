@@ -808,12 +808,12 @@ const MATCHES = [
   {id:'d5',home:'Turquia',away:'Estados Unidos',fH:'tr',fA:'us',group:'D',phase:'group',status:'upcoming',date:'25 Jun · 23h',city:'Los Angeles'},
   {id:'d6',home:'Paraguai',away:'Austrália',fH:'py',fA:'au',group:'D',phase:'group',status:'upcoming',date:'25 Jun · 23h',city:'Santa Clara'},
   // GRUPO E
-  {id:'e1',home:'Alemanha',away:'Curaçau',fH:'de',fA:'cw',group:'E',phase:'group',status:'upcoming',date:'14 Jun · 14h',city:'Houston'},
+  {id:'e1',home:'Alemanha',away:'Curaçao',fH:'de',fA:'cw',group:'E',phase:'group',status:'upcoming',date:'14 Jun · 14h',city:'Houston'},
   {id:'e2',home:'Costa do Marfim',away:'Equador',fH:'ci',fA:'ec',group:'E',phase:'group',status:'upcoming',date:'14 Jun · 20h',city:'Filadélfia'},
   {id:'e3',home:'Alemanha',away:'Costa do Marfim',fH:'de',fA:'ci',group:'E',phase:'group',status:'upcoming',date:'20 Jun · 17h',city:'Toronto'},
-  {id:'e4',home:'Equador',away:'Curaçau',fH:'ec',fA:'cw',group:'E',phase:'group',status:'upcoming',date:'20 Jun · 21h',city:'Kansas City'},
+  {id:'e4',home:'Equador',away:'Curaçao',fH:'ec',fA:'cw',group:'E',phase:'group',status:'upcoming',date:'20 Jun · 21h',city:'Kansas City'},
   {id:'e5',home:'Equador',away:'Alemanha',fH:'ec',fA:'de',group:'E',phase:'group',status:'upcoming',date:'25 Jun · 17h',city:'Nova York/NJ'},
-  {id:'e6',home:'Curaçau',away:'Costa do Marfim',fH:'cw',fA:'ci',group:'E',phase:'group',status:'upcoming',date:'25 Jun · 17h',city:'Filadélfia'},
+  {id:'e6',home:'Curaçao',away:'Costa do Marfim',fH:'cw',fA:'ci',group:'E',phase:'group',status:'upcoming',date:'25 Jun · 17h',city:'Filadélfia'},
   // GRUPO F
   {id:'f1',home:'Holanda',away:'Japão',fH:'nl',fA:'jp',group:'F',phase:'group',status:'upcoming',date:'14 Jun · 17h',city:'Dallas'},
   {id:'f2',home:'Suécia',away:'Tunísia',fH:'se',fA:'tn',group:'F',phase:'group',status:'upcoming',date:'14 Jun · 23h',city:'Monterrey'},
@@ -997,7 +997,7 @@ const FIFA_RANKING = {
   'Argélia':37,'África do Sul':38,'Costa do Marfim':40,'Rep. D. Congo':43,
   'Gana':44,'Tunísia':45,'Cabo Verde':46,'Arábia Saudita':47,'Iraque':48,
   'Jordânia':49,'Qatar':50,'Uzbequistão':51,'Panamá':52,'Paraguai':54,
-  'Haiti':55,'Canadá':57,'Bósnia e Herz.':58,'Curaçau':59,'Nova Zelândia':60,
+  'Haiti':55,'Canadá':57,'Bósnia e Herz.':58,'Curaçao':59,'Nova Zelândia':60,
 };
 
 function calcGroupStandings(group, userPalpites) {
@@ -4294,11 +4294,13 @@ async function adminUnsubmit(uid) {
   showToast('Palpites desbloqueados! ✓');
 }
 
-async function adminDeleteUser(wpp, nome) {
-  if (!confirm(`Tem certeza que deseja excluir ${nome}?\n\nOs palpites serão preservados mas o participante ficará invisível no ranking e não poderá mais acessar o APP.`)) return;
-  state.users[wpp]._deleted = true;
+async function adminDeleteUser(uid, nome) {
+  if (!confirm(`Tem certeza que deseja excluir ${nome} permanentemente?\n\nTodos os dados e palpites serão removidos e não poderão ser recuperados.`)) return;
+  // Exclusão total — remover usuário e palpites
+  delete state.users[uid];
+  delete state.palpites[uid];
   await saveGlobal();
-  showToast(`${nome.split(' ')[0]} foi excluído.`);
+  showToast(`${nome} foi excluído permanentemente.`);
   renderAdminParticipants();
   renderRanking();
 }
