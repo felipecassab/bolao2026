@@ -3474,16 +3474,35 @@ async function saveDraft() {
 function loadDraft() {
   if (!state.user) return;
   const draft = localStorage.getItem('bolao_draft_' + state.user);
-  if (!draft) return;
+  // Se não há draft específico, tentar recuperar pen do backup global
+  const backupStr = localStorage.getItem('bolao_backup');
   try {
-    const local = JSON.parse(draft);
     if (!state.palpites[state.user]) state.palpites[state.user] = {};
     const fb = state.palpites[state.user];
+
+    // Recuperar pen do backup global se Firebase não tem
+    if (backupStr) {
+      try {
+        const backup = JSON.parse(backupStr);
+        const backupP = backup.palpites && backup.palpites[state.user];
+        if (backupP) {
+          MATCHES.filter(m => m.phase === 'knockout').forEach(function(m) {
+            const bp = backupP[m.id];
+            const fp = fb[m.id];
+            if (bp && bp.pen && fp && !fp.pen) {
+              fb[m.id] = Object.assign({}, fp, {pen: bp.pen});
+            }
+          });
+        }
+      } catch(e2) {}
+    }
+
+    if (!draft) return;
+    const local = JSON.parse(draft);
     let changed = false;
 
     // Merge por jogo: para cada jogo no localStorage,
-    // se o Firebase não tem esse jogo OU o localStorage tem pen e Firebase não tem,
-    // atualizar o Firebase com os dados do localStorage
+    // sempre aplicar pen se localStorage tem e Firebase não tem
     MATCHES.forEach(function(m) {
       const lp = local[m.id];
       const fp = fb[m.id];
@@ -3493,7 +3512,7 @@ function loadDraft() {
         fb[m.id] = Object.assign({}, lp);
         changed = true;
       } else {
-        // Ambos têm — merge: pen do localStorage prevalece se Firebase não tem
+        // Ambos têm — sempre aplicar pen do localStorage se Firebase não tem
         if (lp.pen && !fp.pen) {
           fb[m.id] = Object.assign({}, fp, {pen: lp.pen});
           changed = true;
