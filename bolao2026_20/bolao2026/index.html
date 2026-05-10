@@ -3323,7 +3323,7 @@ async function syncDraft() {
   });
   // Atualizar state com os palpites consolidados
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
-  // Preservar metadados
+  // Preservar metadados ANTES de qualquer modificação
   const preserved2 = {
     _savedAt: state.palpites[state.user]._savedAt,
     _qa: state.palpites[state.user]._qa,
@@ -3332,8 +3332,10 @@ async function syncDraft() {
   };
   // Aplicar temp sobre o state existente (não apagar tudo)
   Object.assign(state.palpites[state.user], temp);
-  // Restaurar metadados se foram sobrescritos
-  Object.assign(state.palpites[state.user], preserved2);
+  // Restaurar metadados — garantir que _qa não foi perdido
+  if (preserved2._qa) state.palpites[state.user]._qa = preserved2._qa;
+  if (preserved2._fp) state.palpites[state.user]._fp = preserved2._fp;
+  if (preserved2._fp3) state.palpites[state.user]._fp3 = preserved2._fp3;
   // Save local draft too
   localStorage.setItem('bolao_draft_' + state.user, JSON.stringify(state.palpites[state.user]));
   localStorage.setItem('bolao_draft_time_' + state.user, new Date().toISOString());
@@ -3400,9 +3402,12 @@ async function saveDraft() {
     }
     // Se input vazio mas havia valor salvo no state — manter o valor salvo (não apagar)
   });
-  // Preserve extras (_qa) and fair play (_fp)
-  if (state.palpites[state.user]?._qa) draft._qa = state.palpites[state.user]._qa;
-  if (state.palpites[state.user]?._fp) draft._fp = state.palpites[state.user]._fp;
+  // Preserve metadados
+  const existingMeta = state.palpites[state.user] || {};
+  if (existingMeta._qa) draft._qa = existingMeta._qa;
+  if (existingMeta._fp) draft._fp = existingMeta._fp;
+  if (existingMeta._fp3) draft._fp3 = existingMeta._fp3;
+  if (existingMeta._submitted) draft._submitted = existingMeta._submitted;
 
   // Update state
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
