@@ -3306,19 +3306,20 @@ async function syncDraft() {
       temp[k] = Object.assign({}, existing[k]);
     }
   });
-  // Sobrescrever com valores atuais do DOM
+  // Sobrescrever com valores atuais do DOM (apenas se o input existe e tem valor)
   MATCHES.forEach(m => {
-    const h = document.getElementById('p_'+m.id+'_h')?.value;
-    const a = document.getElementById('p_'+m.id+'_a')?.value;
+    const ih = document.getElementById('p_'+m.id+'_h');
+    const ia = document.getElementById('p_'+m.id+'_a');
+    if (!ih || !ia) return;
+    const h = ih.value, a = ia.value;
     if (h !== '' && a !== '') {
       temp[m.id] = {h:+h, a:+a};
-      // Preserve penalty if set
       const ex = existing[m.id];
       if (ex?.pen && +h === +a) temp[m.id].pen = ex.pen;
-    } else if (h === '' && a === '') {
-      // Explicitamente em branco no DOM = usuário apagou
+    } else if (h === '' && a === '' && !existing[m.id]) {
       delete temp[m.id];
     }
+    // Se input vazio mas havia valor salvo — manter valor salvo
   });
   // Atualizar state com os palpites consolidados
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
@@ -3381,18 +3382,23 @@ async function saveDraft() {
     }
   });
 
-  // Sobrescrever com valores atuais do DOM (mais recentes que o state)
+  // Sobrescrever com valores atuais do DOM (apenas se o input existe e tem valor)
   MATCHES.forEach(m => {
-    const h = document.getElementById('p_'+m.id+'_h')?.value;
-    const a = document.getElementById('p_'+m.id+'_a')?.value;
-    if (h !== undefined && a !== undefined && h !== '' && a !== '') {
+    const ih = document.getElementById('p_'+m.id+'_h');
+    const ia = document.getElementById('p_'+m.id+'_a');
+    // Só processar se o input existe no DOM
+    if (!ih || !ia) return;
+    const h = ih.value, a = ia.value;
+    if (h !== '' && a !== '') {
+      // Input tem valor — sobrescrever
       const pen = draft[m.id]?.pen || null;
       draft[m.id] = {h:+h, a:+a};
       if (pen && +h===+a) draft[m.id].pen = pen;
-    } else if (h === '' && a === '') {
-      // Explicitamente apagado no DOM
+    } else if (h === '' && a === '' && !existing[m.id]) {
+      // Input vazio E não havia valor salvo — garantir que não existe no draft
       delete draft[m.id];
     }
+    // Se input vazio mas havia valor salvo no state — manter o valor salvo (não apagar)
   });
   // Preserve extras (_qa) and fair play (_fp)
   if (state.palpites[state.user]?._qa) draft._qa = state.palpites[state.user]._qa;
