@@ -1716,7 +1716,7 @@ function buildResolvedTeams(userPalpites, targetObj, penFallback) {
 
 function renderPenaltySelector(matchId, homeName, awayName, locked, p) {
   var m = MATCHES.find(function(x){return x.id===matchId;});
-  if (!m || m.phase !== 'knockout' || locked) return '';
+  if (!m || m.phase !== 'knockout') return '';
   // Read from DOM inputs (current typed values) OR saved palpite
   var ih = document.getElementById('p_'+matchId+'_h');
   var ia = document.getElementById('p_'+matchId+'_a');
@@ -1729,6 +1729,17 @@ function renderPenaltySelector(matchId, homeName, awayName, locked, p) {
   var rt = resolvedTeams[matchId];
   if (rt && rt.home && rt.home.name) homeName = rt.home.name;
   if (rt && rt.away && rt.away.name) awayName = rt.away.name;
+  if (locked) {
+    // Modo somente leitura — mostrar quem foi escolhido sem botões clicáveis
+    if (!pen) return '<div class="penalty-selector"><span class="penalty-label">🥅 Pênaltis:</span><span style="color:var(--gray);font-size:13px;">Não definido</span></div>';
+    var winnerName = pen === 'H' ? homeName : awayName;
+    var loserName = pen === 'H' ? awayName : homeName;
+    return '<div class="penalty-selector">' +
+      '<span class="penalty-label">🥅 Pênaltis:</span>' +
+      '<button class="penalty-btn selected" disabled style="opacity:1;cursor:default;">' + winnerName + '</button>' +
+      '<button class="penalty-btn" disabled style="cursor:default;">' + loserName + '</button>' +
+      '</div>';
+  }
   return '<div class="penalty-selector">' +
     '<span class="penalty-label">🥅 Pênaltis:</span>' +
     '<button class="penalty-btn' + (pen==='H'?' selected':'') + '" onclick="setPenalty(\'' + matchId + '\',\'H\')">' + homeName + '</button>' +
