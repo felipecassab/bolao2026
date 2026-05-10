@@ -2566,6 +2566,17 @@ function updateFAB() {
 }
 
 function renderAll() {
+  // Popular cache de grupos a partir dos palpites salvos (para renderThirdsStandings)
+  if (state.user && state.palpites[state.user]) {
+    if (!state._groupDomCache) state._groupDomCache = {};
+    var saved = state.palpites[state.user];
+    MATCHES.filter(function(m){ return m.phase === 'group'; }).forEach(function(m) {
+      var p = saved[m.id];
+      if (p && p.h !== undefined && p.a !== undefined) {
+        state._groupDomCache[m.id] = {h: p.h, a: p.a};
+      }
+    });
+  }
   buildResolvedTeamsFromResults();
   renderAdminFP3Block();
   updateFAB();
