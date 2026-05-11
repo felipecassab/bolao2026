@@ -625,7 +625,7 @@ body{display:flex;flex-direction:column}
         <input class="form-input" type="text" id="f-reg-name" placeholder="Seu nome" maxlength="40"/>
       </div>
       <div class="form-field">
-        <label class="form-label">APELIDO <span style="font-size:10px;color:var(--gray);">(único, sem espaços — ex: FelipeRacional)</span></label>
+        <label class="form-label">APELIDO <span style="font-size:10px;color:var(--gray);">(único, sem espaços — ex: VaiCorinthians)</span></label>
         <input class="form-input" type="text" id="f-reg-apelido" placeholder="SeuApelido" maxlength="30" autocomplete="off" autocorrect="off" autocapitalize="off"/>
       </div>
       <div class="form-field">
@@ -4316,7 +4316,16 @@ async function adminClear(id) {
   buildResolvedTeamsFromResults();
   showToast('Resultado removido'); renderAdminTabs(); renderAdminGames(); renderAdminFP3Block(); renderRanking();
 }
-function renderAdminParticipants() {
+async function renderAdminParticipants() {
+  // Buscar dados frescos do Firebase
+  try {
+    const fresh = await fbGet();
+    if (fresh) {
+      state.users = fresh.users || state.users;
+      state.palpites = fresh.palpites || state.palpites;
+    }
+  } catch(e) {}
+
   const users = Object.entries(state.users);
   if (!users.length) { document.getElementById('admin-participants').innerHTML='<p style="font-size:13px;color:var(--gray);">Nenhum participante cadastrado.</p>'; return; }
 
@@ -4330,7 +4339,10 @@ function renderAdminParticipants() {
   const rejected = users.filter(([,u]) => u.status === 'rejected' && !u._deleted);
   const deleted  = users.filter(([,u]) => u._deleted);
 
-  let html = '';
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <span style="font-size:11px;color:var(--gray);">${users.length} cadastro${users.length!==1?'s':''} no total</span>
+    <button onclick="renderAdminParticipants()" style="padding:6px 12px;background:rgba(126,184,245,0.1);border:1px solid rgba(126,184,245,0.2);border-radius:8px;color:#7eb8f5;font-size:12px;cursor:pointer;">🔄 Atualizar</button>
+  </div>`;
 
   // Pending approvals first
   if (pending.length) {
