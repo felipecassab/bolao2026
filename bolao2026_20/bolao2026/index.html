@@ -3308,6 +3308,16 @@ async function syncDraft() {
   if (!state.user) { openModal('login'); return; }
   if (isPastDeadline()) { showToast('Prazo encerrado!', true); return; }
   if (isSubmitted()) { showToast('Palpites já enviados à Comissão!', true); return; }
+
+  // Carregar pen de todas as fontes locais disponíveis
+  let localDraft = {};
+  try { localDraft = JSON.parse(localStorage.getItem('bolao_draft_' + state.user) || '{}'); } catch(e) {}
+  let backupDraft = {};
+  try {
+    const bk = JSON.parse(localStorage.getItem('bolao_backup') || '{}');
+    backupDraft = (bk.palpites && bk.palpites[state.user]) || {};
+  } catch(e) {}
+
   // Começar com palpites já salvos (para não perder jogos fora do DOM)
   const temp = {};
   const existing = state.palpites[state.user] || {};
@@ -3315,8 +3325,14 @@ async function syncDraft() {
     if (k.startsWith('_')) return;
     if (existing[k] && existing[k].h !== undefined && existing[k].a !== undefined) {
       temp[k] = Object.assign({}, existing[k]);
+      // Garantir pen de todas as fontes
+      if (!temp[k].pen) {
+        const pen = localDraft[k] && localDraft[k].pen || backupDraft[k] && backupDraft[k].pen || null;
+        if (pen && temp[k].h === temp[k].a) temp[k].pen = pen;
+      }
     }
   });
+
   // Sobrescrever com valores atuais do DOM (apenas se o input existe e tem valor)
   MATCHES.forEach(m => {
     const ih = document.getElementById('p_'+m.id+'_h');
@@ -3324,13 +3340,15 @@ async function syncDraft() {
     if (!ih || !ia) return;
     const h = ih.value, a = ia.value;
     if (h !== '' && a !== '') {
+      // Buscar pen de TODAS as fontes disponíveis
+      const pen = existing[m.id] && existing[m.id].pen ||
+                  localDraft[m.id] && localDraft[m.id].pen ||
+                  backupDraft[m.id] && backupDraft[m.id].pen || null;
       temp[m.id] = {h:+h, a:+a};
-      const ex = existing[m.id];
-      if (ex?.pen && +h === +a) temp[m.id].pen = ex.pen;
+      if (pen && +h === +a) temp[m.id].pen = pen;
     } else if (h === '' && a === '' && !existing[m.id]) {
       delete temp[m.id];
     }
-    // Se input vazio mas havia valor salvo — manter valor salvo
   });
   // Atualizar state com os palpites consolidados
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
