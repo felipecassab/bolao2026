@@ -4374,7 +4374,7 @@ async function renderAdminParticipants() {
           <p style="font-size:12px;color:var(--gray);">📱 ${uWpp(u,uid)}</p>
         </div>
         <button onclick="adminViewPalpites('${uid}')" style="padding:5px 10px;background:rgba(126,184,245,0.12);color:#7eb8f5;border:1px solid rgba(126,184,245,0.3);border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;">👁 Ver</button>
-        ${submitted ? `<button onclick="adminUnsubmit('${uid}')" style="padding:5px 10px;background:rgba(245,197,24,0.12);color:var(--gold);border:1px solid rgba(245,197,24,0.3);border-radius:8px;font-size:12px;cursor:pointer;">🔓 Desbloquear</button>` : ''}
+        ${submitted ? `<button onclick="adminUnsubmit('${uid}')" style="padding:5px 10px;background:rgba(245,197,24,0.12);color:var(--gold);border:1px solid rgba(245,197,24,0.3);border-radius:8px;font-size:12px;cursor:pointer;">🔓 Desbloquear</button>` : `<button onclick="adminMarkSubmitted('${uid}')" style="padding:5px 10px;background:rgba(0,200,83,0.1);color:var(--green);border:1px solid rgba(0,200,83,0.3);border-radius:8px;font-size:12px;cursor:pointer;">✅ Marcar enviado</button>`}
         <button onclick="adminResetPwd('${uid}')" style="padding:5px 10px;background:transparent;border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--gray);font-size:12px;cursor:pointer;">Resetar senha</button>
         <button onclick="adminDeleteUser('${uid}','${uApelido(u,uid)}')" style="padding:5px 10px;background:transparent;border:1px solid rgba(244,67,54,0.3);border-radius:8px;color:var(--red);font-size:12px;cursor:pointer;">🗑️</button>
       </div>`;
@@ -4443,6 +4443,16 @@ async function adminResetAllUsers() {
   showToast('Todos os participantes foram removidos.');
   renderAdminParticipants();
   renderRanking();
+}
+
+async function adminMarkSubmitted(uid) {
+  const nome = state.users[uid]?.apelido || state.users[uid]?.nome || uid;
+  if (!confirm('Marcar palpites de ' + nome + ' como enviados? O participante não poderá mais editar.')) return;
+  if (!state.palpites[uid]) state.palpites[uid] = {};
+  state.palpites[uid]._submitted = true;
+  await saveGlobal();
+  renderAdminParticipants();
+  showToast('Palpites de ' + nome + ' marcados como enviados! ✓');
 }
 
 async function adminUnsubmit(uid) {
