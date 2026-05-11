@@ -3760,31 +3760,39 @@ function histTab(tab, btn) {
 // RENDER EXTRAS
 // ═══════════════════════════════════════════════════════════════════
 function renderExtras() {
-  const locked=isPastDeadline();
-  const saved=state.user?(state.palpites[state.user]?._qa||{}):{};
-  const answered=EXTRA_QS.filter(q=>saved[q.id]?.answer?.trim()).length;
-  document.getElementById('extras-count').textContent=`${answered}/${EXTRA_QS.length}`;
-  document.getElementById('extras-count').style.color=answered===EXTRA_QS.length?'var(--green)':'var(--gold)';
-  let html='';
-  EXTRA_QS.forEach(q=>{
-    const val=saved[q.id]?.answer||'';
-    const ok=!!val.trim(); const missing=!ok&&!locked;
-    html+=`<div class="extra-card" style="border-color:${missing?'rgba(245,166,35,0.4)':ok?'rgba(0,200,83,0.3)':'rgba(255,255,255,0.07)'};">
+  const locked = isLocked();
+  const saved = state.user ? (state.palpites[state.user]?._qa || {}) : {};
+  const answered = EXTRA_QS.filter(q => saved[q.id]?.answer?.trim()).length;
+  document.getElementById('extras-count').textContent = `${answered}/${EXTRA_QS.length}`;
+  document.getElementById('extras-count').style.color = answered === EXTRA_QS.length ? 'var(--green)' : 'var(--gold)';
+  let html = '';
+  if (locked) {
+    const msg = isSubmitted()
+      ? '✅ Palpites enviados à Comissão — respostas bloqueadas para edição.'
+      : '🔒 Prazo encerrado — respostas bloqueadas para edição.';
+    html += `<div style="background:rgba(0,200,83,0.08);border:1px solid rgba(0,200,83,0.25);border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:13px;color:var(--green);font-weight:600;">${msg}</div>`;
+  }
+  EXTRA_QS.forEach(q => {
+    const val = saved[q.id]?.answer || '';
+    const ok = !!val.trim();
+    const missing = !ok && !locked;
+    html += `<div class="extra-card" style="border-color:${missing ? 'rgba(245,166,35,0.4)' : ok ? 'rgba(0,200,83,0.3)' : 'rgba(255,255,255,0.07)'};">
       <div class="card-body">
         <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
           <p style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:1px;">PERGUNTA ${q.label} · 3 pts</p>
-          ${ok?'<span style="font-size:11px;color:var(--green);font-weight:600;">✓</span>':missing?'<span style="font-size:11px;color:#f5a623;font-weight:600;">obrigatória</span>':''}
+          ${ok ? '<span style="font-size:11px;color:var(--green);font-weight:600;">✓</span>' : missing ? '<span style="font-size:11px;color:#f5a623;font-weight:600;">obrigatória</span>' : ''}
         </div>
         <p style="font-size:14px;font-weight:500;color:var(--light);margin-bottom:10px;line-height:1.4;">${q.q}</p>
-        <input class="name-input" type="text" id="extra_${q.id}" placeholder="Sua resposta..." value="${val}" ${locked?'disabled':''}/>
+        <input class="name-input" type="text" id="extra_${q.id}" placeholder="Sua resposta..." value="${val}" ${locked ? 'disabled style="opacity:0.6;cursor:not-allowed;"' : ''}/>
       </div>
     </div>`;
   });
-  document.getElementById('extras-list').innerHTML=html;
+  document.getElementById('extras-list').innerHTML = html;
 }
+
 async function saveExtras() {
   if (!state.user) { openModal('login'); return; }
-  if (isPastDeadline()) { showToast('Prazo encerrado!', true); return; }
+  if (isLocked()) { showToast(isSubmitted()?'Palpites já enviados!':'Prazo encerrado!', true); return; }
   if (!state.palpites[state.user]) state.palpites[state.user]={};
   if (!state.palpites[state.user]._qa) state.palpites[state.user]._qa={};
   let count=0, missing=[];
