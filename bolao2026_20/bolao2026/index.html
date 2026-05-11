@@ -3547,8 +3547,12 @@ function loadDraft() {
     ['_fp', '_fp3', '_qa'].forEach(function(k) {
       if (local[k] && !fb[k]) { fb[k] = local[k]; changed = true; }
     });
+    // Nunca remover _submitted do Firebase via localStorage
+    // (só o admin pode modificar _submitted)
 
     if (changed) {
+      // Antes de salvar, garantir que _submitted não foi perdido
+      // (pode ter sido definido pelo admin enquanto o usuário estava offline)
       saveGlobal().catch(function(){});
     }
     // Limpar localStorage após merge
@@ -4451,6 +4455,13 @@ async function adminMarkSubmitted(uid) {
   if (!state.palpites[uid]) state.palpites[uid] = {};
   state.palpites[uid]._submitted = true;
   await saveGlobal();
+  // Verificar que foi salvo corretamente
+  try {
+    const fresh = await fbGet();
+    if (fresh && fresh.palpites && fresh.palpites[uid]) {
+      state.palpites[uid] = fresh.palpites[uid];
+    }
+  } catch(e) {}
   renderAdminParticipants();
   showToast('Palpites de ' + nome + ' marcados como enviados! ✓');
 }
