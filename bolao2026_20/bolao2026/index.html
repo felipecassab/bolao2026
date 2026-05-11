@@ -3370,9 +3370,6 @@ async function syncDraft() {
   localStorage.setItem('bolao_draft_time_' + state.user, new Date().toISOString());
   // Save to Firebase
   try {
-    // DEBUG — mostrar pens que serão salvos
-    const pensDebug = Object.entries(temp).filter(([k,v]) => v && v.pen).map(([k,v]) => k + ':' + v.pen);
-    alert('DEBUG pens no temp: ' + (pensDebug.length ? pensDebug.join(', ') : 'NENHUM'));
     showToast('Sincronizando...');
     await saveGlobal();
     // Marcar como enviado — bloqueia edição
@@ -3558,21 +3555,59 @@ function loadDraft() {
 async function savePalpites() {
   if (!state.user) { openModal('login'); return; }
   if (isPastDeadline()) { showToast('Prazo encerrado!', true); return; }
+  if (isSubmitted()) { showToast('Palpites já enviados à Comissão!', true); return; }
+
+  // Carregar pen de todas as fontes locais disponíveis
+  let localDraft = {};
+  try { localDraft = JSON.parse(localStorage.getItem('bolao_draft_' + state.user) || '{}'); } catch(e) {}
+  let backupDraft = {};
+  try {
+    const bk = JSON.parse(localStorage.getItem('bolao_backup') || '{}');
+    backupDraft = (bk.palpites && bk.palpites[state.user]) || {};
+  } catch(e) {}
+
+  // Construir temp a partir do state + DOM
+  const existing = state.palpites[state.user] || {};
   const temp = {};
-  MATCHES.forEach(m=>{
-    const h=document.getElementById('p_'+m.id+'_h')?.value;
-    const a=document.getElementById('p_'+m.id+'_a')?.value;
-    if(h!==''&&a!=='') temp[m.id]={h:+h,a:+a};
+
+  // Base: palpites salvos no state (preserva pen)
+  Object.keys(existing).forEach(k => {
+    if (k.startsWith('_')) return;
+    if (existing[k] && existing[k].h !== undefined && existing[k].a !== undefined) {
+      temp[k] = Object.assign({}, existing[k]);
+      // Garantir pen de todas as fontes
+      if (!temp[k].pen) {
+        const pen = (localDraft[k] && localDraft[k].pen) || (backupDraft[k] && backupDraft[k].pen) || null;
+        if (pen && temp[k].h === temp[k].a) temp[k].pen = pen;
+      }
+    }
   });
-  const missingM = MATCHES.filter(m=>!temp[m.id]);
-  const savedQA = state.palpites[state.user]?._qa||{};
-  const missingE = EXTRA_QS.filter(q=>!savedQA[q.id]?.answer?.trim());
-  if (missingM.length||missingE.length) {
+
+  // Override com DOM (apenas se input existe e tem valor)
+  MATCHES.forEach(m => {
+    const ih = document.getElementById('p_'+m.id+'_h');
+    const ia = document.getElementById('p_'+m.id+'_a');
+    if (!ih || !ia) return;
+    const h = ih.value, a = ia.value;
+    if (h !== '' && a !== '') {
+      const pen = (existing[m.id] && existing[m.id].pen) ||
+                  (localDraft[m.id] && localDraft[m.id].pen) ||
+                  (backupDraft[m.id] && backupDraft[m.id].pen) || null;
+      temp[m.id] = {h:+h, a:+a};
+      if (pen && +h === +a) temp[m.id].pen = pen;
+    }
+  });
+
+  // Verificar jogos faltando
+  const missingM = MATCHES.filter(m => !temp[m.id]);
+  const savedQA = existing._qa || {};
+  const missingE = EXTRA_QS.filter(q => !savedQA[q.id]?.answer?.trim());
+  if (missingM.length || missingE.length) {
     const alertEl = document.getElementById('missing-alert');
     let html = '<span style="font-size:20px;flex-shrink:0;">⚠️</span><div style="flex:1;">';
     if (missingM.length) {
       const byG = {};
-      missingM.forEach(m=>{ const k=m.phase==='group'?'Grupo '+m.group:m.group; byG[k]=(byG[k]||0)+1; });
+      missingM.forEach(m => { const k = m.phase==='group'?'Grupo '+m.group:m.group; byG[k]=(byG[k]||0)+1; });
       html += `<p style="font-size:13px;font-weight:600;color:#f5a623;margin-bottom:2px;">⚽ Faltam ${missingM.length} jogo${missingM.length>1?'s':''}</p>`;
       html += `<p style="font-size:12px;color:var(--gray);margin-bottom:${missingE.length?'8px':'0'};">${Object.entries(byG).map(([g,n])=>`${g}: ${n}`).join(' · ')}</p>`;
     }
@@ -3584,18 +3619,39 @@ async function savePalpites() {
     html += '</div>';
     alertEl.style.display='flex'; alertEl.innerHTML=html;
     alertEl.scrollIntoView({behavior:'smooth',block:'center'});
-    showToast('Preencha tudo antes de salvar!', true);
+    showToast('Preencha tudo antes de enviar!', true);
     return;
   }
-  if (!state.palpites[state.user]) state.palpites[state.user]={};
+
+  // Aplicar temp no state preservando metadados
+  if (!state.palpites[state.user]) state.palpites[state.user] = {};
+  const meta = {
+    _qa: existing._qa,
+    _fp: existing._fp,
+    _fp3: existing._fp3,
+  };
   Object.assign(state.palpites[state.user], temp);
+  if (meta._qa) state.palpites[state.user]._qa = meta._qa;
+  if (meta._fp) state.palpites[state.user]._fp = meta._fp;
+  if (meta._fp3) state.palpites[state.user]._fp3 = meta._fp3;
+
   document.getElementById('missing-alert').style.display='none';
-  // Clear local draft after successful submission
-  localStorage.removeItem('bolao_draft_' + state.user);
-  localStorage.removeItem('bolao_draft_time_' + state.user);
-  await saveGlobal();
-  showToast('Palpites enviados à Comissão! ✓');
-  renderRanking();
+  try {
+    showToast('Sincronizando...');
+    await saveGlobal();
+    // Marcar como enviado
+    state.palpites[state.user]._submitted = true;
+    await saveGlobal();
+    // Limpar localStorage após envio bem sucedido
+    localStorage.removeItem('bolao_draft_' + state.user);
+    localStorage.removeItem('bolao_draft_time_' + state.user);
+    const count = Object.keys(temp).filter(k => !k.startsWith('_')).length;
+    showToast('✅ ' + count + ' palpites enviados à Comissão!');
+    renderMatches();
+    renderRanking();
+  } catch(e) {
+    showToast('Erro ao enviar. Verifique sua conexão.', true);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
