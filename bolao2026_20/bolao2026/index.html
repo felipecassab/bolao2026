@@ -3370,6 +3370,9 @@ async function syncDraft() {
   localStorage.setItem('bolao_draft_time_' + state.user, new Date().toISOString());
   // Save to Firebase
   try {
+    // DEBUG — mostrar pens que serão salvos
+    const pensDebug = Object.entries(temp).filter(([k,v]) => v && v.pen).map(([k,v]) => k + ':' + v.pen);
+    alert('DEBUG pens no temp: ' + (pensDebug.length ? pensDebug.join(', ') : 'NENHUM'));
     showToast('Sincronizando...');
     await saveGlobal();
     // Marcar como enviado — bloqueia edição
