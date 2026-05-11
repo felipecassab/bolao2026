@@ -2328,6 +2328,16 @@ async function saveGlobal() {
   if (state.user && state.palpites[state.user]) {
     state.palpites[state.user]._savedAt = new Date().toISOString();
   }
+  // Garantir que _submitted nunca é perdido — verificar backup local
+  if (state.user && !state.palpites[state.user]?._submitted) {
+    try {
+      const bk = JSON.parse(localStorage.getItem('bolao_backup') || '{}');
+      if (bk.palpites?.[state.user]?._submitted) {
+        if (!state.palpites[state.user]) state.palpites[state.user] = {};
+        state.palpites[state.user]._submitted = true;
+      }
+    } catch(e) {}
+  }
   const data = {users: state.users, palpites: state.palpites, results: state.results, snapshots: state.snapshots};
   try {
     await fbSet(data);
@@ -2353,7 +2363,22 @@ function startPolling() {
       // to avoid overwriting inputs the user is currently filling
       const onPalpites = document.getElementById('page-palpites')?.classList.contains('active');
       if (!onPalpites) {
+        // Preservar _submitted do Firebase — nunca deixar o state local sobrescrever
+        const prevSubmitted = state.user && state.palpites[state.user]?._submitted;
         state.palpites = s.palpites || {};
+        // Se Firebase tem _submitted, garantir que está no state
+        if (state.user && s.palpites?.[state.user]?._submitted) {
+          if (!state.palpites[state.user]) state.palpites[state.user] = {};
+          state.palpites[state.user]._submitted = true;
+          // Salvar no localStorage como cache
+          try {
+            const bk = JSON.parse(localStorage.getItem('bolao_backup') || '{}');
+            if (bk.palpites && bk.palpites[state.user]) {
+              bk.palpites[state.user]._submitted = true;
+              localStorage.setItem('bolao_backup', JSON.stringify(bk));
+            }
+          } catch(e) {}
+        }
       }
       renderRanking();
       renderHistorico();
