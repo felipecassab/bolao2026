@@ -4334,9 +4334,10 @@ async function renderAdminParticipants() {
   function uNome(u, uid) { return u.nome || u.name || uid; }
   function uWpp(u, uid) { return u.wpp || uid; }
 
-  const pending  = users.filter(([,u]) => u.status === 'pending');
-  const approved = users.filter(([,u]) => u.status !== 'pending' && u.status !== 'rejected' && !u._deleted);
-  const rejected = users.filter(([,u]) => u.status === 'rejected' && !u._deleted);
+  const sortAlpha = (a, b) => (a[1].apelido||a[1].nome||a[1].name||a[0]).localeCompare(b[1].apelido||b[1].nome||b[1].name||b[0], 'pt-BR', {sensitivity:'base'});
+  const pending  = users.filter(([,u]) => u.status === 'pending').sort(sortAlpha);
+  const approved = users.filter(([,u]) => u.status !== 'pending' && u.status !== 'rejected' && !u._deleted).sort(sortAlpha);
+  const rejected = users.filter(([,u]) => u.status === 'rejected' && !u._deleted).sort(sortAlpha);
   const deleted  = users.filter(([,u]) => u._deleted);
 
   let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
