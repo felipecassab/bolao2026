@@ -1307,6 +1307,11 @@ function doUpdateGroupStandings(group) {
       if (rt.home) updateTeamInDOM(m.id, 'h', rt.home);
       if (rt.away) updateTeamInDOM(m.id, 'a', rt.away);
     });
+    // Atualizar tabela de terceiros sempre que houver mudança nos grupos
+    var thirdsWrap = document.getElementById('thirds-standings-wrap');
+    if (thirdsWrap) {
+      thirdsWrap.innerHTML = renderThirdsStandings(fullP);
+    }
   }, 600);
 }
 
@@ -3088,7 +3093,7 @@ function renderMatches() {
           }
         }
         // Tabela dos melhores terceiros — sempre visível
-        html += thirdsHtml;
+        html += '<div id="thirds-standings-wrap">' + thirdsHtml + '</div>';
         html += '</div></div>';
       }
     }
