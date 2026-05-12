@@ -3736,44 +3736,73 @@ function renderEvolucao() {
   const snaps=state.snapshots, canvas=document.getElementById('evo-chart');
   const legend=document.getElementById('evo-legend'), table=document.getElementById('evo-table');
   if (!canvas) return;
-  if (!snaps.length) {
+
+  // Datas reais dos jogos com resultados
+  const monthMap = {'Jan':1,'Feb':2,'Mar':3,'Apr':4,'May':5,'Jun':6,'Jul':7,'Aug':8,'Sep':9,'Oct':10,'Nov':11,'Dec':12};
+  function matchDateKey(dateStr) {
+    const m = dateStr.match(/(\d+)\s+(\w+)/);
+    if (!m) return '';
+    return '2026-' + String(monthMap[m[2]]||0).padStart(2,'0') + '-' + m[1].padStart(2,'0');
+  }
+
+  const daysWithResults = [...new Set(
+    MATCHES.filter(m => state.results[m.id]).map(m => matchDateKey2(m.date))
+  )].sort();
+
+  const users = Object.keys(state.users).filter(w => state.users[w] && !state.users[w]._deleted);
+
+  if (!daysWithResults.length) {
     canvas.style.display='none'; legend.innerHTML='';
     table.innerHTML='<div class="empty"><div class="empty-icon">📈</div><p>Disponível após o primeiro dia de resultados.</p></div>';
     return;
   }
   canvas.style.display='block';
 
-  // Eixo X fixo: 11/06/2026 a 19/07/2026
+  // Calcular pontos por jogo para cada usuário
+  function ptsForMatch(uid, m) {
+    const res = state.results[m.id];
+    const p = state.palpites[uid]?.[m.id];
+    if (!res || !p || p.h === undefined || p.a === undefined) return 0;
+    const rW = res.h > res.a ? 'H' : res.h < res.a ? 'A' : 'E';
+    const pW = +p.h > +p.a ? 'H' : +p.h < +p.a ? 'A' : 'E';
+    if (+p.h === +res.h && +p.a === +res.a) return 5;
+    if (rW === pW) return 3;
+    return 0;
+  }
+
+  // Pontos por dia e acumulados para cada usuário
+  const ptsByDay = {};
+  users.forEach(uid => {
+    ptsByDay[uid] = {};
+    daysWithResults.forEach(dk => { ptsByDay[uid][dk] = 0; });
+    MATCHES.filter(m => state.results[m.id]).forEach(m => {
+      const dk = matchDateKey(m.date);
+      if (ptsByDay[uid][dk] !== undefined) ptsByDay[uid][dk] += ptsForMatch(uid, m);
+    });
+  });
+
+  // Séries acumuladas para o gráfico
+  const series = users.map(uid => {
+    let acc = 0;
+    const data = daysWithResults.map(dk => {
+      acc += ptsByDay[uid][dk];
+      return acc;
+    });
+    return {uid, name: uName(uid), color: uColor(uid), data};
+  });
+
+  // Eixo X fixo: 11/06 a 19/07 (39 dias)
   const START = new Date('2026-06-11');
   const END   = new Date('2026-07-19');
-  const totalDays = Math.round((END - START) / 86400000) + 1; // 39 dias
+  const totalDays = Math.round((END - START) / 86400000) + 1;
   const today = new Date();
   const lastDay = Math.min(Math.round((today - START) / 86400000), totalDays - 1);
 
-  // Construir array de todos os dias com label
-  const allDates = [];
-  for (let i = 0; i < totalDays; i++) {
-    const d = new Date(START); d.setDate(START.getDate() + i);
-    const iso = d.toISOString().slice(0,10);
-    const label = String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0');
-    allDates.push({iso, label, idx: i});
+  // Mapear datas reais para posição no eixo X
+  function dayIdx(iso) {
+    const d = new Date(iso);
+    return Math.round((d - START) / 86400000);
   }
-
-  // Para cada usuário, construir série com pontuação acumulada por dia
-  const users = Object.keys(state.users).filter(w => state.users[w] && !state.users[w]._deleted);
-  const snapByDate = {};
-  snaps.forEach(s => { snapByDate[s.date] = s.scores; });
-
-  const series = users.map(w => {
-    let lastScore = 0;
-    const data = allDates.map(d => {
-      if (snapByDate[d.iso] && snapByDate[d.iso][w] !== undefined) {
-        lastScore = snapByDate[d.iso][w];
-      }
-      return {day: d.idx, label: d.label, score: lastScore, hasData: !!snapByDate[d.iso]};
-    });
-    return {w, name: uName(w), color: uColor(w), data};
-  });
 
   // Desenhar gráfico
   const W = canvas.offsetWidth || 320, H = 260;
@@ -3785,21 +3814,22 @@ function renderEvolucao() {
 
   const P = {t:16, r:24, b:40, l:44};
   const cW = W - P.l - P.r, cH = H - P.t - P.b;
-  const maxP = Math.max(...series.flatMap(s => s.data.map(d => d.score)), 50);
+  const maxP = Math.max(...series.flatMap(s => s.data), 50);
 
   const xOf = i => P.l + (i / (totalDays - 1)) * cW;
   const yOf = v => P.t + cH - (v / maxP * cH);
 
   // Grade horizontal
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+  ctx.lineWidth = 1;
   [0, 0.25, 0.5, 0.75, 1].forEach(f => {
     const y = P.t + cH * (1 - f);
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
     ctx.beginPath(); ctx.moveTo(P.l, y); ctx.lineTo(P.l + cW, y); ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.font = '10px Barlow,sans-serif'; ctx.textAlign = 'right';
     ctx.fillText(Math.round(maxP * f), P.l - 6, y + 4);
   });
 
-  // Linha vertical "hoje"
+  // Linha "hoje"
   if (lastDay >= 0 && lastDay < totalDays) {
     ctx.strokeStyle = 'rgba(245,197,24,0.25)'; ctx.lineWidth = 1; ctx.setLineDash([4,3]);
     ctx.beginPath(); ctx.moveTo(xOf(lastDay), P.t); ctx.lineTo(xOf(lastDay), P.t + cH); ctx.stroke();
@@ -3808,70 +3838,96 @@ function renderEvolucao() {
     ctx.fillText('hoje', xOf(lastDay), P.t - 4);
   }
 
-  // Labels do eixo X — mostrar a cada 7 dias + início + fim
+  // Labels eixo X a cada 7 dias
+  const allLabels = [];
+  for (let i = 0; i < totalDays; i++) {
+    const d = new Date(START); d.setDate(START.getDate() + i);
+    allLabels.push(String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0'));
+  }
   ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = '10px Barlow,sans-serif'; ctx.textAlign = 'center';
-  allDates.forEach((d, i) => {
+  allLabels.forEach((lbl, i) => {
     if (i === 0 || i === totalDays-1 || i % 7 === 0) {
-      ctx.fillText(d.label, xOf(i), H - P.b + 16);
-      // Marca vertical suave
+      ctx.fillText(lbl, xOf(i), H - P.b + 16);
       ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(xOf(i), P.t); ctx.lineTo(xOf(i), P.t + cH); ctx.stroke();
     }
   });
 
-  // Curvas dos participantes
+  // Curvas — usando datas reais dos jogos como pontos
   series.forEach(s => {
-    // Encontrar último índice com dados reais
-    let lastRealIdx = -1;
-    snaps.forEach(snap => {
-      const idx = allDates.findIndex(d => d.iso === snap.date);
-      if (idx > lastRealIdx) lastRealIdx = idx;
-    });
-    if (lastRealIdx < 0) return;
-
     ctx.beginPath();
     ctx.strokeStyle = s.color; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
-    let started = false;
-    s.data.slice(0, lastRealIdx + 1).forEach((d, i) => {
-      const x = xOf(i), y = yOf(d.score);
-      if (!started) { ctx.moveTo(x, y); started = true; }
-      else ctx.lineTo(x, y);
+    daysWithResults.forEach((dk, i) => {
+      const x = xOf(dayIdx(dk)), y = yOf(s.data[i]);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
     ctx.stroke();
+    // Ponto no último dia
+    const lastX = xOf(dayIdx(daysWithResults[daysWithResults.length-1]));
+    const lastY = yOf(s.data[s.data.length-1]);
+    ctx.beginPath(); ctx.arc(lastX, lastY, 4, 0, Math.PI*2);
+    ctx.fillStyle = s.color; ctx.fill();
+  });
 
-    // Ponto no último dia com dados
-    if (lastRealIdx >= 0) {
-      const lx = xOf(lastRealIdx), ly = yOf(s.data[lastRealIdx].score);
-      ctx.beginPath(); ctx.arc(lx, ly, 4, 0, Math.PI*2);
-      ctx.fillStyle = s.color; ctx.fill();
+  // Legenda ordenada por pontuação atual
+  const lastTotal = uid => series.find(s => s.uid === uid)?.data.slice(-1)[0] || 0;
+  legend.innerHTML = users.slice()
+    .sort((a,b) => lastTotal(b) - lastTotal(a))
+    .map(uid => {
+      const s = series.find(x => x.uid === uid);
+      return `<span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--light);">
+        <span style="width:12px;height:12px;border-radius:50%;background:${s.color};flex-shrink:0;"></span>
+        ${s.name.split(' ')[0]} <span style="color:var(--gold);font-weight:700;">${s.data.slice(-1)[0]}pts</span>
+      </span>`;
+    }).join('');
+
+  // Tabela por data real dos jogos
+  // Extrair dias únicos dos MATCHES com resultados, em ordem
+  function matchDateKey2(dateStr) {
+    const m2 = dateStr.match(/(\d+)\s+(\w+)/);
+    if (!m2) return '';
+    const day2 = m2[1].padStart(2,'0');
+    const mon2 = String(monthMap[m2[2]] || 0).padStart(2,'0');
+    return '2026-' + mon2 + '-' + day2;
+  }
+
+  // Para cada usuário e cada dia, calcular pontos acumulados até aquele dia
+  const sortedUsers = users.slice().sort((a,b) => uName(a).localeCompare(uName(b), 'pt-BR', {sensitivity:'base'}));
+
+  // Pontos por dia (não acumulados) para cada usuário — reutilizando ptsByDay do gráfico
+  // Garantir que sortedUsers também tem os dados do ptsByDay
+  sortedUsers.forEach(uid => {
+    if (!ptsByDay[uid]) {
+      ptsByDay[uid] = {};
+      daysWithResults.forEach(dk => { ptsByDay[uid][dk] = 0; });
+      MATCHES.filter(m => state.results[m.id]).forEach(m => {
+        const dk = matchDateKey(m.date);
+        if (ptsByDay[uid][dk] !== undefined) ptsByDay[uid][dk] += ptsForMatch(uid, m);
+      });
     }
   });
 
-  // Legenda
-  legend.innerHTML = series.slice()
-    .sort((a,b) => b.data[lastDay]?.score - a.data[lastDay]?.score)
-    .map(s => `<span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--light);">
-      <span style="width:12px;height:12px;border-radius:50%;background:${s.color};flex-shrink:0;"></span>
-      ${s.name.split(' ')[0]} <span style="color:var(--gold);font-weight:700;">${s.data[Math.min(lastDay, totalDays-1)]?.score || 0}pts</span>
-    </span>`).join('');
+  // Construir tabela
+  let th = '<tr><th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--gray);position:sticky;left:0;background:var(--navy2);">Participante</th>';
+  daysWithResults.forEach(dk => {
+    const [,m,d] = dk.split('-');
+    th += `<th style="padding:6px 6px;font-size:11px;color:var(--gray);text-align:center;min-width:44px;">${d}/${m}</th>`;
+  });
+  th += '<th style="padding:6px 8px;font-size:11px;color:var(--gold);text-align:center;">Total</th></tr>';
 
-  // Tabela por dia com dados reais
-  const snapDates = snaps.map(s => s.date).sort();
-  let th = '<tr><th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--gray);">Participante</th>';
-  snapDates.forEach(iso => {
-    const [,m,d] = iso.split('-');
-    th += `<th style="padding:6px 4px;font-size:11px;color:var(--gray);text-align:center;">${d}/${m}</th>`;
-  });
-  th += '</tr>';
-  const rows = users.map(w => {
-    let tr = `<tr><td style="padding:6px 8px;font-size:13px;font-weight:500;white-space:nowrap;">${uName(w).split(' ')[0]}</td>`;
-    snapDates.forEach(iso => {
-      tr += `<td style="padding:6px 4px;font-size:13px;text-align:center;color:var(--gold);font-weight:600;">${snapByDate[iso]?.[w] || 0}</td>`;
+  const tableRows = sortedUsers.map(uid => {
+    const total = Object.values(ptsByDay[uid]).reduce((a,b) => a+b, 0);
+    let tr = `<tr><td style="padding:6px 8px;font-size:13px;font-weight:500;white-space:nowrap;position:sticky;left:0;background:var(--navy2);">${uName(uid)}</td>`;
+    daysWithResults.forEach(dk => {
+      const pts = ptsByDay[uid][dk];
+      tr += `<td style="padding:6px 4px;font-size:13px;text-align:center;color:${pts>0?'var(--gold)':'rgba(255,255,255,0.25)'};font-weight:${pts>0?'700':'400'};">${pts > 0 ? '+'+pts : '—'}</td>`;
     });
-    return tr + '</tr>';
+    tr += `<td style="padding:6px 8px;font-size:14px;font-weight:900;text-align:center;color:var(--gold);">${total}</td></tr>`;
+    return tr;
   });
-  table.innerHTML = `<p style="font-size:11px;color:var(--gray);margin-bottom:8px;letter-spacing:1px;font-weight:600;">PONTUAÇÃO POR DIA</p>
-    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">${th}${rows.join('')}</table></div>`;
+
+  table.innerHTML = `<p style="font-size:11px;color:var(--gray);margin-bottom:8px;letter-spacing:1px;font-weight:600;">PONTUAÇÃO POR DIA (data real dos jogos)</p>
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">${th}${tableRows.join('')}</table></div>`;
 }
 
 // ═══════════════════════════════════════════════════════════════════
