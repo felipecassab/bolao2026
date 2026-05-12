@@ -4396,11 +4396,9 @@ function adminSelectGroup(g,btn) {
 function renderAdminThirds() {
   var container = document.getElementById('admin-thirds');
   if (!container) return;
-
   var groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
   var realP = Object.assign({}, state.results);
   if (state.results._fpAdmin) realP._fp = state.results._fpAdmin;
-
   var allThirds = groups.map(function(g) {
     var gMatches = MATCHES.filter(function(m){ return m.group===g && m.phase==='group'; });
     var played = gMatches.filter(function(m){ return state.results[m.id]; }).length;
@@ -4408,10 +4406,8 @@ function renderAdminThirds() {
     var third = s[2] || null;
     return { group: g, played: played, total: gMatches.length, third: third };
   });
-
   var completeGroups = allThirds.filter(function(x){ return x.played === 6 && x.third; });
   var incompleteGroups = allThirds.filter(function(x){ return x.played < 6; });
-
   var rankedThirds = completeGroups.map(function(x){ return Object.assign({}, x.third, {group:x.group}); });
   var fp3admin = state.results._fp3admin || [];
   rankedThirds.sort(function(a,b) {
@@ -4421,11 +4417,9 @@ function renderAdminThirds() {
     if (b.gp !== a.gp) return b.gp - a.gp;
     var iA=fp3admin.indexOf(a.name), iB=fp3admin.indexOf(b.name);
     if (iA!==-1&&iB!==-1) return iA-iB;
-    if (iA!==-1) return -1;
-    if (iB!==-1) return 1;
+    if (iA!==-1) return -1; if (iB!==-1) return 1;
     return (FIFA_RANKING[a.name]||99)-(FIFA_RANKING[b.name]||99);
   });
-
   var best8 = rankedThirds.slice(0,8);
   var best8key = best8.map(function(t){ return t.group; }).sort().join('');
   var annexCOption = null;
@@ -4433,91 +4427,34 @@ function renderAdminThirds() {
     var assignment = FIFA_THIRD_COMBINATIONS[best8key] || null;
     if (assignment) annexCOption = { key: best8key, assignment: assignment };
   }
-
   var slotIds  = ['r32_7','r32_13','r32_9','r32_2','r32_10','r32_5','r32_15','r32_8'];
-  var slotOpps = ['A',    'B',     'D',    'E',    'G',     'I',    'K',     'L'];
-
+  var slotOpps = ['A','B','D','E','G','I','K','L'];
   var html = '';
-
-  // Status banner
   var totalPlayed = completeGroups.length;
   var statusColor = totalPlayed === 12 ? 'var(--green)' : totalPlayed > 0 ? 'var(--gold)' : 'var(--gray)';
-  var statusText  = totalPlayed === 12 ? '✅ Fase de grupos concluída' :
-                    totalPlayed > 0    ? '⏳ ' + totalPlayed + '/12 grupos concluídos' :
-                                         '⏳ Nenhum grupo concluído ainda';
-  html += '<div style="margin-bottom:12px;padding:10px 14px;border-radius:var(--radius-sm);background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);">' +
-    '<span style="font-size:13px;font-weight:700;color:' + statusColor + ';">' + statusText + '</span></div>';
-
-  // Aviso grupos incompletos
+  var statusText  = totalPlayed === 12 ? '✅ Fase de grupos concluída' : totalPlayed > 0 ? '⏳ ' + totalPlayed + '/12 grupos concluídos' : '⏳ Nenhum grupo concluído ainda';
+  html += '<div style="margin-bottom:12px;padding:10px 14px;border-radius:var(--radius-sm);background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);"><span style="font-size:13px;font-weight:700;color:' + statusColor + ';">' + statusText + '</span></div>';
   if (incompleteGroups.length > 0) {
     var incList = incompleteGroups.map(function(x){ return 'Gr.' + x.group + ' (' + x.played + '/' + x.total + ')'; }).join(' · ');
-    html += '<div style="margin-bottom:12px;padding:10px 14px;border-radius:var(--radius-sm);background:rgba(245,197,24,0.07);border:1px solid rgba(245,197,24,0.25);">' +
-      '<span style="font-size:11px;font-weight:700;color:var(--gold);letter-spacing:0.5px;">⚠️ GRUPOS INCOMPLETOS: </span>' +
-      '<span style="font-size:11px;color:var(--light);">' + incList + '</span></div>';
+    html += '<div style="margin-bottom:12px;padding:10px 14px;border-radius:var(--radius-sm);background:rgba(245,197,24,0.07);border:1px solid rgba(245,197,24,0.25);"><span style="font-size:11px;font-weight:700;color:var(--gold);">⚠️ GRUPOS INCOMPLETOS: </span><span style="font-size:11px;color:var(--light);">' + incList + '</span></div>';
   }
-
-  // Tabela de todos os 12 terceiros
-  html += '<div class="card" style="margin-bottom:12px;"><div class="card-body">' +
-    '<p style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:1px;margin-bottom:12px;">CLASSIFICAÇÃO DOS TERCEIROS COLOCADOS (' + completeGroups.length + '/12 grupos)</p>' +
-    '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
-    '<tr style="border-bottom:1px solid rgba(255,255,255,0.08);">' +
-    '<th style="text-align:left;padding:4px 6px;font-size:10px;color:var(--gray);font-weight:600;">Pos</th>' +
-    '<th style="text-align:left;padding:4px 6px;font-size:10px;color:var(--gray);font-weight:600;">Gr.</th>' +
-    '<th style="text-align:left;padding:4px 6px;font-size:10px;color:var(--gray);font-weight:600;">Seleção</th>' +
-    '<th style="text-align:center;padding:4px 4px;font-size:10px;color:var(--gray);">PTS</th>' +
-    '<th style="text-align:center;padding:4px 4px;font-size:10px;color:var(--gray);">J</th>' +
-    '<th style="text-align:center;padding:4px 4px;font-size:10px;color:var(--gray);">SG</th>' +
-    '<th style="text-align:center;padding:4px 4px;font-size:10px;color:var(--gray);">GP</th>' +
-    '<th style="text-align:center;padding:4px 4px;font-size:10px;color:var(--gray);">GC</th>' +
-    '<th style="text-align:center;padding:4px 4px;font-size:10px;color:var(--gray);">Status</th>' +
-    '</tr>';
-
+  html += '<div class="card" style="margin-bottom:12px;"><div class="card-body"><p style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:1px;margin-bottom:12px;">CLASSIFICAÇÃO DOS TERCEIROS COLOCADOS (' + completeGroups.length + '/12 grupos)</p><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="border-bottom:1px solid rgba(255,255,255,0.08);"><th style="text-align:left;padding:4px 6px;font-size:10px;color:var(--gray);font-weight:600;">Pos</th><th style="text-align:left;padding:4px 6px;font-size:10px;color:var(--gray);font-weight:600;">Gr.</th><th style="text-align:left;padding:4px 6px;font-size:10px;color:var(--gray);font-weight:600;">Seleção</th><th style="text-align:center;padding:4px 4px;font-size:10px;color:var(--gray);">PTS</th><th style="text-align:center;padding:4px 4px;font-size:10px;color:var(--gray);">J</th><th style="text-align:center;padding:4px 4px;font-size:10px;color:var(--gray);">SG</th><th style="text-align:center;padding:4px 4px;font-size:10px;color:var(--gray);">GP</th><th style="text-align:center;padding:4px 4px;font-size:10px;color:var(--gray);">GC</th><th style="text-align:center;padding:4px 4px;font-size:10px;color:var(--gray);">Status</th></tr>';
   rankedThirds.forEach(function(t, i) {
     var qualified = i < 8;
     var rowBg = qualified ? 'rgba(0,200,83,0.07)' : 'transparent';
     var posStyle = qualified ? 'color:var(--green);font-weight:700;' : 'color:var(--gray);';
-    var badge = qualified
-      ? '<span style="font-size:9px;font-weight:700;color:var(--green);background:rgba(0,200,83,0.12);border:1px solid rgba(0,200,83,0.3);border-radius:50px;padding:2px 7px;">CLASSIF.</span>'
-      : '<span style="font-size:9px;font-weight:700;color:var(--red);background:rgba(244,67,54,0.1);border:1px solid rgba(244,67,54,0.3);border-radius:50px;padding:2px 7px;">ELIM.</span>';
+    var badge = qualified ? '<span style="font-size:9px;font-weight:700;color:var(--green);background:rgba(0,200,83,0.12);border:1px solid rgba(0,200,83,0.3);border-radius:50px;padding:2px 7px;">CLASSIF.</span>' : '<span style="font-size:9px;font-weight:700;color:var(--red);background:rgba(244,67,54,0.1);border:1px solid rgba(244,67,54,0.3);border-radius:50px;padding:2px 7px;">ELIM.</span>';
     var sg = t.gp - t.gc;
     var cutBorder = i === 7 ? 'border-bottom:2px dashed rgba(244,67,54,0.4);' : 'border-bottom:1px solid rgba(255,255,255,0.04);';
-    html += '<tr style="' + cutBorder + 'background:' + rowBg + ';">' +
-      '<td style="padding:5px 6px;' + posStyle + '">' + (i+1) + 'º</td>' +
-      '<td style="padding:5px 6px;"><span style="font-size:10px;font-weight:700;color:var(--gold);background:rgba(245,197,24,0.1);border-radius:4px;padding:2px 6px;">' + t.group + '</span></td>' +
-      '<td style="padding:5px 6px;">' + flagImg(t.flag||'un') + ' <span style="font-weight:500;">' + t.name + '</span></td>' +
-      '<td style="text-align:center;padding:5px 4px;font-weight:700;color:var(--gold);">' + t.pt + '</td>' +
-      '<td style="text-align:center;padding:5px 4px;color:var(--gray);">' + t.j + '</td>' +
-      '<td style="text-align:center;padding:5px 4px;" class="' + (sg>0?'sg-pos':sg<0?'sg-neg':'') + '">' + (sg>0?'+':'') + sg + '</td>' +
-      '<td style="text-align:center;padding:5px 4px;">' + t.gp + '</td>' +
-      '<td style="text-align:center;padding:5px 4px;">' + t.gc + '</td>' +
-      '<td style="text-align:center;padding:5px 4px;">' + badge + '</td>' +
-      '</tr>';
-    if (i === 7 && rankedThirds.length > 8) {
-      html += '<tr><td colspan="9" style="padding:3px 6px;text-align:center;font-size:9px;color:var(--red);letter-spacing:1px;font-weight:700;">── LINHA DE CORTE ──</td></tr>';
-    }
+    html += '<tr style="' + cutBorder + 'background:' + rowBg + ';"><td style="padding:5px 6px;' + posStyle + '">' + (i+1) + 'º</td><td style="padding:5px 6px;"><span style="font-size:10px;font-weight:700;color:var(--gold);background:rgba(245,197,24,0.1);border-radius:4px;padding:2px 6px;">' + t.group + '</span></td><td style="padding:5px 6px;">' + flagImg(t.flag||'un') + ' <span style="font-weight:500;">' + t.name + '</span></td><td style="text-align:center;padding:5px 4px;font-weight:700;color:var(--gold);">' + t.pt + '</td><td style="text-align:center;padding:5px 4px;color:var(--gray);">' + t.j + '</td><td style="text-align:center;padding:5px 4px;" class="' + (sg>0?'sg-pos':sg<0?'sg-neg':'') + '">' + (sg>0?'+':'') + sg + '</td><td style="text-align:center;padding:5px 4px;">' + t.gp + '</td><td style="text-align:center;padding:5px 4px;">' + t.gc + '</td><td style="text-align:center;padding:5px 4px;">' + badge + '</td></tr>';
+    if (i === 7 && rankedThirds.length > 8) html += '<tr><td colspan="9" style="padding:3px 6px;text-align:center;font-size:9px;color:var(--red);letter-spacing:1px;font-weight:700;">── LINHA DE CORTE ──</td></tr>';
   });
-
   allThirds.filter(function(x){ return x.played < 6; }).forEach(function(x) {
-    html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);opacity:0.45;">' +
-      '<td style="padding:5px 6px;color:var(--gray);">—</td>' +
-      '<td style="padding:5px 6px;"><span style="font-size:10px;font-weight:700;color:var(--gray);background:rgba(255,255,255,0.06);border-radius:4px;padding:2px 6px;">' + x.group + '</span></td>' +
-      '<td style="padding:5px 6px;color:var(--gray);" colspan="7">⏳ ' + x.played + '/' + x.total + ' jogos</td>' +
-      '</tr>';
+    html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);opacity:0.45;"><td style="padding:5px 6px;color:var(--gray);">—</td><td style="padding:5px 6px;"><span style="font-size:10px;font-weight:700;color:var(--gray);background:rgba(255,255,255,0.06);border-radius:4px;padding:2px 6px;">' + x.group + '</span></td><td style="padding:5px 6px;color:var(--gray);" colspan="7">⏳ ' + x.played + '/' + x.total + ' jogos</td></tr>';
   });
-
   html += '</table></div></div>';
-
-  // Combinação Anexo C
   if (annexCOption) {
-    html += '<div class="card" style="margin-bottom:12px;"><div class="card-body">' +
-      '<p style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:1px;margin-bottom:4px;">COMBINAÇÃO ATIVADA — ANEXO C</p>' +
-      '<p style="font-size:12px;color:var(--gray);margin-bottom:12px;">Grupos classificados: <span style="color:var(--light);font-weight:700;letter-spacing:2px;">' + annexCOption.key.split('').join(' ') + '</span></p>' +
-      '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
-      '<tr style="border-bottom:1px solid rgba(255,255,255,0.08);">' +
-      '<th style="text-align:left;padding:4px 6px;font-size:10px;color:var(--gray);font-weight:600;">3º Colocado</th>' +
-      '<th style="text-align:left;padding:4px 6px;font-size:10px;color:var(--gray);font-weight:600;">Seleção</th>' +
-      '<th style="text-align:left;padding:4px 6px;font-size:10px;color:var(--gray);font-weight:600;">Adversário</th>' +
-      '</tr>';
+    html += '<div class="card" style="margin-bottom:12px;"><div class="card-body"><p style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:1px;margin-bottom:4px;">COMBINAÇÃO ATIVADA — ANEXO C</p><p style="font-size:12px;color:var(--gray);margin-bottom:12px;">Grupos classificados: <span style="color:var(--light);font-weight:700;letter-spacing:2px;">' + annexCOption.key.split('').join(' ') + '</span></p><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="border-bottom:1px solid rgba(255,255,255,0.08);"><th style="text-align:left;padding:4px 6px;font-size:10px;color:var(--gray);font-weight:600;">3º Colocado</th><th style="text-align:left;padding:4px 6px;font-size:10px;color:var(--gray);font-weight:600;">Seleção</th><th style="text-align:left;padding:4px 6px;font-size:10px;color:var(--gray);font-weight:600;">Adversário (32-avos)</th></tr>';
     slotIds.forEach(function(sid, i) {
       var grp = annexCOption.assignment[i];
       var t = rankedThirds.find(function(x){ return x.group===grp; });
@@ -4526,20 +4463,12 @@ function renderAdminThirds() {
       var oppTeam = (oppStandings && oppStandings[0] && oppStandings[0].j>0) ? oppStandings[0] : null;
       var oppName = oppTeam ? oppTeam.name : '1º Gr.' + oppGrp;
       var oppFlag = oppTeam ? (oppTeam.flag||'un') : 'un';
-      html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">' +
-        '<td style="padding:6px 6px;"><span style="font-size:10px;font-weight:700;color:var(--gold);background:rgba(245,197,24,0.1);border-radius:4px;padding:2px 6px;">Gr.' + grp + '</span></td>' +
-        '<td style="padding:6px 6px;">' + (t ? flagImg(t.flag||'un') + ' <span style="font-weight:500;">' + t.name + '</span>' : '<span style="color:var(--gray);">—</span>') + '</td>' +
-        '<td style="padding:6px 6px;">' + flagImg(oppFlag) + ' <span style="font-weight:500;">' + oppName + '</span> <span style="font-size:10px;color:var(--gray);">(1º Gr.' + oppGrp + ')</span></td>' +
-        '</tr>';
+      html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:6px 6px;"><span style="font-size:10px;font-weight:700;color:var(--gold);background:rgba(245,197,24,0.1);border-radius:4px;padding:2px 6px;">Gr.' + grp + '</span></td><td style="padding:6px 6px;">' + (t ? flagImg(t.flag||'un') + ' <span style="font-weight:500;">' + t.name + '</span>' : '<span style="color:var(--gray);">—</span>') + '</td><td style="padding:6px 6px;">' + flagImg(oppFlag) + ' <span style="font-weight:500;">' + oppName + '</span> <span style="font-size:10px;color:var(--gray);">(1º Gr.' + oppGrp + ')</span></td></tr>';
     });
     html += '</table></div></div>';
   } else if (completeGroups.length > 0) {
-    html += '<div class="card" style="margin-bottom:12px;opacity:0.6;"><div class="card-body">' +
-      '<p style="font-size:11px;color:var(--gray);font-weight:700;letter-spacing:1px;">COMBINAÇÃO ANEXO C</p>' +
-      '<p style="font-size:12px;color:var(--gray);margin-top:6px;">Disponível quando os 12 grupos estiverem completos.</p>' +
-      '</div></div>';
+    html += '<div class="card" style="margin-bottom:12px;opacity:0.6;"><div class="card-body"><p style="font-size:11px;color:var(--gray);font-weight:700;letter-spacing:1px;">COMBINAÇÃO ANEXO C</p><p style="font-size:12px;color:var(--gray);margin-top:6px;">Disponível quando os 12 grupos estiverem completos.</p></div></div>';
   }
-
   container.innerHTML = html;
 }
 function renderAdminGames() {
@@ -4643,7 +4572,7 @@ function renderAdminGames() {
     // Seletor de pênaltis (mostrar se KO e placar atual empatado)
     const hVal = document.getElementById?.('ar_'+m.id+'_h')?.value ?? (res?.h??'');
     const aVal = document.getElementById?.('ar_'+m.id+'_a')?.value ?? (res?.a??'');
-    const showPen = isKO && res && isDrawResult;
+    const showPen = isKO && isDrawResult || (isKO && !res && hVal !== '' && aVal !== '' && +hVal === +aVal);
     const penSelector = showPen ? `
       <div style="margin-top:8px;padding:8px 10px;background:rgba(245,197,24,0.08);border:1px solid rgba(245,197,24,0.2);border-radius:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <span style="font-size:12px;color:var(--gold);font-weight:700;">🥅 Vencedor nos pênaltis:</span>
@@ -4765,7 +4694,15 @@ function adminCheckPen(id) {
 }
 
 async function adminSetPen(id, winner) {
-  if (!state.results[id]) return;
+  // Se o resultado ainda não foi confirmado, criá-lo com os placares atuais dos inputs
+  if (!state.results[id]) {
+    const ih = document.getElementById('ar_'+id+'_h');
+    const ia = document.getElementById('ar_'+id+'_a');
+    const hv = ih ? ih.value : '';
+    const av = ia ? ia.value : '';
+    if (hv === '' || av === '') { showToast('Preencha os placares antes de escolher o vencedor nos pênaltis', true); return; }
+    state.results[id] = { h: +hv, a: +av };
+  }
   state.results[id].pen = winner;
   await saveGlobal();
   buildResolvedTeamsFromResults();
