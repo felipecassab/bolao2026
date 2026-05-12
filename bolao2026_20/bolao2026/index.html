@@ -3736,7 +3736,7 @@ function renderEvolucao() {
   const snaps=state.snapshots, canvas=document.getElementById('evo-chart');
   const legend=document.getElementById('evo-legend'), table=document.getElementById('evo-table');
   if (!canvas) return;
-  if (snaps.length<2) { canvas.style.display='none'; legend.innerHTML=''; table.innerHTML='<div class="empty"><div class="empty-icon">📈</div><p>Disponível após 2 dias de resultados.</p></div>'; return; }
+  if (snaps.length<1) { canvas.style.display='none'; legend.innerHTML=''; table.innerHTML='<div class="empty"><div class="empty-icon">📈</div><p>Disponível após o primeiro dia de resultados.</p></div>'; return; }
   canvas.style.display='block';
   const users=Object.keys(state.users);
   const dates=snaps.map(s=>{ const[,m,d]=s.date.split('-'); return d+'/'+m; });
