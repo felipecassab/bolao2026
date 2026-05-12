@@ -5878,7 +5878,6 @@ function closeScoreModal() {
 }
 
 function openScoreModal(uid) {
-  const user = state.users[uid];
   const pal  = state.palpites[uid] || {};
   const name = uName(uid);
 
@@ -5887,162 +5886,188 @@ function openScoreModal(uid) {
   av.style.background = uColor(uid);
   av.style.color = uColorT(uid);
   av.textContent = initials(name);
-
   document.getElementById('score-modal-name').textContent = name;
 
-  // Build resolvedTeams for this user
+  // Build resolvedTeams for this user AND real teams
   buildResolvedTeams(pal);
+  buildResolvedTeamsFromResults();
 
-  // ── Pontos jogo a jogo ──────────────────────────────────────────
-  let totalPts = 0, totalAc = 0, totalEx = 0;
-  let bonusPts = 0, extraPts = 0;
-
-  const phases = [
-    { key:'group',    label:'FASE DE GRUPOS',   groups:['A','B','C','D','E','F','G','H','I','J','K','L'] },
-    { key:'knockout', label:'32-AVOS DE FINAL',  groups:['32-avos'] },
-    { key:'knockout', label:'OITAVAS DE FINAL',   groups:['Oitavas'] },
-    { key:'knockout', label:'QUARTAS DE FINAL',   groups:['Quartas'] },
-    { key:'knockout', label:'SEMIFINAIS',          groups:['Semifinais'] },
-    { key:'knockout', label:'DISPUTA 3º LUGAR',    groups:['3º Lugar'] },
-    { key:'knockout', label:'FINAL',               groups:['Final'] },
-  ];
-
-  // Phase bonus labels
-  const bonusLabel = { '32-avos':'Bônus classif. grupos', 'Oitavas':'Bônus 32-avos', 'Quartas':'Bônus oitavas', 'Semifinais':'Bônus quartas', 'Final':'Bônus semis', '3º Lugar':'', 'group':'' };
-  const bonusPerTeam = { '32-avos':2, 'Oitavas':4, 'Quartas':6, 'Semifinais':8, 'Final':12 };
-
-  let html = '';
-
-  // ── Summary grid (filled after calc) ───────────────────────────
-  // We'll do two passes: first collect data, then render
-
-  let matchRows = []; // { phase, group, m, pts, type, homeName, awayName, userH, userA, resH, resA, bonusH, bonusA }
-
-  phases.forEach(phase => {
-    phase.groups.forEach(grp => {
-      const matches = MATCHES.filter(m => m.group === grp);
-      matches.forEach(m => {
-        const res = state.results[m.id];
-        const p   = pal[m.id];
-        const rt  = resolvedTeams[m.id] || null;
-        const rtr = resolvedTeamsReal[m.id] || null;
-        const homeName = (rtr && rtr.home && rtr.home.name) ? rtr.home.name : m.home;
-        const awayName = (rtr && rtr.away && rtr.away.name) ? rtr.away.name : m.away;
-        const userHomeName = (rt && rt.home && rt.home.name) ? rt.home.name : m.home;
-        const userAwayName = (rt && rt.away && rt.away.name) ? rt.away.name : m.away;
-
-        let pts = 0, type = 'zero';
-        let bonusH = 0, bonusA = 0;
-
-        if (res && p && p.h !== undefined && p.a !== undefined) {
-          const rW = res.h > res.a ? 'H' : res.h < res.a ? 'A' : 'E';
-          const pW = +p.h > +p.a ? 'H' : +p.h < +p.a ? 'A' : 'E';
-          if (+p.h === res.h && +p.a === res.a) { pts = 5; type = 'exact'; totalEx++; totalAc++; }
-          else if (rW === pW) { pts = 3; type = 'winner'; totalAc++; }
-          else { pts = 0; type = 'zero'; }
-          totalPts += pts;
-
-          // Bonus for this match
-          if (grp === '32-avos') {
-            if (res.homeTeam && userHomeName === res.homeTeam) { bonusH = 2; bonusPts += 2; }
-            if (res.awayTeam && userAwayName === res.awayTeam) { bonusA = 2; bonusPts += 2; }
-          } else if (['Oitavas','Quartas','Semifinais','Final'].includes(grp)) {
-            const bVal = {'Oitavas':4,'Quartas':6,'Semifinais':8,'Final':12}[grp] || 0;
-            const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : 'A');
-            const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen === 'H' ? 'H' : 'A');
-            if (realWin === userWin) { bonusH = bVal; bonusPts += bVal; }
-          }
-        }
-
-        matchRows.push({ phaseLabel: phase.label, group: grp, m, pts, type, homeName, awayName, userH: p?.h, userA: p?.a, resH: res?.h, resA: res?.a, bonusH, bonusA, res, p });
-      });
-    });
-  });
-
-  // Extras
+  // ── Recalc totals cleanly ────────────────────────────────────────
+  const {pts: totalPts, ac: totalAc, ex: totalEx} = calcPts(pal);
+  const bonusPts = calcBonusPts(pal);
   const qa = pal._qa || {};
   const qaAnswers = state.results._qaAnswers || {};
-  let extraRows = [];
-  Object.entries(qa).forEach(([qid, q]) => {
-    if (q.correct === true) { extraPts += 3; totalPts += 3; }
-    extraRows.push({ qid, q, ans: qaAnswers[qid] });
-  });
-
-  // Total bonus
-  totalPts += bonusPts; // already added per match above? No — let's recalc cleanly
-  // Actually recalc cleanly to avoid double counting
-  const {pts: realTotal, ac: realAc, ex: realEx} = calcPts(pal);
-  totalPts = realTotal; totalAc = realAc; totalEx = realEx;
-  // recalc bonus/extra for display
-  bonusPts = calcBonusPts(pal);
-  extraPts = 0;
+  let extraPts = 0;
   Object.values(qa).forEach(q => { if(q.correct===true) extraPts += 3; });
-  const matchOnlyPts = totalPts - bonusPts - extraPts;
 
   document.getElementById('score-modal-sub').textContent = totalAc + ' acertos · ' + totalEx + ' exatos';
 
+  // ── Bonus labels per phase (what bonus you get for winning THAT phase) ──
+  // e.g. winning a 32-avos match = +4pts (oitavas bonus)
+  // But classifying FROM groups INTO 32-avos = +2pts per team
+  const bonusWinVal  = {'32-avos':4, 'Oitavas':6, 'Quartas':8, 'Semifinais':12, 'Final':20};
+  const bonusWinLabel= {'32-avos':'classificou para oitavas','Oitavas':'classificou para quartas','Quartas':'classificou para semis','Semifinais':'classificou para a final','Final':'CAMPEÃ'};
+
+  let html = '';
+
   // Summary grid
   html += '<div class="score-summary-grid">' +
-    '<div class="score-summary-cell"><div class="score-summary-val">' + totalPts + '</div><div class="score-summary-lbl">Total</div></div>' +
+    '<div class="score-summary-cell"><div class="score-summary-val">' + totalPts + '</div><div class="score-summary-lbl">Total de pontos</div></div>' +
     '<div class="score-summary-cell"><div class="score-summary-val" style="color:#7eb8f5;">' + bonusPts + '</div><div class="score-summary-lbl">Bônus mata-mata</div></div>' +
     '<div class="score-summary-cell"><div class="score-summary-val" style="color:var(--green);">' + extraPts + '</div><div class="score-summary-lbl">Extras</div></div>' +
     '</div>';
 
-  // Render by phase
-  let currentPhase = '';
-  matchRows.forEach(row => {
-    const hasResult = row.res !== undefined && row.res !== null;
-    if (!hasResult) return; // skip matches without result
+  const phases = [
+    { label:'FASE DE GRUPOS',  groups:['A','B','C','D','E','F','G','H','I','J','K','L'] },
+    { label:'32-AVOS DE FINAL', groups:['32-avos'] },
+    { label:'OITAVAS DE FINAL', groups:['Oitavas'] },
+    { label:'QUARTAS DE FINAL', groups:['Quartas'] },
+    { label:'SEMIFINAIS',       groups:['Semifinais'] },
+    { label:'DISPUTA 3º LUGAR', groups:['3º Lugar'] },
+    { label:'FINAL',            groups:['Final'] },
+  ];
 
-    if (row.phaseLabel !== currentPhase) {
-      currentPhase = row.phaseLabel;
-      const phasePts = matchRows.filter(r => r.phaseLabel === currentPhase && r.res).reduce((s,r) => s + r.pts + r.bonusH + r.bonusA, 0);
-      html += '<div class="score-phase-title">' + currentPhase + '</div>';
-    }
+  phases.forEach(phase => {
+    let phaseHtml = '';
 
-    const ptsClass = row.type === 'exact' ? 'score-pts-exact' : row.type === 'winner' ? 'score-pts-winner' : 'score-pts-zero';
-    const userScore = (row.userH !== undefined && row.userA !== undefined) ? row.userH + ':' + row.userA : '—';
-    const realScore = (row.resH !== undefined && row.resA !== undefined) ? row.resH + ':' + row.resA : '—';
+    phase.groups.forEach(grp => {
+      MATCHES.filter(m => m.group === grp).forEach(m => {
+        const res = state.results[m.id];
+        if (!res) return;
+        const p   = pal[m.id];
+        const rtr = resolvedTeamsReal[m.id] || null;
+        const rt  = resolvedTeams[m.id] || null;
 
-    const homeFlag = (resolvedTeamsReal[row.m.id]?.home?.flag) || row.m.fH;
-    const awayFlag = (resolvedTeamsReal[row.m.id]?.away?.flag) || row.m.fA;
+        // Real team names
+        const homeName = (rtr && rtr.home && rtr.home.name) ? rtr.home.name : m.home;
+        const awayName = (rtr && rtr.away && rtr.away.name) ? rtr.away.name : m.away;
+        const homeFlag = (rtr && rtr.home && rtr.home.flag) ? rtr.home.flag : m.fH;
+        const awayFlag = (rtr && rtr.away && rtr.away.flag) ? rtr.away.flag : m.fA;
 
-    html += '<div class="score-match-row">' +
-      '<span class="score-pts-badge ' + ptsClass + '">' + (row.pts > 0 ? '+' + row.pts : '0') + '</span>' +
-      '<img src="https://flagcdn.com/w20/' + homeFlag + '.png" style="width:16px;height:11px;border-radius:1px;flex-shrink:0;" onerror="this.style.display=&quot;none&quot;">' +
-      '<span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--light);">' + row.homeName + '</span>' +
-      '<span style="font-family:var(--font-cond),sans-serif;font-size:13px;color:var(--gray);margin:0 2px;">×</span>' +
-      '<span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--light);text-align:right;">' + row.awayName + '</span>' +
-      '<img src="https://flagcdn.com/w20/' + awayFlag + '.png" style="width:16px;height:11px;border-radius:1px;flex-shrink:0;" onerror="this.style.display=&quot;none&quot;">' +
-      '<span style="font-size:11px;color:var(--gray);margin:0 4px;white-space:nowrap;">Palp:<b style="color:var(--light);">' + userScore + '</b></span>' +
-      '<span style="font-size:11px;color:var(--gray);white-space:nowrap;">Real:<b style="color:var(--light);">' + realScore + '</b></span>' +
-      '</div>';
+        // User predicted team names (from their bracket)
+        const userHomeName = (rt && rt.home && rt.home.name) ? rt.home.name : m.home;
+        const userAwayName = (rt && rt.away && rt.away.name) ? rt.away.name : m.away;
+        const userHomeFlag = (rt && rt.home && rt.home.flag) ? rt.home.flag : m.fH;
+        const userAwayFlag = (rt && rt.away && rt.away.flag) ? rt.away.flag : m.fA;
 
-    // Bonus row
-    if (row.bonusH > 0 || row.bonusA > 0) {
-      const bTotal = row.bonusH + row.bonusA;
-      html += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0 5px 38px;border-bottom:1px solid rgba(255,255,255,0.04);">' +
-        '<span class="score-pts-badge score-pts-bonus">+' + bTotal + '</span>' +
-        '<span style="font-size:11px;color:#7eb8f5;">bônus classificação</span>' +
-        '</div>';
+        // ── Match points ─────────────────────────────────────────
+        let pts = 0, type = 'zero';
+        const userScore = (p && p.h !== undefined && p.a !== undefined) ? p.h + ':' + p.a : '—';
+        const realScore = res.h + ':' + res.a;
+
+        if (p && p.h !== undefined && p.a !== undefined) {
+          const rW = res.h > res.a ? 'H' : res.h < res.a ? 'A' : 'E';
+          const pW = +p.h > +p.a ? 'H' : +p.h < +p.a ? 'A' : 'E';
+          if (+p.h === res.h && +p.a === res.a) { pts = 5; type = 'exact'; }
+          else if (rW === pW) { pts = 3; type = 'winner'; }
+        }
+
+        const ptsClass = type === 'exact' ? 'score-pts-exact' : type === 'winner' ? 'score-pts-winner' : 'score-pts-zero';
+
+        phaseHtml += '<div class="score-match-row">' +
+          '<span class="score-pts-badge ' + ptsClass + '">' + (pts > 0 ? '+' + pts : '0') + '</span>' +
+          '<img src="https://flagcdn.com/w20/' + homeFlag + '.png" style="width:16px;height:11px;border-radius:1px;flex-shrink:0;" onerror="this.style.display=&quot;none&quot;">' +
+          '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--light);">' + homeName + '</span>' +
+          '<span style="font-family:var(--font-cond),sans-serif;font-size:13px;color:var(--gray);margin:0 2px;">×</span>' +
+          '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--light);text-align:right;">' + awayName + '</span>' +
+          '<img src="https://flagcdn.com/w20/' + awayFlag + '.png" style="width:16px;height:11px;border-radius:1px;flex-shrink:0;" onerror="this.style.display=&quot;none&quot;">' +
+          '<span style="font-size:11px;color:var(--gray);margin:0 4px;white-space:nowrap;">Palp:<b style="color:var(--light);">' + userScore + '</b></span>' +
+          '<span style="font-size:11px;color:var(--gray);white-space:nowrap;">Real:<b style="color:var(--light);">' + realScore + '</b></span>' +
+          '</div>';
+
+        // ── Bonus rows ───────────────────────────────────────────
+        // 32-avos: +2 per team that the user correctly predicted would classify from groups
+        if (grp === '32-avos') {
+          var bonusItems = [];
+          if (res.homeTeam && userHomeName === res.homeTeam)
+            bonusItems.push({ pts:2, flag:userHomeFlag, team:userHomeName, label:'classificou para 32-avos' });
+          if (res.awayTeam && userAwayName === res.awayTeam)
+            bonusItems.push({ pts:2, flag:userAwayFlag, team:userAwayName, label:'classificou para 32-avos' });
+          bonusItems.forEach(function(b) {
+            phaseHtml += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0 4px 6px;border-bottom:1px solid rgba(255,255,255,0.03);background:rgba(126,184,245,0.04);">' +
+              '<span style="width:32px;"></span>' +
+              '<span class="score-pts-badge score-pts-bonus">+' + b.pts + '</span>' +
+              '<img src="https://flagcdn.com/w20/' + b.flag + '.png" style="width:14px;height:10px;border-radius:1px;" onerror="this.style.display=&quot;none&quot;">' +
+              '<span style="font-size:11px;color:#7eb8f5;flex:1;">' + b.team + ' <span style="opacity:0.7;">— ' + b.label + '</span></span>' +
+              '</div>';
+          });
+        }
+
+        // Oitavas/Quartas/Semis/Final: bonus for correctly predicting the winner advancing
+        if (['Oitavas','Quartas','Semifinais','Final'].includes(grp) && p && p.h !== undefined) {
+          const bVal   = {'Oitavas':4,'Quartas':6,'Semifinais':8,'Final':12}[grp];
+          const bLabel = bonusWinLabel[grp];
+          const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : 'A');
+          const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen === 'H' ? 'H' : 'A');
+          if (realWin === userWin) {
+            const winName = realWin === 'H' ? homeName : awayName;
+            const winFlag = realWin === 'H' ? homeFlag : awayFlag;
+            phaseHtml += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0 4px 6px;border-bottom:1px solid rgba(255,255,255,0.03);background:rgba(126,184,245,0.04);">' +
+              '<span style="width:32px;"></span>' +
+              '<span class="score-pts-badge score-pts-bonus">+' + bVal + '</span>' +
+              '<img src="https://flagcdn.com/w20/' + winFlag + '.png" style="width:14px;height:10px;border-radius:1px;" onerror="this.style.display=&quot;none&quot;">' +
+              '<span style="font-size:11px;color:#7eb8f5;flex:1;">' + winName + ' <span style="opacity:0.7;">— ' + bLabel + '</span></span>' +
+              '</div>';
+          }
+          // Bonus for campeã (+20) shown separately
+          if (grp === 'Final') {
+            const realWin20 = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : 'A');
+            const userWin20 = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen === 'H' ? 'H' : 'A');
+            if (realWin20 === userWin20) {
+              const champName = realWin20 === 'H' ? homeName : awayName;
+              const champFlag = realWin20 === 'H' ? homeFlag : awayFlag;
+              phaseHtml += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0 4px 6px;border-bottom:1px solid rgba(255,255,255,0.03);background:rgba(245,197,24,0.06);">' +
+                '<span style="width:32px;"></span>' +
+                '<span class="score-pts-badge score-pts-exact">+20</span>' +
+                '<img src="https://flagcdn.com/w20/' + champFlag + '.png" style="width:14px;height:10px;border-radius:1px;" onerror="this.style.display=&quot;none&quot;">' +
+                '<span style="font-size:11px;color:var(--gold);flex:1;">🏆 ' + champName + ' <span style="opacity:0.7;">— acertou a campeã</span></span>' +
+                '</div>';
+            }
+          }
+        }
+      });
+    });
+
+    if (phaseHtml) {
+      html += '<div class="score-phase-title">' + phase.label + '</div>' + phaseHtml;
     }
   });
 
-  // Extras
-  if (extraRows.length > 0) {
-    html += '<div class="score-phase-title">PERGUNTAS EXTRAS</div>';
-    extraRows.forEach(row => {
-      if (!row.ans) return;
-      const correct = row.q.correct === true;
-      html += '<div class="score-match-row">' +
-        '<span class="score-pts-badge ' + (correct ? 'score-pts-extra' : 'score-pts-zero') + '">' + (correct ? '+3' : '0') + '</span>' +
-        '<span style="flex:1;color:var(--light);font-size:11px;">' + (row.ans.correct || '?') + '</span>' +
-        '<span style="font-size:11px;color:var(--gray);">Resp: <b style="color:var(--light);">' + (row.q.answer || '—') + '</b></span>' +
-        '</div>';
-    });
-  }
+  // ── Extras ───────────────────────────────────────────────────────
+  // Iterate over all 11 questions, not just the ones the user answered
+  let extrasHtml = '';
+  EXTRA_QS.forEach(function(q) {
+    const userQ   = qa[q.id];           // user's answer object (may be undefined)
+    const ans     = qaAnswers[q.id];    // admin's correction (may be undefined)
+    const userAns = userQ ? (userQ.answer || '—') : '—';
+    const correct = userQ && userQ.correct === true;
+    const graded  = userQ && userQ.correct !== null && userQ.correct !== undefined;
+    const corrAns = ans ? (ans.correct || '') : '';
 
-  if (!html.includes('score-phase-title') && extraRows.length === 0) {
+    // Badge: green +3 if correct, red 0 if graded wrong, gray ? if not graded yet
+    var badgeClass, badgeText;
+    if (correct)        { badgeClass = 'score-pts-extra'; badgeText = '+3'; }
+    else if (graded)    { badgeClass = 'score-pts-zero';  badgeText = '0'; }
+    else                { badgeClass = 'score-pts-zero';  badgeText = '?'; }
+
+    extrasHtml += '<div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);">' +
+      // Question label + text
+      '<div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:4px;">' +
+        '<span class="score-pts-badge ' + badgeClass + '" style="flex-shrink:0;margin-top:1px;">' + badgeText + '</span>' +
+        '<span style="font-size:11px;color:var(--gray);flex:1;line-height:1.4;">' +
+          '<b style="color:var(--gold);">' + q.label + '.</b> ' + q.q +
+        '</span>' +
+      '</div>' +
+      // User answer + correct answer
+      '<div style="display:flex;gap:12px;padding-left:38px;flex-wrap:wrap;">' +
+        '<span style="font-size:11px;color:var(--gray);">Resp: <b style="color:' + (correct ? 'var(--green)' : graded ? 'var(--red)' : 'var(--light)') + ';">' + userAns + '</b></span>' +
+        (corrAns ? '<span style="font-size:11px;color:var(--gray);">Gabarito: <b style="color:var(--green);">' + corrAns + '</b></span>' : '') +
+      '</div>' +
+    '</div>';
+  });
+  if (extrasHtml) html += '<div class="score-phase-title">PERGUNTAS EXTRAS</div>' + extrasHtml;
+
+  if (!html.includes('score-phase-title')) {
     html += '<div class="empty" style="padding:30px 0;"><div class="empty-icon">📊</div><p>Nenhum resultado registrado ainda.</p></div>';
   }
 
