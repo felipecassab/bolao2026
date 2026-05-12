@@ -2722,15 +2722,25 @@ function calcMaxPts(userPalpites) {
   // 4. Extras
   // - correct === true  → já ganhou, soma 3
   // - correct === false → já errou, soma 0
-  // - correct === null/undefined E respondeu → admin ainda não corrigiu, assume 3 como possível
-  // - não respondeu (sem qa) → não vai ganhar, soma 0
+  // - gabarito definido + score === 0 → claramente errado, soma 0
+  // - gabarito definido + score > 0 → admin ainda não confirmou mas parece certo, soma 3
+  // - sem gabarito + respondeu → admin ainda não processou, soma 3 (melhor caso)
+  // - não respondeu → soma 0
+  const qaAnswersMax = (state.results && state.results._qaAnswers) || {};
   EXTRA_QS.forEach(q => {
     const qa = userPalpites?._qa?.[q.id];
     const answered = qa && qa.answer && qa.answer.trim() !== '';
-    if (qa?.correct === true) maxPts += 3;
-    else if (qa?.correct === false) maxPts += 0;
-    else if (answered) maxPts += 3; // respondeu mas admin ainda não corrigiu
-    // else: não respondeu → 0
+    if (!answered) return; // não respondeu → 0
+    if (qa.correct === true)  { maxPts += 3; return; }
+    if (qa.correct === false) { return; } // já marcado errado
+    // correct === null: ainda não confirmado pelo admin
+    // Se há gabarito, usa matchScore para ver se há chance
+    const ansObj = qaAnswersMax[q.id];
+    if (ansObj && ansObj.correct) {
+      const score = matchScore(qa.answer, ansObj.correct);
+      if (score === 0) return; // gabarito existe e resposta está claramente errada
+    }
+    maxPts += 3; // sem gabarito ou com chance de acerto
   });
 
   return maxPts;
