@@ -75,9 +75,9 @@ body{display:flex;flex-direction:column}
 .tab-btn{padding:7px 14px;border-radius:50px;font-size:13px;font-weight:500;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--gray);cursor:pointer}
 .tab-btn.active{background:var(--gold);color:var(--navy);border-color:var(--gold);font-weight:700}
 /* METRICS */
-.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
 .metric{background:var(--card);border-radius:var(--radius-sm);padding:12px 8px;text-align:center;border:1px solid rgba(255,255,255,0.07)}
-.metric-val{font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:700;color:var(--gold)}
+.metric-val{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;color:var(--gold)}
 .metric-label{font-size:11px;color:var(--gray);margin-top:2px}
 /* RANKING */
 .rank-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05)}
@@ -2720,11 +2720,17 @@ function calcMaxPts(userPalpites) {
   if (finalMatch && !state.results[finalMatch.id]) maxPts += 20;
 
   // 4. Extras
+  // - correct === true  → já ganhou, soma 3
+  // - correct === false → já errou, soma 0
+  // - correct === null/undefined E respondeu → admin ainda não corrigiu, assume 3 como possível
+  // - não respondeu (sem qa) → não vai ganhar, soma 0
   EXTRA_QS.forEach(q => {
     const qa = userPalpites?._qa?.[q.id];
+    const answered = qa && qa.answer && qa.answer.trim() !== '';
     if (qa?.correct === true) maxPts += 3;
     else if (qa?.correct === false) maxPts += 0;
-    else maxPts += 3;
+    else if (answered) maxPts += 3; // respondeu mas admin ainda não corrigiu
+    // else: não respondeu → 0
   });
 
   return maxPts;
@@ -3729,10 +3735,14 @@ function renderRanking() {
   const names = Object.keys(state.users).filter(u => !state.users[u]._deleted);
   const scores = names.map(u=>({u,...calcPts(state.palpites[u])})).sort((a,b)=>b.pts-a.pts);
   const done = MATCHES.filter(m=>state.results[m.id]).length;
+  const qaAnswers = state.results._qaAnswers || {};
+  const extrasCorrigidas = EXTRA_QS.filter(q => qaAnswers[q.id] && qaAnswers[q.id].correct).length;
+  const extrasTotal = EXTRA_QS.length;
   document.getElementById('metrics').innerHTML = `
     <div class="metric"><div class="metric-val">${names.length}</div><div class="metric-label">Participantes</div></div>
     <div class="metric"><div class="metric-val">${done}</div><div class="metric-label">Encerrados</div></div>
-    <div class="metric"><div class="metric-val">${scores[0]?.pts||0}</div><div class="metric-label">Líder (pts)</div></div>`;
+    <div class="metric"><div class="metric-val">${scores[0]?.pts||0}</div><div class="metric-label">Líder (pts)</div></div>
+    <div class="metric"><div class="metric-val" style="color:${extrasCorrigidas===extrasTotal?'var(--green)':'var(--gold)'};">${extrasCorrigidas}<span style="font-size:14px;font-weight:500;color:var(--gray);">/${extrasTotal}</span></div><div class="metric-label">Extras corrigidas</div></div>`;
   if (!scores.length) { document.getElementById('ranking-list').innerHTML='<div class="empty"><div class="empty-icon">🏆</div><p>Nenhum participante ainda</p></div>'; return; }
   const canView = isPastDeadline();
   document.getElementById('ranking-list').innerHTML = scores.map((s,i)=>{
@@ -6003,9 +6013,14 @@ function openScoreModal(uid) {
         }
 
         // Oitavas/Quartas/Semis/Final: bonus for correctly predicting the winner advancing
+        // Bônus é pela classificação NA fase atual (não para a próxima)
+        // Oitavas → +4 (classificou nas oitavas)
+        // Quartas → +6 (classificou nas quartas)
+        // Semifinais → +8 (classificou nas semis)
+        // Final → +12 (classificou na final) + +20 (acertou a campeã)
         if (['Oitavas','Quartas','Semifinais','Final'].includes(grp) && p && p.h !== undefined) {
           const bVal   = {'Oitavas':4,'Quartas':6,'Semifinais':8,'Final':12}[grp];
-          const bLabel = bonusWinLabel[grp];
+          const bLabel = {'Oitavas':'classificou nas oitavas','Quartas':'classificou nas quartas','Semifinais':'classificou nas semis','Final':'classificou na final'}[grp];
           const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : 'A');
           const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen === 'H' ? 'H' : 'A');
           if (realWin === userWin) {
@@ -6017,19 +6032,13 @@ function openScoreModal(uid) {
               '<img src="https://flagcdn.com/w20/' + winFlag + '.png" style="width:14px;height:10px;border-radius:1px;" onerror="this.style.display=&quot;none&quot;">' +
               '<span style="font-size:11px;color:#7eb8f5;flex:1;">' + winName + ' <span style="opacity:0.7;">— ' + bLabel + '</span></span>' +
               '</div>';
-          }
-          // Bonus for campeã (+20) shown separately
-          if (grp === 'Final') {
-            const realWin20 = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : 'A');
-            const userWin20 = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen === 'H' ? 'H' : 'A');
-            if (realWin20 === userWin20) {
-              const champName = realWin20 === 'H' ? homeName : awayName;
-              const champFlag = realWin20 === 'H' ? homeFlag : awayFlag;
+            // Bônus campeã (+20) na Final
+            if (grp === 'Final') {
               phaseHtml += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0 4px 6px;border-bottom:1px solid rgba(255,255,255,0.03);background:rgba(245,197,24,0.06);">' +
                 '<span style="width:32px;"></span>' +
                 '<span class="score-pts-badge score-pts-exact">+20</span>' +
-                '<img src="https://flagcdn.com/w20/' + champFlag + '.png" style="width:14px;height:10px;border-radius:1px;" onerror="this.style.display=&quot;none&quot;">' +
-                '<span style="font-size:11px;color:var(--gold);flex:1;">🏆 ' + champName + ' <span style="opacity:0.7;">— acertou a campeã</span></span>' +
+                '<img src="https://flagcdn.com/w20/' + winFlag + '.png" style="width:14px;height:10px;border-radius:1px;" onerror="this.style.display=&quot;none&quot;">' +
+                '<span style="font-size:11px;color:var(--gold);flex:1;">🏆 ' + winName + ' <span style="opacity:0.7;">— acertou a campeã</span></span>' +
                 '</div>';
             }
           }
