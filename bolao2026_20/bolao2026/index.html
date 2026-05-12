@@ -763,8 +763,18 @@ body{display:flex;flex-direction:column}
 // ═══════════════════════════════════════════════════════════════════
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════════
-const COLORS = ['#1a6ef5','#e040fb','#00bfa5','#ff6d00','#00c853','#ffab00','#f44336'];
-const COLORS_T = ['#a8c8ff','#f3b3ff','#80dfcf','#ffbc8a','#80e2a7','#ffd680','#ff9a96'];
+const COLORS = [
+  '#1a6ef5','#e040fb','#00bfa5','#ff6d00','#00c853',
+  '#ffab00','#f44336','#00b0ff','#76ff03','#ff4081',
+  '#18ffff','#ffea00','#d500f9','#ff6e40','#69f0ae',
+  '#40c4ff','#ea80fc','#ccff90','#ff9100','#84ffff'
+];
+const COLORS_T = [
+  '#a8c8ff','#f3b3ff','#80dfcf','#ffbc8a','#80e2a7',
+  '#ffd680','#ff9a96','#80d8ff','#ccff90','#ff80ab',
+  '#84ffff','#ffff8d','#ea80fc','#ffbe9f','#b9f6ca',
+  '#b3e5fc','#f8bbff','#f4ff81','#ffd180','#e0f7fa'
+];
 const DEADLINE = new Date('2026-06-11T02:59:00Z');
 const ADMIN_PWD = 'aaa2026';
 const PTS_EXACT = 5, PTS_WINNER = 3;
@@ -3913,15 +3923,21 @@ function renderEvolucao() {
     const [,m,d] = dk.split('-');
     th += `<th style="padding:6px 6px;font-size:11px;color:var(--gray);text-align:center;min-width:44px;">${d}/${m}</th>`;
   });
+  th += '<th style="padding:6px 8px;font-size:11px;color:var(--green);text-align:center;min-width:52px;">Extras</th>';
   th += '<th style="padding:6px 8px;font-size:11px;color:var(--gold);text-align:center;">Total</th></tr>';
 
   const tableRows = sortedUsers.map(uid => {
-    const total = Object.values(ptsByDay[uid]).reduce((a,b) => a+b, 0);
+    const dayTotal = Object.values(ptsByDay[uid]).reduce((a,b) => a+b, 0);
+    // Pontos extras já confirmados pelo admin
+    const qa = state.palpites[uid]?._qa || {};
+    const extrasTotal = EXTRA_QS.reduce((sum, q) => sum + (qa[q.id]?.correct === true ? 3 : 0), 0);
+    const total = dayTotal + extrasTotal;
     let tr = `<tr><td style="padding:6px 8px;font-size:13px;font-weight:500;white-space:nowrap;position:sticky;left:0;background:var(--navy2);">${uName(uid)}</td>`;
     daysWithResults.forEach(dk => {
       const pts = ptsByDay[uid][dk];
       tr += `<td style="padding:6px 4px;font-size:13px;text-align:center;color:${pts>0?'var(--gold)':'rgba(255,255,255,0.25)'};font-weight:${pts>0?'700':'400'};">${pts > 0 ? '+'+pts : '—'}</td>`;
     });
+    tr += `<td style="padding:6px 8px;font-size:13px;text-align:center;color:${extrasTotal>0?'var(--green)':'rgba(255,255,255,0.25)'};font-weight:${extrasTotal>0?'700':'400'};">${extrasTotal > 0 ? '+'+extrasTotal : '—'}</td>`;
     tr += `<td style="padding:6px 8px;font-size:14px;font-weight:900;text-align:center;color:var(--gold);">${total}</td></tr>`;
     return tr;
   });
