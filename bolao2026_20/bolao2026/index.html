@@ -185,6 +185,8 @@ body{display:flex;flex-direction:column}
 .fab-draft:active { opacity: 0.8; }
 /* GROUP STANDINGS */
 .classif-wrap{background:var(--card2);border-radius:var(--radius-sm);padding:8px 10px;margin-top:8px;}
+.sg-pos{color:var(--green);}
+.sg-neg{color:var(--red);}
 .classif-title{font-size:10px;font-weight:700;color:var(--gold);letter-spacing:1.5px;margin-bottom:4px;font-family:'Barlow Condensed',sans-serif;}
 .classif-table{width:100%;border-collapse:collapse;font-size:12px;}
 .classif-table th{font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;color:var(--gray);padding:4px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.08);}
@@ -473,9 +475,6 @@ body{display:flex;flex-direction:column}
       <div class="tabs" id="admin-tabs" style="overflow-x:auto;flex-wrap:nowrap;"></div>
       <div id="admin-fp3-block"></div>
       <div id="admin-games"></div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px;">
-        <p style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:1px;">PERGUNTAS EXTRAS</p>
-      </div>
       <div class="card"><div class="card-body" id="admin-extras" style="display:none;"></div></div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px;">
         <p style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:1px;">PARTICIPANTES</p>
@@ -2639,7 +2638,7 @@ function renderAll() {
   if (!hasFilledInput) renderMatches();
   renderRanking();
   renderHistorico();
-  renderAdminExtras();
+  if (adminGroup === '__extras__') renderAdminExtras();
   updateDeadlinePill();
   updateAdminBadge();
 }
@@ -3791,14 +3790,38 @@ function renderEvolucao() {
     });
   });
 
-  // Séries acumuladas para o gráfico
+  // Pontos de bônus por classificação para cada usuário (usando calcBonusPts)
+  function getBonusPts(uid) {
+    const p = state.palpites[uid] || {};
+    // calcBonusPts usa resolvedTeams global — precisamos construir para este usuário
+    const savedResolved = resolvedTeams;
+    buildResolvedTeams(p);
+    const b = calcBonusPts(p);
+    // Restaurar resolvedTeams do estado atual
+    buildResolvedTeams(state.palpites[state.user] || {});
+    return b;
+  }
+
+  // Pontos extras confirmados pelo admin para cada usuário
+  function getExtrasPts(uid) {
+    const qa = state.palpites[uid]?._qa || {};
+    return EXTRA_QS.reduce((sum, q) => sum + (qa[q.id]?.correct === true ? 3 : 0), 0);
+  }
+
+  // Séries acumuladas para o gráfico (jogos + bônus + extras)
   const series = users.map(uid => {
     let acc = 0;
     const data = daysWithResults.map(dk => {
       acc += ptsByDay[uid][dk];
       return acc;
     });
-    return {uid, name: uName(uid), color: uColor(uid), data};
+    // Adicionar bônus e extras ao último valor (acumulado total)
+    const bonus = getBonusPts(uid);
+    const extras = getExtrasPts(uid);
+    const dataWithAll = data.map((v, i) => i === data.length - 1 ? v + bonus + extras : v + bonus + extras);
+    // Na verdade, bônus e extras são totais — adicionar ao acumulado de cada ponto
+    const dataFinal = data.map(v => v + bonus + extras);
+    return {uid, name: uName(uid), color: uColor(uid), data: dataFinal, bonus, extras};
   });
 
   // Eixo X fixo: 11/06 a 19/07 (39 dias)
@@ -3923,21 +3946,22 @@ function renderEvolucao() {
     const [,m,d] = dk.split('-');
     th += `<th style="padding:6px 6px;font-size:11px;color:var(--gray);text-align:center;min-width:44px;">${d}/${m}</th>`;
   });
+  th += '<th style="padding:6px 8px;font-size:11px;color:#7eb8f5;text-align:center;min-width:52px;">Bônus</th>';
   th += '<th style="padding:6px 8px;font-size:11px;color:var(--green);text-align:center;min-width:52px;">Extras</th>';
   th += '<th style="padding:6px 8px;font-size:11px;color:var(--gold);text-align:center;">Total</th></tr>';
 
   const tableRows = sortedUsers.map(uid => {
     const dayTotal = Object.values(ptsByDay[uid]).reduce((a,b) => a+b, 0);
-    // Pontos extras já confirmados pelo admin
-    const qa = state.palpites[uid]?._qa || {};
-    const extrasTotal = EXTRA_QS.reduce((sum, q) => sum + (qa[q.id]?.correct === true ? 3 : 0), 0);
-    const total = dayTotal + extrasTotal;
+    const bonus = getBonusPts(uid);
+    const extras = getExtrasPts(uid);
+    const total = dayTotal + bonus + extras;
     let tr = `<tr><td style="padding:6px 8px;font-size:13px;font-weight:500;white-space:nowrap;position:sticky;left:0;background:var(--navy2);">${uName(uid)}</td>`;
     daysWithResults.forEach(dk => {
       const pts = ptsByDay[uid][dk];
       tr += `<td style="padding:6px 4px;font-size:13px;text-align:center;color:${pts>0?'var(--gold)':'rgba(255,255,255,0.25)'};font-weight:${pts>0?'700':'400'};">${pts > 0 ? '+'+pts : '—'}</td>`;
     });
-    tr += `<td style="padding:6px 8px;font-size:13px;text-align:center;color:${extrasTotal>0?'var(--green)':'rgba(255,255,255,0.25)'};font-weight:${extrasTotal>0?'700':'400'};">${extrasTotal > 0 ? '+'+extrasTotal : '—'}</td>`;
+    tr += `<td style="padding:6px 8px;font-size:13px;text-align:center;color:${bonus>0?'#7eb8f5':'rgba(255,255,255,0.25)'};font-weight:${bonus>0?'700':'400'};">${bonus > 0 ? '+'+bonus : '—'}</td>`;
+    tr += `<td style="padding:6px 8px;font-size:13px;text-align:center;color:${extras>0?'var(--green)':'rgba(255,255,255,0.25)'};font-weight:${extras>0?'700':'400'};">${extras > 0 ? '+'+extras : '—'}</td>`;
     tr += `<td style="padding:6px 8px;font-size:14px;font-weight:900;text-align:center;color:var(--gold);">${total}</td></tr>`;
     return tr;
   });
@@ -4052,7 +4076,7 @@ function adminLogin() {
     localStorage.setItem('bolao_admin','true');
     document.getElementById('admin-login-view').style.display='none';
     document.getElementById('admin-main-view').style.display='block';
-    renderAdminGames(); renderAdminTabs(); renderAdminFP3Block(); renderAdminExtras(); renderAdminParticipants();
+    renderAdminGames(); renderAdminTabs(); renderAdminParticipants();
   } else { showToast('Senha incorreta',true); document.getElementById('admin-pwd').value=''; }
 }
 function confirmLogout() { doLogout(); }
@@ -4225,7 +4249,7 @@ function adminLogout() {
 }
 function renderAdminPage() {
   if (!adminAuthed) { document.getElementById('admin-login-view').style.display='block'; document.getElementById('admin-main-view').style.display='none'; }
-  else { renderAdminTabs(); renderAdminGames(); renderAdminFP3Block(); renderAdminExtras(); renderAdminParticipants(); }
+  else { renderAdminTabs(); renderAdminGames(); renderAdminFP3Block(); renderAdminParticipants(); }
 }
 function getThirdsFPNeededAdmin() {
   var results = state.results;
@@ -4470,6 +4494,51 @@ function renderAdminGames() {
       <div id="admin-pen-${m.id}"></div>
     </div></div>`;
   }).join('');
+
+  // Tabela de classificação real após todos os 6 jogos do grupo
+  if (isGroupPhase) {
+    const playedCount = games.filter(m => state.results[m.id]).length;
+    if (playedCount > 0) {
+      const realP = Object.assign({}, state.results);
+      if (state.results._fpAdmin) realP._fp = state.results._fpAdmin;
+      const standings = calcGroupStandings(adminGroup, realP);
+      const flags = {};
+      games.forEach(m => { flags[m.home] = m.fH; flags[m.away] = m.fA; });
+      let tableHtml = `<div class="card" style="margin-top:12px;"><div class="card-body">
+        <p style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:1px;margin-bottom:10px;">CLASSIFICAÇÃO — GRUPO ${adminGroup} (${playedCount}/6 jogos)</p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.08);">
+            <th style="text-align:left;padding:4px 6px;font-size:11px;color:var(--gray);font-weight:600;">Seleção</th>
+            <th style="text-align:center;padding:4px 4px;font-size:11px;color:var(--gray);">PTS</th>
+            <th style="text-align:center;padding:4px 4px;font-size:11px;color:var(--gray);">J</th>
+            <th style="text-align:center;padding:4px 4px;font-size:11px;color:var(--gray);">V</th>
+            <th style="text-align:center;padding:4px 4px;font-size:11px;color:var(--gray);">E</th>
+            <th style="text-align:center;padding:4px 4px;font-size:11px;color:var(--gray);">D</th>
+            <th style="text-align:center;padding:4px 4px;font-size:11px;color:var(--gray);">GP</th>
+            <th style="text-align:center;padding:4px 4px;font-size:11px;color:var(--gray);">GC</th>
+            <th style="text-align:center;padding:4px 4px;font-size:11px;color:var(--gray);">SG</th>
+          </tr>`;
+      standings.forEach((t, i) => {
+        const qualified = playedCount === 6 && i < 2;
+        const third = playedCount === 6 && i === 2;
+        const rowBg = qualified ? 'rgba(0,200,83,0.07)' : third ? 'rgba(245,197,24,0.05)' : 'transparent';
+        const pos = playedCount === 6 ? (qualified ? `<span style="color:var(--green);font-weight:700;">${i+1}º✓</span>` : third ? `<span style="color:var(--gold);">${i+1}º</span>` : `<span style="color:var(--gray);">${i+1}º</span>`) : `<span style="color:var(--gray);">${i+1}º</span>`;
+        tableHtml += `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);background:${rowBg};">
+          <td style="padding:6px 6px;display:flex;align-items:center;gap:6px;">${pos} ${flagImg(flags[t.name]||'un')} <span style="font-weight:500;">${t.name}</span></td>
+          <td style="text-align:center;padding:6px 4px;font-weight:700;color:var(--gold);">${t.pt}</td>
+          <td style="text-align:center;padding:6px 4px;color:var(--gray);">${t.j}</td>
+          <td style="text-align:center;padding:6px 4px;">${t.w}</td>
+          <td style="text-align:center;padding:6px 4px;">${t.d}</td>
+          <td style="text-align:center;padding:6px 4px;">${t.l}</td>
+          <td style="text-align:center;padding:6px 4px;">${t.gp}</td>
+          <td style="text-align:center;padding:6px 4px;">${t.gc}</td>
+          <td style="text-align:center;padding:6px 4px;" class="${(t.gp-t.gc)>0?'sg-pos':(t.gp-t.gc)<0?'sg-neg':''}">${t.gp-t.gc>0?'+':''}${t.gp-t.gc}</td>
+        </tr>`;
+      });
+      tableHtml += '</table></div></div>';
+      document.getElementById('admin-games').innerHTML += tableHtml;
+    }
+  }
 }
 
 function adminGroupFPMove(group, idx, move) {
