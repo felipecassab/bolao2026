@@ -3736,31 +3736,142 @@ function renderEvolucao() {
   const snaps=state.snapshots, canvas=document.getElementById('evo-chart');
   const legend=document.getElementById('evo-legend'), table=document.getElementById('evo-table');
   if (!canvas) return;
-  if (snaps.length<1) { canvas.style.display='none'; legend.innerHTML=''; table.innerHTML='<div class="empty"><div class="empty-icon">📈</div><p>Disponível após o primeiro dia de resultados.</p></div>'; return; }
+  if (!snaps.length) {
+    canvas.style.display='none'; legend.innerHTML='';
+    table.innerHTML='<div class="empty"><div class="empty-icon">📈</div><p>Disponível após o primeiro dia de resultados.</p></div>';
+    return;
+  }
   canvas.style.display='block';
-  const users=Object.keys(state.users);
-  const dates=snaps.map(s=>{ const[,m,d]=s.date.split('-'); return d+'/'+m; });
-  const series=users.map(w=>({w,name:uName(w),color:uColor(w),data:snaps.map(s=>s.scores[w]||0)}));
-  const W=canvas.offsetWidth||320, H=240;
-  canvas.width=W*window.devicePixelRatio; canvas.height=H*window.devicePixelRatio;
-  canvas.style.height=H+'px';
-  const ctx=canvas.getContext('2d'); ctx.scale(window.devicePixelRatio,window.devicePixelRatio);
-  const P={t:16,r:20,b:36,l:40}, cW=W-P.l-P.r, cH=H-P.t-P.b;
-  const maxP=Math.max(...series.flatMap(s=>s.data),10);
-  const xOf=i=>P.l+(snaps.length<=1?cW/2:i/(snaps.length-1)*cW);
-  const yOf=v=>P.t+cH-(v/maxP*cH);
-  ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth=1;
-  [0,.25,.5,.75,1].forEach(f=>{ const y=P.t+cH*(1-f); ctx.beginPath(); ctx.moveTo(P.l,y); ctx.lineTo(P.l+cW,y); ctx.stroke(); ctx.fillStyle='rgba(255,255,255,0.3)'; ctx.font='10px Barlow,sans-serif'; ctx.textAlign='right'; ctx.fillText(Math.round(maxP*f),P.l-6,y+4); });
-  ctx.fillStyle='rgba(255,255,255,0.4)'; ctx.font='10px Barlow,sans-serif'; ctx.textAlign='center';
-  const step=Math.max(1,Math.ceil(dates.length/8));
-  dates.forEach((d,i)=>{ if(i%step===0||i===dates.length-1) ctx.fillText(d,xOf(i),H-P.b+14); });
-  series.forEach(s=>{ ctx.beginPath(); ctx.strokeStyle=s.color; ctx.lineWidth=2.5; ctx.lineJoin='round'; s.data.forEach((v,i)=>{ const x=xOf(i),y=yOf(v); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); }); ctx.stroke(); const lx=xOf(s.data.length-1),ly=yOf(s.data[s.data.length-1]); ctx.beginPath(); ctx.arc(lx,ly,4,0,Math.PI*2); ctx.fillStyle=s.color; ctx.fill(); });
-  legend.innerHTML=series.slice().sort((a,b)=>b.data[b.data.length-1]-a.data[a.data.length-1]).map(s=>`<span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--light);"><span style="width:12px;height:12px;border-radius:50%;background:${s.color};flex-shrink:0;"></span>${s.name.split(' ')[0]}</span>`).join('');
-  let th='<tr><th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--gray);">Participante</th>';
-  snaps.forEach(s=>{ const[,m,d]=s.date.split('-'); th+=`<th style="padding:6px 4px;font-size:11px;color:var(--gray);text-align:center;">${d}/${m}</th>`; });
-  th+='</tr>';
-  const rows=users.map(w=>{ let tr=`<tr><td style="padding:6px 8px;font-size:13px;font-weight:500;white-space:nowrap;">${uName(w).split(' ')[0]}</td>`; snaps.forEach(s=>{ tr+=`<td style="padding:6px 4px;font-size:13px;text-align:center;color:var(--gold);font-weight:600;">${s.scores[w]||0}</td>`; }); return tr+'</tr>'; });
-  table.innerHTML=`<p style="font-size:11px;color:var(--gray);margin-bottom:8px;letter-spacing:1px;font-weight:600;">PONTUAÇÃO POR DIA</p><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">${th}${rows.join('')}</table></div>`;
+
+  // Eixo X fixo: 11/06/2026 a 19/07/2026
+  const START = new Date('2026-06-11');
+  const END   = new Date('2026-07-19');
+  const totalDays = Math.round((END - START) / 86400000) + 1; // 39 dias
+  const today = new Date();
+  const lastDay = Math.min(Math.round((today - START) / 86400000), totalDays - 1);
+
+  // Construir array de todos os dias com label
+  const allDates = [];
+  for (let i = 0; i < totalDays; i++) {
+    const d = new Date(START); d.setDate(START.getDate() + i);
+    const iso = d.toISOString().slice(0,10);
+    const label = String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0');
+    allDates.push({iso, label, idx: i});
+  }
+
+  // Para cada usuário, construir série com pontuação acumulada por dia
+  const users = Object.keys(state.users).filter(w => state.users[w] && !state.users[w]._deleted);
+  const snapByDate = {};
+  snaps.forEach(s => { snapByDate[s.date] = s.scores; });
+
+  const series = users.map(w => {
+    let lastScore = 0;
+    const data = allDates.map(d => {
+      if (snapByDate[d.iso] && snapByDate[d.iso][w] !== undefined) {
+        lastScore = snapByDate[d.iso][w];
+      }
+      return {day: d.idx, label: d.label, score: lastScore, hasData: !!snapByDate[d.iso]};
+    });
+    return {w, name: uName(w), color: uColor(w), data};
+  });
+
+  // Desenhar gráfico
+  const W = canvas.offsetWidth || 320, H = 260;
+  canvas.width  = W * window.devicePixelRatio;
+  canvas.height = H * window.devicePixelRatio;
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+  const P = {t:16, r:24, b:40, l:44};
+  const cW = W - P.l - P.r, cH = H - P.t - P.b;
+  const maxP = Math.max(...series.flatMap(s => s.data.map(d => d.score)), 50);
+
+  const xOf = i => P.l + (i / (totalDays - 1)) * cW;
+  const yOf = v => P.t + cH - (v / maxP * cH);
+
+  // Grade horizontal
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+  [0, 0.25, 0.5, 0.75, 1].forEach(f => {
+    const y = P.t + cH * (1 - f);
+    ctx.beginPath(); ctx.moveTo(P.l, y); ctx.lineTo(P.l + cW, y); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.font = '10px Barlow,sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(Math.round(maxP * f), P.l - 6, y + 4);
+  });
+
+  // Linha vertical "hoje"
+  if (lastDay >= 0 && lastDay < totalDays) {
+    ctx.strokeStyle = 'rgba(245,197,24,0.25)'; ctx.lineWidth = 1; ctx.setLineDash([4,3]);
+    ctx.beginPath(); ctx.moveTo(xOf(lastDay), P.t); ctx.lineTo(xOf(lastDay), P.t + cH); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(245,197,24,0.7)'; ctx.font = '9px Barlow,sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('hoje', xOf(lastDay), P.t - 4);
+  }
+
+  // Labels do eixo X — mostrar a cada 7 dias + início + fim
+  ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = '10px Barlow,sans-serif'; ctx.textAlign = 'center';
+  allDates.forEach((d, i) => {
+    if (i === 0 || i === totalDays-1 || i % 7 === 0) {
+      ctx.fillText(d.label, xOf(i), H - P.b + 16);
+      // Marca vertical suave
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(xOf(i), P.t); ctx.lineTo(xOf(i), P.t + cH); ctx.stroke();
+    }
+  });
+
+  // Curvas dos participantes
+  series.forEach(s => {
+    // Encontrar último índice com dados reais
+    let lastRealIdx = -1;
+    snaps.forEach(snap => {
+      const idx = allDates.findIndex(d => d.iso === snap.date);
+      if (idx > lastRealIdx) lastRealIdx = idx;
+    });
+    if (lastRealIdx < 0) return;
+
+    ctx.beginPath();
+    ctx.strokeStyle = s.color; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
+    let started = false;
+    s.data.slice(0, lastRealIdx + 1).forEach((d, i) => {
+      const x = xOf(i), y = yOf(d.score);
+      if (!started) { ctx.moveTo(x, y); started = true; }
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Ponto no último dia com dados
+    if (lastRealIdx >= 0) {
+      const lx = xOf(lastRealIdx), ly = yOf(s.data[lastRealIdx].score);
+      ctx.beginPath(); ctx.arc(lx, ly, 4, 0, Math.PI*2);
+      ctx.fillStyle = s.color; ctx.fill();
+    }
+  });
+
+  // Legenda
+  legend.innerHTML = series.slice()
+    .sort((a,b) => b.data[lastDay]?.score - a.data[lastDay]?.score)
+    .map(s => `<span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--light);">
+      <span style="width:12px;height:12px;border-radius:50%;background:${s.color};flex-shrink:0;"></span>
+      ${s.name.split(' ')[0]} <span style="color:var(--gold);font-weight:700;">${s.data[Math.min(lastDay, totalDays-1)]?.score || 0}pts</span>
+    </span>`).join('');
+
+  // Tabela por dia com dados reais
+  const snapDates = snaps.map(s => s.date).sort();
+  let th = '<tr><th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--gray);">Participante</th>';
+  snapDates.forEach(iso => {
+    const [,m,d] = iso.split('-');
+    th += `<th style="padding:6px 4px;font-size:11px;color:var(--gray);text-align:center;">${d}/${m}</th>`;
+  });
+  th += '</tr>';
+  const rows = users.map(w => {
+    let tr = `<tr><td style="padding:6px 8px;font-size:13px;font-weight:500;white-space:nowrap;">${uName(w).split(' ')[0]}</td>`;
+    snapDates.forEach(iso => {
+      tr += `<td style="padding:6px 4px;font-size:13px;text-align:center;color:var(--gold);font-weight:600;">${snapByDate[iso]?.[w] || 0}</td>`;
+    });
+    return tr + '</tr>';
+  });
+  table.innerHTML = `<p style="font-size:11px;color:var(--gray);margin-bottom:8px;letter-spacing:1px;font-weight:600;">PONTUAÇÃO POR DIA</p>
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">${th}${rows.join('')}</table></div>`;
 }
 
 // ═══════════════════════════════════════════════════════════════════
