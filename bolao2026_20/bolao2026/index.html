@@ -4127,15 +4127,21 @@ function matchScore(answer, correct) {
   var c = normalizeStr(correct);
   if (!a || !c) return 0;
   if (a === c) return 1; // exato
-  if (a.includes(c) || c.includes(a)) return 0.9; // contém
-  // Verificar se todas as palavras da resposta correta estão na resposta do usuário
+
+  // A resposta do usuário contém a resposta correta completa (ex: "o jogador neymar" contém "neymar")
+  // Mas NÃO o inverso: se a correta contém a do usuário, pode ser uma resposta parcial demais
+  // Ex: usuário digitou "africa" e correto é "africa do sul" → NÃO deve contar como certo automaticamente
+  if (a.includes(c)) return 0.9; // resposta do usuário contém o gabarito completo
+
+  // Verificar se todas as palavras do gabarito estão na resposta do usuário
   var cWords = c.split(' ').filter(Boolean);
   var aWords = a.split(' ').filter(Boolean);
-  var allMatch = cWords.every(function(w){ return aWords.some(function(aw){ return aw.includes(w) || w.includes(aw); }); });
+  var allMatch = cWords.every(function(w){ return aWords.some(function(aw){ return aw === w || (aw.length > 3 && (aw.includes(w) || w.includes(aw))); }); });
   if (allMatch) return 0.8;
-  // Pelo menos uma palavra em comum
-  var anyMatch = cWords.some(function(w){ return w.length > 3 && aWords.some(function(aw){ return aw.includes(w) || w.includes(aw); }); });
-  if (anyMatch) return 0.5; // incerto
+
+  // Pelo menos metade das palavras do gabarito em comum (incerto)
+  var matchCount = cWords.filter(function(w){ return w.length > 3 && aWords.some(function(aw){ return aw.includes(w) || w.includes(aw); }); }).length;
+  if (matchCount > 0 && matchCount >= Math.ceil(cWords.length / 2)) return 0.5; // incerto
   return 0;
 }
 
