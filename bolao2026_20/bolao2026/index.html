@@ -5483,7 +5483,7 @@ async function adminViewPalpites(wpp) {
         const realWinF = finalRes ? (finalRes.h>finalRes.a?'H':finalRes.a>finalRes.h?'A':(finalRes.pen==='H'?'H':'A')) : null;
         const realChamp = realWinF==='H'?(finalRtr?.home?.name):realWinF==='A'?(finalRtr?.away?.name):null;
         inNextPhase = realChamp && w.name === realChamp;
-        bPts = inNextPhase ? '+12+20' : null;
+        bPts = inNextPhase ? '+20' : null;
         chipColor = 'var(--gold)';
       } else {
         inNextPhase = nextPhase && realTeamsPerPhase[nextPhase] && realTeamsPerPhase[nextPhase].has(w.name);
