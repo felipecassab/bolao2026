@@ -5309,8 +5309,91 @@ async function adminViewPalpites(wpp) {
       </div>${champLine}`;
     });
 
+    // Tabela de classificação prevista (só grupos de 1 letra: A-L)
+    if (g.length === 1) {
+      const standings = calcGroupStandings(g, p);
+      html += '<div style="margin:4px 8px 8px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.07);">';
+      html += '<div style="padding:5px 10px;background:rgba(245,197,24,0.08);font-size:10px;font-weight:700;color:var(--gold);letter-spacing:1px;">CLASSIFICAÇÃO PREVISTA — GRUPO ' + g + '</div>';
+      html += '<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+      html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.06);">' +
+        '<th style="padding:4px 6px;text-align:left;color:var(--gray);font-weight:600;width:32px;">Pos</th>' +
+        '<th style="padding:4px 6px;text-align:left;color:var(--gray);font-weight:600;">Seleção</th>' +
+        '<th style="padding:4px 4px;text-align:center;color:var(--gray);font-weight:600;">PTS</th>' +
+        '<th style="padding:4px 4px;text-align:center;color:var(--gray);font-weight:600;">J</th>' +
+        '<th style="padding:4px 4px;text-align:center;color:var(--gray);font-weight:600;">SG</th>' +
+        '<th style="padding:4px 4px;text-align:center;color:var(--gray);font-weight:600;">GP</th>' +
+        '</tr>';
+      standings.forEach(function(t, i) {
+        const classified = i < 2;
+        const isThird = i === 2;
+        const rowBg = classified ? 'rgba(0,200,83,0.06)' : isThird ? 'rgba(245,197,24,0.04)' : 'transparent';
+        const posColor = classified ? 'var(--green)' : isThird ? 'var(--gold)' : 'var(--gray)';
+        const sg = t.gp - t.gc;
+        const badge = classified ? ' <span style="font-size:9px;color:var(--green);">✓</span>' : isThird ? ' <span style="font-size:9px;color:var(--gold);">3º</span>' : '';
+        html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.03);background:' + rowBg + ';">' +
+          '<td style="padding:5px 6px;color:' + posColor + ';font-weight:700;">' + (i+1) + 'º' + badge + '</td>' +
+          '<td style="padding:5px 6px;">' + flagImg(t.flag||'un') + ' <span style="font-weight:500;">' + t.name + '</span></td>' +
+          '<td style="padding:5px 4px;text-align:center;font-weight:700;color:var(--gold);">' + t.pt + '</td>' +
+          '<td style="padding:5px 4px;text-align:center;color:var(--gray);">' + t.j + '</td>' +
+          '<td style="padding:5px 4px;text-align:center;" class="' + (sg>0?'sg-pos':sg<0?'sg-neg':'') + '">' + (sg>0?'+':'') + sg + '</td>' +
+          '<td style="padding:5px 4px;text-align:center;">' + t.gp + '</td>' +
+          '</tr>';
+      });
+      html += '</table></div>';
+    }
+
     html += '</div></div>';
   });
+
+  // ── Resumo do mata-mata previsto ────────────────────────────────
+  const koPhases = [
+    { group: '32-avos',    label: '32-AVOS → Classificados para as Oitavas' },
+    { group: 'Oitavas',    label: 'OITAVAS → Classificados para as Quartas' },
+    { group: 'Quartas',    label: 'QUARTAS → Classificados para as Semis' },
+    { group: 'Semifinais', label: 'SEMIS → Classificados para a Final' },
+  ];
+
+  let koHtml = '';
+  koPhases.forEach(function(phase) {
+    const phaseMatches = MATCHES.filter(function(m){ return m.group === phase.group; });
+    if (!phaseMatches.length) return;
+
+    // Collect winners predicted by user
+    const winners = [];
+    phaseMatches.forEach(function(m) {
+      const mp = p[m.id];
+      if (!mp || mp.h === undefined || mp.a === undefined) return;
+      const rt = viewerResolved[m.id];
+      const homeName = (rt?.home?.name) || m.home;
+      const awayName = (rt?.away?.name) || m.away;
+      const homeFlag = (rt?.home?.flag && rt.home.flag !== 'un') ? rt.home.flag : m.fH;
+      const awayFlag = (rt?.away?.flag && rt.away.flag !== 'un') ? rt.away.flag : m.fA;
+      let winName, winFlag;
+      if (+mp.h > +mp.a)       { winName = homeName; winFlag = homeFlag; }
+      else if (+mp.a > +mp.h)  { winName = awayName; winFlag = awayFlag; }
+      else if (mp.pen === 'H') { winName = homeName; winFlag = homeFlag; }
+      else if (mp.pen === 'A') { winName = awayName; winFlag = awayFlag; }
+      if (winName) winners.push({ name: winName, flag: winFlag });
+    });
+
+    if (!winners.length) return;
+
+    koHtml += '<div style="margin-bottom:10px;">';
+    koHtml += '<div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:6px;">' + phase.label + '</div>';
+    koHtml += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+    winners.forEach(function(w) {
+      koHtml += '<div style="display:flex;align-items:center;gap:5px;padding:4px 8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:20px;">' +
+        flagImg(w.flag || 'un') +
+        '<span style="font-size:12px;font-weight:500;color:var(--light);">' + w.name + '</span>' +
+        '</div>';
+    });
+    koHtml += '</div></div>';
+  });
+
+  if (koHtml) {
+    html += '<div class="card" style="margin-bottom:12px;"><div class="card-header"><span class="group-label">Mata-Mata Previsto</span></div>' +
+      '<div class="card-body">' + koHtml + '</div></div>';
+  }
 
   // Extras
   if (p._qa) {
@@ -6049,7 +6132,7 @@ function openScoreModal(uid) {
         // Final → +12 (classificou na final) + +20 (acertou a campeã)
         if (['Oitavas','Quartas','Semifinais','Final'].includes(grp) && p && p.h !== undefined) {
           const bVal   = {'Oitavas':4,'Quartas':6,'Semifinais':8,'Final':12}[grp];
-          const bLabel = {'Oitavas':'classificou nas oitavas','Quartas':'classificou nas quartas','Semifinais':'classificou nas semis','Final':'classificou na final'}[grp];
+          const bLabel = {'Oitavas':'classificou para as oitavas','Quartas':'classificou para as quartas','Semifinais':'classificou para as semis','Final':'classificou para a final'}[grp];
           const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : 'A');
           const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen === 'H' ? 'H' : 'A');
           if (realWin === userWin) {
