@@ -4246,12 +4246,16 @@ async function adminConfirmExtra(qid) {
   var overrides = ans.overrides || {};
   var correct = ans.correct;
   var count = 0;
-  Object.keys(state.palpites).forEach(function(uid) {
+  var count = 0;
+  // Iterar apenas sobre UIDs registrados em state.users para evitar duplicatas
+  Object.keys(state.users).forEach(function(uid) {
+    if (state.users[uid]._deleted || state.users[uid].status === 'pending') return;
     var userAns = state.palpites[uid]?._qa?.[qid]?.answer;
     if (!userAns) return;
     var override = overrides[uid];
     var score = matchScore(userAns, correct);
     var isCorrect = override !== undefined ? override : (getMatchStatus(score) === 'correct');
+    if (!state.palpites[uid]) return;
     if (!state.palpites[uid]._qa) return;
     if (!state.palpites[uid]._qa[qid]) return;
     state.palpites[uid]._qa[qid].correct = isCorrect;
