@@ -476,7 +476,7 @@ body{display:flex;flex-direction:column}
       <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px;">
         <p style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:1px;">PERGUNTAS EXTRAS</p>
       </div>
-      <div class="card"><div class="card-body" id="admin-extras"></div></div>
+      <div class="card"><div class="card-body" id="admin-extras" style="display:none;"></div></div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px;">
         <p style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:1px;">PARTICIPANTES</p>
         <button onclick="exportPalpites()" style="padding:6px 14px;background:rgba(0,200,83,0.12);color:var(--green);border:1px solid rgba(0,200,83,0.3);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📊 Exportar Excel</button>
@@ -4105,6 +4105,7 @@ function getMatchStatus(score) {
 function renderAdminExtras() {
   var el = document.getElementById('admin-extras');
   if (!el) return;
+  el.style.display = 'block';
   var answers = state.results._qaAnswers || {}; // {qid: {correct: 'Neymar', overrides: {uid: true/false}}}
 
   var html = '';
@@ -4326,16 +4327,28 @@ async function adminSaveFP3() {
 
 function renderAdminTabs() {
   const groups=[...new Set(MATCHES.map(m=>m.group))];
-  document.getElementById('admin-tabs').innerHTML=groups.map(g=>{
+  const tabs = groups.map(g=>{
     const done=MATCHES.filter(m=>m.group===g&&state.results[m.id]).length;
     const total=MATCHES.filter(m=>m.group===g).length;
     return `<button class="tab-btn${g===adminGroup?' active':''}" style="font-size:12px;padding:6px 10px;white-space:nowrap;" onclick="adminSelectGroup('${g}',this)">${g.length<=1?'Gr.':''}${g} <span style="opacity:0.6;">${done}/${total}</span></button>`;
-  }).join('');
+  });
+  tabs.push(`<button class="tab-btn${adminGroup==='__extras__'?' active':''}" style="font-size:12px;padding:6px 10px;white-space:nowrap;border-left:1px solid rgba(255,255,255,0.1);" onclick="adminSelectGroup('__extras__',this)">❓ Extras</button>`);
+  document.getElementById('admin-tabs').innerHTML = tabs.join('');
 }
 function adminSelectGroup(g,btn) {
   adminGroup=g;
   document.querySelectorAll('#admin-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active'); renderAdminGames();
+  btn.classList.add('active');
+  if (g === '__extras__') {
+    document.getElementById('admin-games').innerHTML = '';
+    document.getElementById('admin-fp3-block').innerHTML = '';
+    document.getElementById('admin-extras').style.display = 'block';
+    renderAdminExtras();
+  } else {
+    document.getElementById('admin-extras').style.display = 'none';
+    document.getElementById('admin-extras').innerHTML = '';
+    renderAdminGames();
+  }
 }
 function renderAdminGames() {
   const games = MATCHES.filter(m => m.group === adminGroup);
