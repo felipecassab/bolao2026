@@ -2785,18 +2785,30 @@ function calcBonusPts(userPalpites) {
   let bonus = 0;
 
   // BONUS 32-AVOS (+2 per team qualifying from groups = 64pts max):
-  // For each r32 match, user gets +2 if they predicted the correct HOME team
-  // and +2 if they predicted the correct AWAY team (both came from group stage)
-  // We compare user's bracket (resolvedTeams built from their palpites)
-  // vs admin-stored real team names in results (res.homeTeam / res.awayTeam)
-  MATCHES.filter(m => m.group === '32-avos').forEach(m => {
-    const res = state.results[m.id];
-    if (!res) return;
-    const rt = resolvedTeams[m.id];
-    if (!rt) return;
-    if (res.homeTeam && rt.home?.name === res.homeTeam) bonus += 2;
-    if (res.awayTeam && rt.away?.name === res.awayTeam) bonus += 2;
-  });
+  // User gets +2 for each team they predicted would reach the r32,
+  // regardless of which slot/match — just whether that team is among the real 32 qualifiers.
+  {
+    // Collect all real teams in r32 (homeTeam + awayTeam from results)
+    const realR32Teams = new Set();
+    MATCHES.filter(m => m.group === '32-avos').forEach(m => {
+      const res = state.results[m.id];
+      if (!res) return;
+      if (res.homeTeam) realR32Teams.add(res.homeTeam);
+      if (res.awayTeam) realR32Teams.add(res.awayTeam);
+    });
+    // Collect all teams user predicted in r32 (from their resolvedTeams)
+    const userR32Teams = new Set();
+    MATCHES.filter(m => m.group === '32-avos').forEach(m => {
+      const rt = resolvedTeams[m.id];
+      if (!rt) return;
+      if (rt.home?.name) userR32Teams.add(rt.home.name);
+      if (rt.away?.name) userR32Teams.add(rt.away.name);
+    });
+    // +2 for each user-predicted team that actually qualified
+    userR32Teams.forEach(team => {
+      if (realR32Teams.has(team)) bonus += 2;
+    });
+  }
 
   // BONUS OITAVAS (+4 per team = 64pts max): winner of each r32 match
   // BONUS QUARTAS (+6 per team = 48pts max): winner of each oitavas match
@@ -6150,22 +6162,7 @@ function openScoreModal(uid) {
           '</div>';
 
         // ── Bonus rows ───────────────────────────────────────────
-        // 32-avos: +2 per team that the user correctly predicted would classify from groups
-        if (grp === '32-avos') {
-          var bonusItems = [];
-          if (res.homeTeam && userHomeName === res.homeTeam)
-            bonusItems.push({ pts:2, flag:userHomeFlag, team:userHomeName, label:'classificou para 32-avos' });
-          if (res.awayTeam && userAwayName === res.awayTeam)
-            bonusItems.push({ pts:2, flag:userAwayFlag, team:userAwayName, label:'classificou para 32-avos' });
-          bonusItems.forEach(function(b) {
-            phaseHtml += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0 4px 6px;border-bottom:1px solid rgba(255,255,255,0.03);background:rgba(126,184,245,0.04);">' +
-              '<span style="width:32px;"></span>' +
-              '<span class="score-pts-badge score-pts-bonus">+' + b.pts + '</span>' +
-              '<img src="https://flagcdn.com/w20/' + b.flag + '.png" style="width:14px;height:10px;border-radius:1px;" onerror="this.style.display=&quot;none&quot;">' +
-              '<span style="font-size:11px;color:#7eb8f5;flex:1;">' + b.team + ' <span style="opacity:0.7;">— ' + b.label + '</span></span>' +
-              '</div>';
-          });
-        }
+        // 32-avos: bonus shown as a summary after all matches (see below)
 
         // Oitavas/Quartas/Semis/Final: bonus for correctly predicting the winner advancing
         // Bônus é pela classificação NA fase atual (não para a próxima)
@@ -6202,6 +6199,47 @@ function openScoreModal(uid) {
     });
 
     if (phaseHtml) {
+      // For 32-avos: append a bonus summary block after all matches
+      if (phase.groups[0] === '32-avos') {
+        // Collect real r32 teams
+        const realR32 = new Set();
+        phase.groups[0] && MATCHES.filter(function(m){ return m.group==='32-avos'; }).forEach(function(m){
+          const res2 = state.results[m.id];
+          if (res2 && res2.homeTeam) realR32.add(res2.homeTeam);
+          if (res2 && res2.awayTeam) realR32.add(res2.awayTeam);
+        });
+        // Collect user predicted r32 teams (with flags)
+        const userR32 = new Map(); // name → flag
+        MATCHES.filter(function(m){ return m.group==='32-avos'; }).forEach(function(m){
+          const rtr2 = resolvedTeamsReal[m.id] || null;
+          const rt2  = resolvedTeams[m.id] || null;
+          // Use real flags if available
+          if (rt2 && rt2.home && rt2.home.name) {
+            const flag = (rtr2 && rtr2.home && rtr2.home.flag) ? rtr2.home.flag : (rt2.home.flag || 'un');
+            userR32.set(rt2.home.name, flag);
+          }
+          if (rt2 && rt2.away && rt2.away.name) {
+            const flag = (rtr2 && rtr2.away && rtr2.away.flag) ? rtr2.away.flag : (rt2.away.flag || 'un');
+            userR32.set(rt2.away.name, flag);
+          }
+        });
+        if (realR32.size > 0 && userR32.size > 0) {
+          let bonusSummary = '<div style="margin:8px 0 4px;padding:8px 10px;background:rgba(126,184,245,0.06);border:1px solid rgba(126,184,245,0.15);border-radius:8px;">' +
+            '<div style="font-size:10px;font-weight:700;color:#7eb8f5;letter-spacing:1px;margin-bottom:6px;">BÔNUS CLASSIFICAÇÃO PARA OS 32-AVOS (+2 por seleção)</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:5px;">';
+          userR32.forEach(function(flag, team) {
+            const hit = realR32.has(team);
+            bonusSummary += '<div style="display:flex;align-items:center;gap:4px;padding:3px 7px;border-radius:20px;' +
+              (hit ? 'background:rgba(126,184,245,0.12);border:1px solid rgba(126,184,245,0.3);' : 'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);opacity:0.5;') + '">' +
+              '<img src="https://flagcdn.com/w20/' + flag + '.png" style="width:14px;height:10px;border-radius:1px;" onerror="this.style.display=&quot;none&quot;">' +
+              '<span style="font-size:11px;color:' + (hit ? '#7eb8f5' : 'var(--gray)') + ';font-weight:' + (hit ? '700' : '400') + ';">' + team + '</span>' +
+              (hit ? '<span style="font-size:10px;color:#7eb8f5;font-weight:700;">+2</span>' : '') +
+              '</div>';
+          });
+          bonusSummary += '</div></div>';
+          phaseHtml += bonusSummary;
+        }
+      }
       html += '<div class="score-phase-title">' + phase.label + '</div>' + phaseHtml;
     }
   });
