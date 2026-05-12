@@ -4180,6 +4180,9 @@ function renderAdminExtras() {
     html += '<div style="display:flex;gap:8px;margin-bottom:10px;">';
     html += '<input type="text" id="admin-qa-'+q.id+'" value="'+correctAnswer.replace(/"/g,'&quot;')+'" placeholder="Resposta correta..." style="flex:1;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:var(--light);font-size:13px;font-family:\'Barlow Condensed\';"/>';
     html += '<button onclick="adminProcessExtra(\''+q.id+'\')" style="padding:8px 14px;background:var(--gold);color:var(--navy);border:none;border-radius:8px;font-family:\'Barlow Condensed\';font-weight:900;font-size:13px;cursor:pointer;">PROCESSAR</button>';
+    if (correctAnswer) {
+      html += '<button onclick="adminClearExtra(\''+q.id+'\')" title="Apagar resposta e pontos" style="padding:8px 12px;background:rgba(244,67,54,0.15);border:1px solid rgba(244,67,54,0.3);color:var(--red);border-radius:8px;font-size:14px;cursor:pointer;">🗑</button>';
+    }
     html += '</div>';
 
     // Lista de respostas dos participantes
@@ -4275,6 +4278,22 @@ async function adminConfirmExtra(qid) {
   renderAdminExtras();
   renderRanking();
   showToast(count + ' participante(s) com ponto atribuído! ✓');
+}
+
+async function adminClearExtra(qid) {
+  if (!confirm('Apagar a resposta correta e os pontos desta pergunta para todos os participantes?')) return;
+  if (state.results._qaAnswers) {
+    delete state.results._qaAnswers[qid];
+  }
+  Object.keys(state.users).forEach(function(uid) {
+    if (state.palpites[uid]?._qa?.[qid]) {
+      state.palpites[uid]._qa[qid].correct = null;
+    }
+  });
+  await saveGlobal();
+  renderAdminExtras();
+  renderRanking();
+  showToast('Resposta e pontos apagados! ✓');
 }
 
 function adminLogout() {
