@@ -5354,11 +5354,54 @@ async function adminViewPalpites(wpp) {
   ];
 
   let koHtml = '';
+
+  // ── Fase de Grupos: top 2 de cada grupo + melhores 3ºs ──────────
+  const groupLetters = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+  const groupClassified = [];
+  groupLetters.forEach(function(g) {
+    const standings = calcGroupStandings(g, p);
+    if (standings[0] && standings[0].j > 0) groupClassified.push({ name: standings[0].name, flag: standings[0].flag || 'un' });
+    if (standings[1] && standings[1].j > 0) groupClassified.push({ name: standings[1].name, flag: standings[1].flag || 'un' });
+  });
+  // Melhores 8 terceiros
+  const allThirds = groupLetters.map(function(g) {
+    const standings = calcGroupStandings(g, p);
+    return standings[2] ? Object.assign({}, standings[2], { group: g }) : null;
+  }).filter(Boolean);
+  const fp3 = p._fp3 || [];
+  allThirds.sort(function(a,b) {
+    if (b.pt !== a.pt) return b.pt - a.pt;
+    const sgA = a.gp-a.gc, sgB = b.gp-b.gc;
+    if (sgB !== sgA) return sgB - sgA;
+    if (b.gp !== a.gp) return b.gp - a.gp;
+    const iA = fp3.indexOf(a.name), iB = fp3.indexOf(b.name);
+    if (iA!==-1&&iB!==-1) return iA-iB;
+    if (iA!==-1) return -1; if (iB!==-1) return 1;
+    return 0;
+  });
+  const best8thirds = allThirds.slice(0, 8);
+  const classifiedFor32 = groupClassified.concat(best8thirds.map(function(t){ return { name: t.name, flag: t.flag || 'un', isThird: true }; }));
+
+  if (classifiedFor32.length > 0) {
+    koHtml += '<div style="margin-bottom:12px;">';
+    koHtml += '<div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:6px;">GRUPOS → Classificados para os 32-avos (' + classifiedFor32.length + '/32)</div>';
+    koHtml += '<div style="display:flex;flex-wrap:wrap;gap:5px;">';
+    classifiedFor32.forEach(function(w) {
+      const style = w.isThird ? 'background:rgba(245,197,24,0.08);border:1px solid rgba(245,197,24,0.2);' : 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);';
+      koHtml += '<div style="display:flex;align-items:center;gap:4px;padding:3px 7px;' + style + 'border-radius:20px;">' +
+        flagImg(w.flag) +
+        '<span style="font-size:11px;font-weight:500;color:var(--light);">' + w.name + '</span>' +
+        (w.isThird ? '<span style="font-size:9px;color:var(--gold);margin-left:1px;">3º</span>' : '') +
+        '</div>';
+    });
+    koHtml += '</div></div>';
+  }
+
+  // ── Fases knockout: vencedores de cada rodada ────────────────────
   koPhases.forEach(function(phase) {
     const phaseMatches = MATCHES.filter(function(m){ return m.group === phase.group; });
     if (!phaseMatches.length) return;
 
-    // Collect winners predicted by user
     const winners = [];
     phaseMatches.forEach(function(m) {
       const mp = p[m.id];
