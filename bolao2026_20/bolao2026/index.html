@@ -4219,12 +4219,11 @@ async function adminProcessExtra(qid) {
   if (!input || !input.value.trim()) { showToast('Digite a resposta correta', true); return; }
   var correct = input.value.trim();
   if (!state.results._qaAnswers) state.results._qaAnswers = {};
-  if (!state.results._qaAnswers[qid]) state.results._qaAnswers[qid] = {};
-  state.results._qaAnswers[qid].correct = correct;
-  state.results._qaAnswers[qid].overrides = state.results._qaAnswers[qid].overrides || {};
+  // Resetar completamente: nova resposta correta + zerar overrides anteriores
+  state.results._qaAnswers[qid] = { correct: correct, overrides: {} };
   await saveGlobal();
   renderAdminExtras();
-  showToast('Respostas processadas! Revise e confirme.');
+  showToast('Respostas processadas! Overrides anteriores foram zerados. Revise e confirme.');
 }
 
 async function adminExtraOverride(qid, uid, value) {
