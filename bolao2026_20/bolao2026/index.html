@@ -6164,80 +6164,116 @@ function openScoreModal(uid) {
         // ── Bonus rows ───────────────────────────────────────────
         // 32-avos: bonus shown as a summary after all matches (see below)
 
-        // Oitavas/Quartas/Semis/Final: bonus for correctly predicting the winner advancing
-        // Bônus é pela classificação NA fase atual (não para a próxima)
-        // Oitavas → +4 (classificou nas oitavas)
-        // Quartas → +6 (classificou nas quartas)
-        // Semifinais → +8 (classificou nas semis)
-        // Final → +12 (classificou na final) + +20 (acertou a campeã)
-        if (['Oitavas','Quartas','Semifinais','Final'].includes(grp) && p && p.h !== undefined) {
-          const bVal   = {'Oitavas':4,'Quartas':6,'Semifinais':8,'Final':12}[grp];
-          const bLabel = {'Oitavas':'classificou para as oitavas','Quartas':'classificou para as quartas','Semifinais':'classificou para as semis','Final':'classificou para a final'}[grp];
-          const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : 'A');
-          const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen === 'H' ? 'H' : 'A');
-          if (realWin === userWin) {
-            const winName = realWin === 'H' ? homeName : awayName;
-            const winFlag = realWin === 'H' ? homeFlag : awayFlag;
-            phaseHtml += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0 4px 6px;border-bottom:1px solid rgba(255,255,255,0.03);background:rgba(126,184,245,0.04);">' +
-              '<span style="width:32px;"></span>' +
-              '<span class="score-pts-badge score-pts-bonus">+' + bVal + '</span>' +
-              '<img src="https://flagcdn.com/w20/' + winFlag + '.png" style="width:14px;height:10px;border-radius:1px;" onerror="this.style.display=&quot;none&quot;">' +
-              '<span style="font-size:11px;color:#7eb8f5;flex:1;">' + winName + ' <span style="opacity:0.7;">— ' + bLabel + '</span></span>' +
-              '</div>';
-            // Bônus campeã (+20) na Final
-            if (grp === 'Final') {
-              phaseHtml += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0 4px 6px;border-bottom:1px solid rgba(255,255,255,0.03);background:rgba(245,197,24,0.06);">' +
-                '<span style="width:32px;"></span>' +
-                '<span class="score-pts-badge score-pts-exact">+20</span>' +
-                '<img src="https://flagcdn.com/w20/' + winFlag + '.png" style="width:14px;height:10px;border-radius:1px;" onerror="this.style.display=&quot;none&quot;">' +
-                '<span style="font-size:11px;color:var(--gold);flex:1;">🏆 ' + winName + ' <span style="opacity:0.7;">— acertou a campeã</span></span>' +
-                '</div>';
-            }
-          }
-        }
+        // Bônus por avanço de fase mostrado no bloco resumo abaixo (ver após o forEach)
       });
     });
 
     if (phaseHtml) {
-      // For 32-avos: append a bonus summary block after all matches
-      if (phase.groups[0] === '32-avos') {
-        // Collect real r32 teams
-        const realR32 = new Set();
-        phase.groups[0] && MATCHES.filter(function(m){ return m.group==='32-avos'; }).forEach(function(m){
-          const res2 = state.results[m.id];
-          if (res2 && res2.homeTeam) realR32.add(res2.homeTeam);
-          if (res2 && res2.awayTeam) realR32.add(res2.awayTeam);
-        });
-        // Collect user predicted r32 teams (with flags)
-        const userR32 = new Map(); // name → flag
-        MATCHES.filter(function(m){ return m.group==='32-avos'; }).forEach(function(m){
-          const rtr2 = resolvedTeamsReal[m.id] || null;
-          const rt2  = resolvedTeams[m.id] || null;
-          // Use real flags if available
-          if (rt2 && rt2.home && rt2.home.name) {
-            const flag = (rtr2 && rtr2.home && rtr2.home.flag) ? rtr2.home.flag : (rt2.home.flag || 'un');
-            userR32.set(rt2.home.name, flag);
+      // Bonus summary block for all KO phases
+      {
+        // Config per phase: which group feeds teams into this phase, bonus pts, label
+        const phaseBonusConfig = {
+          '32-avos':    { feedGroup: '32-avos',    pts: 2,  label: 'BÔNUS CLASSIFICAÇÃO PARA OS 32-AVOS (+2 por seleção)',         champBonus: false },
+          'Oitavas':    { feedGroup: 'Oitavas',    pts: 4,  label: 'BÔNUS CLASSIFICAÇÃO PARA AS OITAVAS (+4 por seleção)',         champBonus: false },
+          'Quartas':    { feedGroup: 'Quartas',    pts: 6,  label: 'BÔNUS CLASSIFICAÇÃO PARA AS QUARTAS (+6 por seleção)',         champBonus: false },
+          'Semifinais': { feedGroup: 'Semifinais', pts: 8,  label: 'BÔNUS CLASSIFICAÇÃO PARA AS SEMIS (+8 por seleção)',           champBonus: false },
+          'Final':      { feedGroup: 'Final',      pts: 12, label: 'BÔNUS CLASSIFICAÇÃO PARA A FINAL (+12 por seleção)',           champBonus: true  },
+        };
+        const cfg = phaseBonusConfig[phase.groups[0]];
+        if (cfg) {
+          // Collect real teams that reached this phase (winners of previous phase)
+          const realTeams = new Set();
+          const realFlags = new Map();
+          if (cfg.feedGroup === '32-avos') {
+            // Special: teams are stored as homeTeam/awayTeam in r32 results
+            MATCHES.filter(function(m){ return m.group==='32-avos'; }).forEach(function(m){
+              const res2 = state.results[m.id];
+              if (!res2) return;
+              const rtr2 = resolvedTeamsReal[m.id];
+              if (res2.homeTeam) { realTeams.add(res2.homeTeam); if (rtr2?.home?.flag) realFlags.set(res2.homeTeam, rtr2.home.flag); }
+              if (res2.awayTeam) { realTeams.add(res2.awayTeam); if (rtr2?.away?.flag) realFlags.set(res2.awayTeam, rtr2.away.flag); }
+            });
+          } else {
+            // Winners of the previous phase matches
+            const prevPhaseGroup = {'Oitavas':'32-avos','Quartas':'Oitavas','Semifinais':'Quartas','Final':'Semifinais'}[cfg.feedGroup];
+            MATCHES.filter(function(m){ return m.group===prevPhaseGroup; }).forEach(function(m){
+              const res2 = state.results[m.id];
+              if (!res2) return;
+              const rtr2 = resolvedTeamsReal[m.id];
+              const realWin2 = res2.h > res2.a ? 'H' : res2.a > res2.h ? 'A' : (res2.pen==='H'?'H':'A');
+              const winName2 = realWin2==='H' ? (rtr2?.home?.name||null) : (rtr2?.away?.name||null);
+              const winFlag2 = realWin2==='H' ? (rtr2?.home?.flag||'un') : (rtr2?.away?.flag||'un');
+              if (winName2) { realTeams.add(winName2); realFlags.set(winName2, winFlag2); }
+            });
           }
-          if (rt2 && rt2.away && rt2.away.name) {
-            const flag = (rtr2 && rtr2.away && rtr2.away.flag) ? rtr2.away.flag : (rt2.away.flag || 'un');
-            userR32.set(rt2.away.name, flag);
+
+          // Collect user predicted teams for this phase (winners of their palpites in prev phase)
+          const userTeams = new Map(); // name → flag
+          if (cfg.feedGroup === '32-avos') {
+            MATCHES.filter(function(m){ return m.group==='32-avos'; }).forEach(function(m){
+              const rt2 = resolvedTeams[m.id];
+              const rtr2 = resolvedTeamsReal[m.id];
+              if (rt2?.home?.name) userTeams.set(rt2.home.name, (rtr2?.home?.flag||rt2.home.flag||'un'));
+              if (rt2?.away?.name) userTeams.set(rt2.away.name, (rtr2?.away?.flag||rt2.away.flag||'un'));
+            });
+          } else {
+            const prevPhaseGroup2 = {'Oitavas':'32-avos','Quartas':'Oitavas','Semifinais':'Quartas','Final':'Semifinais'}[cfg.feedGroup];
+            MATCHES.filter(function(m){ return m.group===prevPhaseGroup2; }).forEach(function(m){
+              const p2 = pal[m.id];
+              if (!p2 || p2.h===undefined) return;
+              const rt2 = resolvedTeams[m.id];
+              const rtr2 = resolvedTeamsReal[m.id];
+              const userWin2 = +p2.h > +p2.a ? 'H' : +p2.a > +p2.h ? 'A' : (p2.pen==='H'?'H':'A');
+              const uName2 = userWin2==='H' ? (rt2?.home?.name||null) : (rt2?.away?.name||null);
+              const uFlag2 = userWin2==='H' ? (rtr2?.home?.flag||rt2?.home?.flag||'un') : (rtr2?.away?.flag||rt2?.away?.flag||'un');
+              if (uName2) userTeams.set(uName2, uFlag2);
+            });
           }
-        });
-        if (realR32.size > 0 && userR32.size > 0) {
-          let bonusSummary = '<div style="margin:8px 0 4px;padding:8px 10px;background:rgba(126,184,245,0.06);border:1px solid rgba(126,184,245,0.15);border-radius:8px;">' +
-            '<div style="font-size:10px;font-weight:700;color:#7eb8f5;letter-spacing:1px;margin-bottom:6px;">BÔNUS CLASSIFICAÇÃO PARA OS 32-AVOS (+2 por seleção)</div>' +
-            '<div style="display:flex;flex-wrap:wrap;gap:5px;">';
-          userR32.forEach(function(flag, team) {
-            const hit = realR32.has(team);
-            bonusSummary += '<div style="display:flex;align-items:center;gap:4px;padding:3px 7px;border-radius:20px;' +
-              (hit ? 'background:rgba(126,184,245,0.12);border:1px solid rgba(126,184,245,0.3);' : 'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);opacity:0.5;') + '">' +
-              '<img src="https://flagcdn.com/w20/' + flag + '.png" style="width:14px;height:10px;border-radius:1px;" onerror="this.style.display=&quot;none&quot;">' +
-              '<span style="font-size:11px;color:' + (hit ? '#7eb8f5' : 'var(--gray)') + ';font-weight:' + (hit ? '700' : '400') + ';">' + team + '</span>' +
-              (hit ? '<span style="font-size:10px;color:#7eb8f5;font-weight:700;">+2</span>' : '') +
-              '</div>';
-          });
-          bonusSummary += '</div></div>';
-          phaseHtml += bonusSummary;
+
+          if (realTeams.size > 0 && userTeams.size > 0) {
+            let bonusSummary = '<div style="margin:8px 0 4px;padding:8px 10px;background:rgba(126,184,245,0.06);border:1px solid rgba(126,184,245,0.15);border-radius:8px;">' +
+              '<div style="font-size:10px;font-weight:700;color:#7eb8f5;letter-spacing:1px;margin-bottom:6px;">' + cfg.label + '</div>' +
+              '<div style="display:flex;flex-wrap:wrap;gap:5px;">';
+            userTeams.forEach(function(flag, team) {
+              const hit = realTeams.has(team);
+              bonusSummary += '<div style="display:flex;align-items:center;gap:4px;padding:3px 7px;border-radius:20px;' +
+                (hit ? 'background:rgba(126,184,245,0.12);border:1px solid rgba(126,184,245,0.3);' : 'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);opacity:0.5;') + '">' +
+                '<img src="https://flagcdn.com/w20/' + flag + '.png" style="width:14px;height:10px;border-radius:1px;" onerror="this.style.display=&quot;none&quot;">' +
+                '<span style="font-size:11px;color:' + (hit ? '#7eb8f5' : 'var(--gray)') + ';font-weight:' + (hit ? '700' : '400') + ';">' + team + '</span>' +
+                (hit ? '<span style="font-size:10px;color:#7eb8f5;font-weight:700;margin-left:2px;">+' + cfg.pts + '</span>' : '') +
+                '</div>';
+            });
+            bonusSummary += '</div>';
+            // Campeã bonus (+20) for Final
+            if (cfg.champBonus) {
+              const finalMatch2 = MATCHES.find(function(m){ return m.group==='Final'; });
+              const finalRes = finalMatch2 ? state.results[finalMatch2.id] : null;
+              const finalRtr = finalMatch2 ? (resolvedTeamsReal[finalMatch2.id]||null) : null;
+              const finalPal = finalMatch2 ? pal[finalMatch2.id] : null;
+              if (finalRes && finalPal && finalPal.h !== undefined) {
+                const realWinF = finalRes.h>finalRes.a?'H':finalRes.a>finalRes.h?'A':(finalRes.pen==='H'?'H':'A');
+                const userWinF = +finalPal.h>+finalPal.a?'H':+finalPal.a>+finalPal.h?'A':(finalPal.pen==='H'?'H':'A');
+                const champRealName = realWinF==='H'?(finalRtr?.home?.name||null):(finalRtr?.away?.name||null);
+                const champUserName = userWinF==='H'?(resolvedTeams[finalMatch2.id]?.home?.name||null):(resolvedTeams[finalMatch2.id]?.away?.name||null);
+                const champFlag = userWinF==='H'?(finalRtr?.home?.flag||'un'):(finalRtr?.away?.flag||'un');
+                const champHit = champRealName && champUserName && champRealName === champUserName;
+                bonusSummary += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(245,197,24,0.2);">' +
+                  '<div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:6px;">BÔNUS CAMPEÃ (+20)</div>' +
+                  '<div style="display:flex;flex-wrap:wrap;gap:5px;">';
+                if (champUserName) {
+                  bonusSummary += '<div style="display:flex;align-items:center;gap:4px;padding:3px 7px;border-radius:20px;' +
+                    (champHit ? 'background:rgba(245,197,24,0.12);border:1px solid rgba(245,197,24,0.4);' : 'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);opacity:0.5;') + '">' +
+                    '<img src="https://flagcdn.com/w20/' + champFlag + '.png" style="width:14px;height:10px;border-radius:1px;" onerror="this.style.display=&quot;none&quot;">' +
+                    '<span style="font-size:11px;color:' + (champHit ? 'var(--gold)' : 'var(--gray)') + ';font-weight:' + (champHit ? '700' : '400') + ';">' + (champHit ? '🏆 ' : '') + champUserName + '</span>' +
+                    (champHit ? '<span style="font-size:10px;color:var(--gold);font-weight:700;margin-left:2px;">+20</span>' : '') +
+                    '</div>';
+                }
+                bonusSummary += '</div></div>';
+              }
+            }
+            bonusSummary += '</div>';
+            phaseHtml += bonusSummary;
+          }
         }
       }
       html += '<div class="score-phase-title">' + phase.label + '</div>' + phaseHtml;
