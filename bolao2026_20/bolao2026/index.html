@@ -4052,7 +4052,7 @@ function adminLogin() {
     localStorage.setItem('bolao_admin','true');
     document.getElementById('admin-login-view').style.display='none';
     document.getElementById('admin-main-view').style.display='block';
-    renderAdminGames(); renderAdminTabs(); renderAdminParticipants();
+    renderAdminGames(); renderAdminTabs(); renderAdminFP3Block(); renderAdminExtras(); renderAdminParticipants();
   } else { showToast('Senha incorreta',true); document.getElementById('admin-pwd').value=''; }
 }
 function confirmLogout() { doLogout(); }
