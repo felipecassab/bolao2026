@@ -5286,9 +5286,10 @@ async function adminViewPalpites(wpp) {
       if (res && mp && mp.h !== undefined) {
         const rW = res.h>res.a?'H':res.h<res.a?'A':'E';
         const pW = +mp.h>+mp.a?'H':+mp.h<+mp.a?'A':'E';
-        const bonus = m.phase==='knockout'?{'32-Avos':2,'Oitavas':4,'Quartas':6,'Semifinais':8,'3º Lugar':12,'Final':12}[m.group]||0:0;
-        if (+mp.h===+res.h && +mp.a===+res.a) { pts='+' + (5+bonus) + 'pts'; ptsColor='var(--green)'; }
-        else if (rW===pW) { pts='+' + (3+bonus) + 'pts'; ptsColor='#f5a623'; }
+        // Winner bonus per match (for advancing to next round)
+        const scorePts = (+mp.h===+res.h && +mp.a===+res.a) ? 5 : (rW===pW ? 3 : 0);
+        if (scorePts === 5) { pts='+5pts'; ptsColor='var(--green)'; }
+        else if (scorePts === 3) { pts='+3pts'; ptsColor='#f5a623'; }
         else { pts='0pts'; ptsColor='var(--gray)'; }
       }
       const score = mp ? `<b style="font-size:16px;font-family:'Barlow Condensed',sans-serif;">${mp.h}:${mp.a}${mp.pen?' (pen)':''}</b>` : '<span style="color:var(--gray);">–</span>';
@@ -5317,7 +5318,7 @@ async function adminViewPalpites(wpp) {
         <span style="font-size:12px;flex:1;">${flagImg(homeFlag)} ${homeName}</span>
         <span style="font-size:12px;margin:0 8px;text-align:center;">${score}</span>
         <span style="font-size:12px;flex:1;text-align:right;">${awayName} ${flagImg(awayFlag)}</span>
-        ${pts ? `<span style="font-size:11px;font-weight:700;color:${ptsColor};margin-left:8px;min-width:40px;text-align:right;">${pts}</span>` : '<span style="min-width:40px;"></span>'}
+        ${pts ? `<span style="font-size:11px;font-weight:700;margin-left:8px;min-width:50px;text-align:right;color:${ptsColor};">${pts}</span>` : '<span style="min-width:50px;"></span>'}
       </div>${champLine}`;
     });
 
@@ -5363,9 +5364,35 @@ async function adminViewPalpites(wpp) {
     { group: 'Oitavas',    label: 'OITAVAS → Classificados para as Quartas' },
     { group: 'Quartas',    label: 'QUARTAS → Classificados para as Semis' },
     { group: 'Semifinais', label: 'SEMIS → Classificados para a Final' },
+    { group: 'Final',      label: 'FINAL → Campeã' },
   ];
 
   let koHtml = '';
+
+  // ── Pre-build sets of real teams per phase for bonus display ────
+  const realTeamsPerPhase = {};
+  // 32-avos: from homeTeam/awayTeam stored in results
+  realTeamsPerPhase['32-avos'] = new Set();
+  MATCHES.filter(function(m){ return m.group==='32-avos'; }).forEach(function(m){
+    const res2 = state.results[m.id];
+    if (res2 && res2.homeTeam) realTeamsPerPhase['32-avos'].add(res2.homeTeam);
+    if (res2 && res2.awayTeam) realTeamsPerPhase['32-avos'].add(res2.awayTeam);
+  });
+  // Oitavas/Quartas/Semis/Final: winners of previous phase
+  [['Oitavas','32-avos'],['Quartas','Oitavas'],['Semifinais','Quartas'],['Final','Semifinais']].forEach(function(pair){
+    const [thisPhase, prevPhase] = pair;
+    realTeamsPerPhase[thisPhase] = new Set();
+    MATCHES.filter(function(m){ return m.group===prevPhase; }).forEach(function(m){
+      const res2 = state.results[m.id];
+      if (!res2) return;
+      const rtr2 = resolvedTeamsReal[m.id];
+      const rW2 = res2.h>res2.a?'H':res2.a>res2.h?'A':(res2.pen==='H'?'H':'A');
+      const wName = rW2==='H'?(rtr2?.home?.name):(rtr2?.away?.name);
+      if (wName) realTeamsPerPhase[thisPhase].add(wName);
+    });
+  });
+  // Bonus pts per phase
+  const bonusPtsPerPhase = {'32-avos':2,'Oitavas':4,'Quartas':6,'Semifinais':8,'Final':12};
 
   // ── Fase de Grupos: top 2 de cada grupo + melhores 3ºs ──────────
   const groupLetters = ['A','B','C','D','E','F','G','H','I','J','K','L'];
@@ -5399,11 +5426,15 @@ async function adminViewPalpites(wpp) {
     koHtml += '<div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:6px;">GRUPOS → Classificados para os 32-avos (' + classifiedFor32.length + '/32)</div>';
     koHtml += '<div style="display:flex;flex-wrap:wrap;gap:5px;">';
     classifiedFor32.forEach(function(w) {
-      const style = w.isThird ? 'background:rgba(245,197,24,0.08);border:1px solid rgba(245,197,24,0.2);' : 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);';
+      const inR32 = realTeamsPerPhase['32-avos'] && realTeamsPerPhase['32-avos'].has(w.name);
+      const style = inR32
+        ? (w.isThird ? 'background:rgba(245,197,24,0.12);border:1px solid rgba(245,197,24,0.35);' : 'background:rgba(0,200,83,0.08);border:1px solid rgba(0,200,83,0.25);')
+        : 'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);opacity:0.45;';
       koHtml += '<div style="display:flex;align-items:center;gap:4px;padding:3px 7px;' + style + 'border-radius:20px;">' +
         flagImg(w.flag) +
-        '<span style="font-size:11px;font-weight:500;color:var(--light);">' + w.name + '</span>' +
+        '<span style="font-size:11px;font-weight:' + (inR32?'700':'400') + ';color:' + (inR32?'var(--light)':'var(--gray)') + ';">' + w.name + '</span>' +
         (w.isThird ? '<span style="font-size:9px;color:var(--gold);margin-left:1px;">3º</span>' : '') +
+        (inR32 ? '<span style="font-size:10px;font-weight:700;color:' + (w.isThird?'var(--gold)':'var(--green)') + ';margin-left:2px;">+2</span>' : '') +
         '</div>';
     });
     koHtml += '</div></div>';
@@ -5437,9 +5468,36 @@ async function adminViewPalpites(wpp) {
     koHtml += '<div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:6px;">' + phase.label + '</div>';
     koHtml += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
     winners.forEach(function(w) {
-      koHtml += '<div style="display:flex;align-items:center;gap:5px;padding:4px 8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:20px;">' +
+      const phaseKey = phase.group;
+      // For Final phase: winner gets +12 (finalist) + +20 (campeã)
+      const isFinalPhase = phaseKey === 'Final';
+      const nextPhaseMap = {'32-avos':'Oitavas','Oitavas':'Quartas','Quartas':'Semifinais','Semifinais':'Final'};
+      const nextPhase = isFinalPhase ? null : nextPhaseMap[phaseKey];
+      // For Final: check if user's predicted winner is the real champion
+      let inNextPhase, bPts, chipColor;
+      if (isFinalPhase) {
+        // Real champion = winner of Final match
+        const finalMatch = MATCHES.find(function(m){ return m.group==='Final'; });
+        const finalRes = finalMatch ? state.results[finalMatch.id] : null;
+        const finalRtr = finalMatch ? resolvedTeamsReal[finalMatch.id] : null;
+        const realWinF = finalRes ? (finalRes.h>finalRes.a?'H':finalRes.a>finalRes.h?'A':(finalRes.pen==='H'?'H':'A')) : null;
+        const realChamp = realWinF==='H'?(finalRtr?.home?.name):realWinF==='A'?(finalRtr?.away?.name):null;
+        inNextPhase = realChamp && w.name === realChamp;
+        bPts = inNextPhase ? '+12+20' : null;
+        chipColor = 'var(--gold)';
+      } else {
+        inNextPhase = nextPhase && realTeamsPerPhase[nextPhase] && realTeamsPerPhase[nextPhase].has(w.name);
+        bPts = inNextPhase ? (bonusPtsPerPhase[nextPhase] || 0) : null;
+        chipColor = '#7eb8f5';
+      }
+      const chipStyle = inNextPhase
+        ? (isFinalPhase ? 'background:rgba(245,197,24,0.12);border:1px solid rgba(245,197,24,0.4);' : 'background:rgba(126,184,245,0.1);border:1px solid rgba(126,184,245,0.3);')
+        : 'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);opacity:0.45;';
+      koHtml += '<div style="display:flex;align-items:center;gap:4px;padding:4px 8px;' + chipStyle + 'border-radius:20px;">' +
         flagImg(w.flag || 'un') +
-        '<span style="font-size:12px;font-weight:500;color:var(--light);">' + w.name + '</span>' +
+        (isFinalPhase && inNextPhase ? '🏆 ' : '') +
+        '<span style="font-size:12px;font-weight:' + (inNextPhase?'700':'400') + ';color:' + (inNextPhase?'var(--light)':'var(--gray)') + ';">' + w.name + '</span>' +
+        (inNextPhase && bPts ? '<span style="font-size:10px;font-weight:700;color:' + chipColor + ';margin-left:2px;">+' + bPts + '</span>' : '') +
         '</div>';
     });
     koHtml += '</div></div>';
