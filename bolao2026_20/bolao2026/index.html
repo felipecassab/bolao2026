@@ -115,6 +115,24 @@ body{display:flex;flex-direction:column}
 /* MODAL AUTH */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:8000;align-items:flex-end;justify-content:center;padding:0}
 .modal-bg.open{display:flex}
+/* SCORE DETAIL MODAL */
+.score-modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:9000; align-items:flex-end; justify-content:center; }
+.score-modal-bg.open { display:flex; }
+.score-modal-box { background:var(--navy2); border-radius:24px 24px 0 0; padding:20px 16px calc(20px + var(--safe-bot)); width:100%; max-width:520px; border-top:1px solid rgba(255,255,255,0.1); max-height:92vh; overflow-y:auto; }
+.score-phase-title { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:11px; letter-spacing:2px; color:var(--gold); margin:14px 0 6px; }
+.score-match-row { display:flex; align-items:center; gap:6px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.04); font-size:12px; }
+.score-match-row:last-child { border-bottom:none; }
+.score-pts-badge { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:13px; min-width:32px; text-align:center; border-radius:6px; padding:2px 5px; }
+.score-pts-exact  { background:rgba(0,200,83,0.15);  color:var(--green); border:1px solid rgba(0,200,83,0.3); }
+.score-pts-winner { background:rgba(245,197,24,0.12); color:var(--gold);  border:1px solid rgba(245,197,24,0.3); }
+.score-pts-bonus  { background:rgba(126,184,245,0.12);color:#7eb8f5;     border:1px solid rgba(126,184,245,0.3); }
+.score-pts-zero   { background:rgba(255,255,255,0.04);color:var(--gray);  border:1px solid rgba(255,255,255,0.08); }
+.score-pts-extra  { background:rgba(0,200,83,0.12);  color:var(--green); border:1px solid rgba(0,200,83,0.25); }
+.score-summary-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:16px; }
+.score-summary-cell { background:rgba(255,255,255,0.04); border-radius:10px; padding:10px 6px; text-align:center; border:1px solid rgba(255,255,255,0.07); }
+.score-summary-val { font-family:'Barlow Condensed',sans-serif; font-size:22px; font-weight:900; color:var(--gold); }
+.score-summary-lbl { font-size:10px; color:var(--gray); margin-top:2px; }
+
 .modal-box{background:var(--navy2);border-radius:24px 24px 0 0;padding:24px 20px calc(24px + var(--safe-bot));width:100%;max-width:480px;border-top:1px solid rgba(255,255,255,0.1);max-height:90vh;overflow-y:auto;position:relative;z-index:1}
 .modal-handle{width:40px;height:4px;background:rgba(255,255,255,0.2);border-radius:2px;margin:0 auto 20px}
 .modal-title{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;color:var(--gold);margin-bottom:4px}
@@ -3720,8 +3738,8 @@ function renderRanking() {
   document.getElementById('ranking-list').innerHTML = scores.map((s,i)=>{
     const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`;
     const cls=i===0?'color:#FFD700':i===1?'color:#C0C0C0':i===2?'color:#CD7F32':'color:var(--gray)';
-    const clickable = canView ? `onclick="viewPalpites('${s.u}')" style="cursor:pointer;"` : '';
-    const hint = canView ? '<span style="font-size:10px;color:var(--gold);margin-left:4px;">ver palpites</span>' : '';
+    const clickable = `onclick="openScoreModal('${s.u}')" style="cursor:pointer;"`;
+    const hint = '<span style="font-size:10px;color:var(--gold);margin-left:4px;">▸ detalhes</span>';
     const maxP = calcMaxPts(state.palpites[s.u]);
     return `<div class="rank-row" ${clickable}>
       <span class="rank-num" style="${cls}">${medal}</span>
@@ -5852,7 +5870,205 @@ const FIFA_THIRD_COMBINATIONS = {
 
 loadState();
 
+// ═══════════════════════════════════════════════════════════════════
+// SCORE DETAIL MODAL
+// ═══════════════════════════════════════════════════════════════════
+function closeScoreModal() {
+  document.getElementById('score-modal').classList.remove('open');
+}
+
+function openScoreModal(uid) {
+  const user = state.users[uid];
+  const pal  = state.palpites[uid] || {};
+  const name = uName(uid);
+
+  // Avatar
+  const av = document.getElementById('score-modal-avatar');
+  av.style.background = uColor(uid);
+  av.style.color = uColorT(uid);
+  av.textContent = initials(name);
+
+  document.getElementById('score-modal-name').textContent = name;
+
+  // Build resolvedTeams for this user
+  buildResolvedTeams(pal);
+
+  // ── Pontos jogo a jogo ──────────────────────────────────────────
+  let totalPts = 0, totalAc = 0, totalEx = 0;
+  let bonusPts = 0, extraPts = 0;
+
+  const phases = [
+    { key:'group',    label:'FASE DE GRUPOS',   groups:['A','B','C','D','E','F','G','H','I','J','K','L'] },
+    { key:'knockout', label:'32-AVOS DE FINAL',  groups:['32-avos'] },
+    { key:'knockout', label:'OITAVAS DE FINAL',   groups:['Oitavas'] },
+    { key:'knockout', label:'QUARTAS DE FINAL',   groups:['Quartas'] },
+    { key:'knockout', label:'SEMIFINAIS',          groups:['Semifinais'] },
+    { key:'knockout', label:'DISPUTA 3º LUGAR',    groups:['3º Lugar'] },
+    { key:'knockout', label:'FINAL',               groups:['Final'] },
+  ];
+
+  // Phase bonus labels
+  const bonusLabel = { '32-avos':'Bônus classif. grupos', 'Oitavas':'Bônus 32-avos', 'Quartas':'Bônus oitavas', 'Semifinais':'Bônus quartas', 'Final':'Bônus semis', '3º Lugar':'', 'group':'' };
+  const bonusPerTeam = { '32-avos':2, 'Oitavas':4, 'Quartas':6, 'Semifinais':8, 'Final':12 };
+
+  let html = '';
+
+  // ── Summary grid (filled after calc) ───────────────────────────
+  // We'll do two passes: first collect data, then render
+
+  let matchRows = []; // { phase, group, m, pts, type, homeName, awayName, userH, userA, resH, resA, bonusH, bonusA }
+
+  phases.forEach(phase => {
+    phase.groups.forEach(grp => {
+      const matches = MATCHES.filter(m => m.group === grp);
+      matches.forEach(m => {
+        const res = state.results[m.id];
+        const p   = pal[m.id];
+        const rt  = resolvedTeams[m.id] || null;
+        const rtr = resolvedTeamsReal[m.id] || null;
+        const homeName = (rtr && rtr.home && rtr.home.name) ? rtr.home.name : m.home;
+        const awayName = (rtr && rtr.away && rtr.away.name) ? rtr.away.name : m.away;
+        const userHomeName = (rt && rt.home && rt.home.name) ? rt.home.name : m.home;
+        const userAwayName = (rt && rt.away && rt.away.name) ? rt.away.name : m.away;
+
+        let pts = 0, type = 'zero';
+        let bonusH = 0, bonusA = 0;
+
+        if (res && p && p.h !== undefined && p.a !== undefined) {
+          const rW = res.h > res.a ? 'H' : res.h < res.a ? 'A' : 'E';
+          const pW = +p.h > +p.a ? 'H' : +p.h < +p.a ? 'A' : 'E';
+          if (+p.h === res.h && +p.a === res.a) { pts = 5; type = 'exact'; totalEx++; totalAc++; }
+          else if (rW === pW) { pts = 3; type = 'winner'; totalAc++; }
+          else { pts = 0; type = 'zero'; }
+          totalPts += pts;
+
+          // Bonus for this match
+          if (grp === '32-avos') {
+            if (res.homeTeam && userHomeName === res.homeTeam) { bonusH = 2; bonusPts += 2; }
+            if (res.awayTeam && userAwayName === res.awayTeam) { bonusA = 2; bonusPts += 2; }
+          } else if (['Oitavas','Quartas','Semifinais','Final'].includes(grp)) {
+            const bVal = {'Oitavas':4,'Quartas':6,'Semifinais':8,'Final':12}[grp] || 0;
+            const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : 'A');
+            const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen === 'H' ? 'H' : 'A');
+            if (realWin === userWin) { bonusH = bVal; bonusPts += bVal; }
+          }
+        }
+
+        matchRows.push({ phaseLabel: phase.label, group: grp, m, pts, type, homeName, awayName, userH: p?.h, userA: p?.a, resH: res?.h, resA: res?.a, bonusH, bonusA, res, p });
+      });
+    });
+  });
+
+  // Extras
+  const qa = pal._qa || {};
+  const qaAnswers = state.results._qaAnswers || {};
+  let extraRows = [];
+  Object.entries(qa).forEach(([qid, q]) => {
+    if (q.correct === true) { extraPts += 3; totalPts += 3; }
+    extraRows.push({ qid, q, ans: qaAnswers[qid] });
+  });
+
+  // Total bonus
+  totalPts += bonusPts; // already added per match above? No — let's recalc cleanly
+  // Actually recalc cleanly to avoid double counting
+  const {pts: realTotal, ac: realAc, ex: realEx} = calcPts(pal);
+  totalPts = realTotal; totalAc = realAc; totalEx = realEx;
+  // recalc bonus/extra for display
+  bonusPts = calcBonusPts(pal);
+  extraPts = 0;
+  Object.values(qa).forEach(q => { if(q.correct===true) extraPts += 3; });
+  const matchOnlyPts = totalPts - bonusPts - extraPts;
+
+  document.getElementById('score-modal-sub').textContent = totalAc + ' acertos · ' + totalEx + ' exatos';
+
+  // Summary grid
+  html += '<div class="score-summary-grid">' +
+    '<div class="score-summary-cell"><div class="score-summary-val">' + totalPts + '</div><div class="score-summary-lbl">Total</div></div>' +
+    '<div class="score-summary-cell"><div class="score-summary-val" style="color:#7eb8f5;">' + bonusPts + '</div><div class="score-summary-lbl">Bônus mata-mata</div></div>' +
+    '<div class="score-summary-cell"><div class="score-summary-val" style="color:var(--green);">' + extraPts + '</div><div class="score-summary-lbl">Extras</div></div>' +
+    '</div>';
+
+  // Render by phase
+  let currentPhase = '';
+  matchRows.forEach(row => {
+    const hasResult = row.res !== undefined && row.res !== null;
+    if (!hasResult) return; // skip matches without result
+
+    if (row.phaseLabel !== currentPhase) {
+      currentPhase = row.phaseLabel;
+      const phasePts = matchRows.filter(r => r.phaseLabel === currentPhase && r.res).reduce((s,r) => s + r.pts + r.bonusH + r.bonusA, 0);
+      html += '<div class="score-phase-title">' + currentPhase + '</div>';
+    }
+
+    const ptsClass = row.type === 'exact' ? 'score-pts-exact' : row.type === 'winner' ? 'score-pts-winner' : 'score-pts-zero';
+    const userScore = (row.userH !== undefined && row.userA !== undefined) ? row.userH + ':' + row.userA : '—';
+    const realScore = (row.resH !== undefined && row.resA !== undefined) ? row.resH + ':' + row.resA : '—';
+
+    const homeFlag = (resolvedTeamsReal[row.m.id]?.home?.flag) || row.m.fH;
+    const awayFlag = (resolvedTeamsReal[row.m.id]?.away?.flag) || row.m.fA;
+
+    html += '<div class="score-match-row">' +
+      '<span class="score-pts-badge ' + ptsClass + '">' + (row.pts > 0 ? '+' + row.pts : '0') + '</span>' +
+      '<img src="https://flagcdn.com/w20/' + homeFlag + '.png" style="width:16px;height:11px;border-radius:1px;flex-shrink:0;" onerror="this.style.display=&quot;none&quot;">' +
+      '<span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--light);">' + row.homeName + '</span>' +
+      '<span style="font-family:var(--font-cond),sans-serif;font-size:13px;color:var(--gray);margin:0 2px;">×</span>' +
+      '<span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--light);text-align:right;">' + row.awayName + '</span>' +
+      '<img src="https://flagcdn.com/w20/' + awayFlag + '.png" style="width:16px;height:11px;border-radius:1px;flex-shrink:0;" onerror="this.style.display=&quot;none&quot;">' +
+      '<span style="font-size:11px;color:var(--gray);margin:0 4px;white-space:nowrap;">Palp:<b style="color:var(--light);">' + userScore + '</b></span>' +
+      '<span style="font-size:11px;color:var(--gray);white-space:nowrap;">Real:<b style="color:var(--light);">' + realScore + '</b></span>' +
+      '</div>';
+
+    // Bonus row
+    if (row.bonusH > 0 || row.bonusA > 0) {
+      const bTotal = row.bonusH + row.bonusA;
+      html += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0 5px 38px;border-bottom:1px solid rgba(255,255,255,0.04);">' +
+        '<span class="score-pts-badge score-pts-bonus">+' + bTotal + '</span>' +
+        '<span style="font-size:11px;color:#7eb8f5;">bônus classificação</span>' +
+        '</div>';
+    }
+  });
+
+  // Extras
+  if (extraRows.length > 0) {
+    html += '<div class="score-phase-title">PERGUNTAS EXTRAS</div>';
+    extraRows.forEach(row => {
+      if (!row.ans) return;
+      const correct = row.q.correct === true;
+      html += '<div class="score-match-row">' +
+        '<span class="score-pts-badge ' + (correct ? 'score-pts-extra' : 'score-pts-zero') + '">' + (correct ? '+3' : '0') + '</span>' +
+        '<span style="flex:1;color:var(--light);font-size:11px;">' + (row.ans.correct || '?') + '</span>' +
+        '<span style="font-size:11px;color:var(--gray);">Resp: <b style="color:var(--light);">' + (row.q.answer || '—') + '</b></span>' +
+        '</div>';
+    });
+  }
+
+  if (!html.includes('score-phase-title') && extraRows.length === 0) {
+    html += '<div class="empty" style="padding:30px 0;"><div class="empty-icon">📊</div><p>Nenhum resultado registrado ainda.</p></div>';
+  }
+
+  document.getElementById('score-modal-body').innerHTML = html;
+  document.getElementById('score-modal').classList.add('open');
+}
+
 </script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<!-- SCORE DETAIL MODAL -->
+<div class="score-modal-bg" id="score-modal" onclick="if(event.target===this)closeScoreModal()">
+  <div class="score-modal-box">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="avatar" id="score-modal-avatar" style="width:40px;height:40px;font-size:16px;"></div>
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:var(--gold);" id="score-modal-name"></div>
+          <div style="font-size:11px;color:var(--gray);" id="score-modal-sub"></div>
+        </div>
+      </div>
+      <button onclick="closeScoreModal()" style="background:transparent;border:none;color:var(--gray);font-size:24px;cursor:pointer;padding:0 4px;line-height:1;">×</button>
+    </div>
+    <div id="score-modal-body"></div>
+  </div>
+</div>
 </body>
 </html>
