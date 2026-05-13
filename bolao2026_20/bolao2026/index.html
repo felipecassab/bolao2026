@@ -6163,7 +6163,6 @@ async function openScoreModal(uid) {
   av.style.color = uColorT(uid);
   av.textContent = initials(name);
   document.getElementById('score-modal-name').textContent = name;
-
   // Build resolvedTeams for this user AND real teams
   buildResolvedTeams(pal, null, false); // sem penFallback para cálculo correto
   buildResolvedTeamsFromResults();
@@ -6213,18 +6212,28 @@ async function openScoreModal(uid) {
         const p   = pal[m.id];
         const rtr = resolvedTeamsReal[m.id] || null;
         const rt  = resolvedTeams[m.id] || null;
+        const isKO = m.phase === 'knockout';
 
-        // Real team names
-        const homeName = (rtr && rtr.home && rtr.home.name) ? rtr.home.name : m.home;
-        const awayName = (rtr && rtr.away && rtr.away.name) ? rtr.away.name : m.away;
-        const homeFlag = (rtr && rtr.home && rtr.home.flag) ? rtr.home.flag : m.fH;
-        const awayFlag = (rtr && rtr.away && rtr.away.flag) ? rtr.away.flag : m.fA;
+        // For KO matches: show user's predicted teams (from their bracket)
+        // For group matches: use real team names (fixed, same for everyone)
+        const homeName = isKO
+          ? ((rt && rt.home && rt.home.name) ? rt.home.name : m.home)
+          : ((rtr && rtr.home && rtr.home.name) ? rtr.home.name : m.home);
+        const awayName = isKO
+          ? ((rt && rt.away && rt.away.name) ? rt.away.name : m.away)
+          : ((rtr && rtr.away && rtr.away.name) ? rtr.away.name : m.away);
+        const homeFlag = isKO
+          ? ((rt && rt.home && rt.home.flag) ? rt.home.flag : m.fH)
+          : ((rtr && rtr.home && rtr.home.flag) ? rtr.home.flag : m.fH);
+        const awayFlag = isKO
+          ? ((rt && rt.away && rt.away.flag) ? rt.away.flag : m.fA)
+          : ((rtr && rtr.away && rtr.away.flag) ? rtr.away.flag : m.fA);
 
-        // User predicted team names (from their bracket)
-        const userHomeName = (rt && rt.home && rt.home.name) ? rt.home.name : m.home;
-        const userAwayName = (rt && rt.away && rt.away.name) ? rt.away.name : m.away;
-        const userHomeFlag = (rt && rt.home && rt.home.flag) ? rt.home.flag : m.fH;
-        const userAwayFlag = (rt && rt.away && rt.away.flag) ? rt.away.flag : m.fA;
+        // User predicted team names = same as above for KO (already using user bracket)
+        const userHomeName = homeName;
+        const userAwayName = awayName;
+        const userHomeFlag = homeFlag;
+        const userAwayFlag = awayFlag;
 
         // ── Match points ─────────────────────────────────────────
         let pts = 0, type = 'zero';
