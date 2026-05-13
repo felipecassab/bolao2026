@@ -2790,9 +2790,10 @@ function calcBonusPts(userPalpites) {
 
   // BONUS 32-AVOS (+2 per team qualifying from groups = 64pts max):
   // User gets +2 for each team they predicted would reach the r32,
-  // regardless of which slot/match — just whether that team is among the real 32 qualifiers.
+  // collected directly from group standings (top 2 + best 8 thirds)
+  // to avoid duplicates or errors from resolvedTeams slot assignment.
   {
-    // Collect all real teams in r32 (homeTeam + awayTeam from results)
+    // Real teams in r32 (from homeTeam/awayTeam stored in results)
     const realR32Teams = new Set();
     MATCHES.filter(m => m.group === '32-avos').forEach(m => {
       const res = state.results[m.id];
@@ -2800,48 +2801,49 @@ function calcBonusPts(userPalpites) {
       if (res.homeTeam) realR32Teams.add(res.homeTeam);
       if (res.awayTeam) realR32Teams.add(res.awayTeam);
     });
-    // Collect all teams user predicted in r32 (from their resolvedTeams)
+    // User's predicted r32 teams: top 2 from each group + best 8 thirds
     const userR32Teams = new Set();
-    MATCHES.filter(m => m.group === '32-avos').forEach(m => {
-      const rt = resolvedTeams[m.id];
-      if (!rt) return;
-      if (rt.home?.name) userR32Teams.add(rt.home.name);
-      if (rt.away?.name) userR32Teams.add(rt.away.name);
+    const groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+    groups.forEach(g => {
+      const s = calcGroupStandings(g, userPalpites);
+      if (s[0] && s[0].j > 0 && s[0].name) userR32Teams.add(s[0].name);
+      if (s[1] && s[1].j > 0 && s[1].name) userR32Teams.add(s[1].name);
     });
+    // Best 8 thirds (already sorted in resolvedTeams via allThirds)
+    const allThirdsBonus = groups.map(g => {
+      const s = calcGroupStandings(g, userPalpites);
+      return s[2] && s[2].j > 0 ? Object.assign({}, s[2], {group: g}) : null;
+    }).filter(Boolean);
+    sortThirds(allThirdsBonus, userPalpites);
+    allThirdsBonus.slice(0, 8).forEach(t => { if (t.name) userR32Teams.add(t.name); });
     // +2 for each user-predicted team that actually qualified
     userR32Teams.forEach(team => {
       if (realR32Teams.has(team)) bonus += 2;
     });
   }
 
-  // BONUS OITAVAS (+4): user predicted correct winner of each r32 match
-  // BONUS QUARTAS (+6): user predicted correct winner of each oitavas match
-  // BONUS SEMIS (+8): user predicted correct winner of each quartas match
-  // BONUS FINAL (+12): user predicted correct winner of each semis match
-  // Logic: compare user's predicted winner (from resolvedTeams) vs real winner
+  // BONUS OITAVAS (+4): user correctly predicted winner of each r32 match
+  // BONUS QUARTAS (+6): user correctly predicted winner of each oitavas match  
+  // BONUS SEMIS (+8): user correctly predicted winner of each quartas match
+  // BONUS FINAL (+12): user correctly predicted winner of each semis match
+  // Logic: user predicted the winner (H or A) of a match via their palpite score
+  //        real winner determined by result score — compare H/A positions directly
+  //        since both user and real reference the same match slot
   const winnerBonus = {'32-avos':4, 'Oitavas':6, 'Quartas':8, 'Semifinais':12};
   Object.entries(winnerBonus).forEach(([phase, pts]) => {
     MATCHES.filter(m => m.group === phase).forEach(m => {
       const res = state.results[m.id];
       if (!res) return;
-      // Real winner of this match
-      const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : res.pen === 'A' ? 'A' : null);
-      if (!realWin) return; // draw with no pen = no bonus
-      // Real winner team name
-      const rtr = resolvedTeamsReal[m.id];
-      const realWinName = realWin === 'H' ? rtr?.home?.name : rtr?.away?.name;
-      if (!realWinName) return;
-      // User's predicted winner = winner of this match per user's palpite
       const p = userPalpites?.[m.id];
       if (!p || p.h === undefined || p.a === undefined) return;
+      // Real winner side (H or A) — null if draw with no pen
+      const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : res.pen === 'A' ? 'A' : null);
+      if (!realWin) return;
+      // User predicted winner side (H or A)
       const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen === 'H' ? 'H' : p.pen === 'A' ? 'A' : null);
       if (!userWin) return;
-      // User's predicted winner team name (from their bracket)
-      const rt = resolvedTeams[m.id];
-      const userWinName = userWin === 'H' ? rt?.home?.name : rt?.away?.name;
-      if (!userWinName) return;
-      // Award bonus if same team
-      if (realWinName === userWinName) bonus += pts;
+      // Same side wins → user predicted the correct team advancing
+      if (realWin === userWin) bonus += pts;
     });
   });
 
@@ -2849,17 +2851,11 @@ function calcBonusPts(userPalpites) {
   const finalMatch = MATCHES.find(m => m.group === 'Final');
   if (finalMatch) {
     const res = state.results[finalMatch.id];
-    if (res) {
+    const p = userPalpites?.[finalMatch.id];
+    if (res && p && p.h !== undefined && p.a !== undefined) {
       const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : res.pen === 'A' ? 'A' : null);
-      const rtr = resolvedTeamsReal[finalMatch.id];
-      const realChamp = realWin === 'H' ? rtr?.home?.name : realWin === 'A' ? rtr?.away?.name : null;
-      const p = userPalpites?.[finalMatch.id];
-      if (realChamp && p && p.h !== undefined && p.a !== undefined) {
-        const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen === 'H' ? 'H' : p.pen === 'A' ? 'A' : null);
-        const rt = resolvedTeams[finalMatch.id];
-        const userChamp = userWin === 'H' ? rt?.home?.name : userWin === 'A' ? rt?.away?.name : null;
-        if (realChamp && userChamp && realChamp === userChamp) bonus += 20;
-      }
+      const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen === 'H' ? 'H' : p.pen === 'A' ? 'A' : null);
+      if (realWin && userWin && realWin === userWin) bonus += 20;
     }
   }
 
@@ -6188,6 +6184,50 @@ async function openScoreModal(uid) {
   // ── Recalc totals cleanly ────────────────────────────────────────
   const {pts: totalPts, ac: totalAc, ex: totalEx} = calcPts(pal);
   const bonusPts = calcBonusPts(pal);
+  // DEBUG - remover depois
+  console.log('=== BONUS DEBUG ===');
+  console.log('bonusPts calculado:', bonusPts);
+  // Re-run r32 manually to see what's happening
+  {
+    buildResolvedTeams(pal, null, false);
+    const realR32 = new Set();
+    MATCHES.filter(m=>m.group==='32-avos').forEach(m=>{
+      const res=state.results[m.id]; if(!res) return;
+      if(res.homeTeam) realR32.add(res.homeTeam);
+      if(res.awayTeam) realR32.add(res.awayTeam);
+    });
+    const userR32 = new Set();
+    const grps=['A','B','C','D','E','F','G','H','I','J','K','L'];
+    grps.forEach(g=>{
+      const s=calcGroupStandings(g,pal);
+      if(s[0]&&s[0].j>0&&s[0].name) userR32.add(s[0].name);
+      if(s[1]&&s[1].j>0&&s[1].name) userR32.add(s[1].name);
+    });
+    const thirds=grps.map(g=>{const s=calcGroupStandings(g,pal);return s[2]&&s[2].j>0?Object.assign({},s[2],{group:g}):null;}).filter(Boolean);
+    sortThirds(thirds,pal);
+    thirds.slice(0,8).forEach(t=>{if(t.name) userR32.add(t.name);});
+    let r32bonus=0;
+    userR32.forEach(t=>{if(realR32.has(t)) r32bonus+=2;});
+    console.log('realR32 size:', realR32.size, [...realR32]);
+    console.log('userR32 size:', userR32.size, [...userR32]);
+    console.log('r32 bonus:', r32bonus);
+    // KO bonuses
+    const wb={'32-avos':4,'Oitavas':6,'Quartas':8,'Semifinais':12};
+    let koBonus=0;
+    Object.entries(wb).forEach(([phase,pts])=>{
+      MATCHES.filter(m=>m.group===phase).forEach(m=>{
+        const res=state.results[m.id]; if(!res) return;
+        const p=pal[m.id]; if(!p||p.h===undefined||p.a===undefined) return;
+        const rW=res.h>res.a?'H':res.a>res.h?'A':(res.pen==='H'?'H':res.pen==='A'?'A':null);
+        if(!rW) return;
+        const uW=+p.h>+p.a?'H':+p.a>+p.h?'A':(p.pen==='H'?'H':p.pen==='A'?'A':null);
+        if(!uW) return;
+        if(rW===uW){koBonus+=pts;console.log('KO bonus +'+pts+' for',m.id,'rW='+rW,'uW='+uW,'p='+p.h+':'+p.a,'res='+res.h+':'+res.a);}
+      });
+    });
+    console.log('KO bonus total:', koBonus);
+    console.log('Expected total:', r32bonus+koBonus);
+  }
   const qa = pal._qa || {};
   const qaAnswers = state.results._qaAnswers || {};
   let extraPts = 0;
