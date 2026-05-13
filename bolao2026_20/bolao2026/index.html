@@ -2836,11 +2836,13 @@ function calcBonusPts(userPalpites) {
       if (!res) return;
       const p = userPalpites?.[m.id];
       if (!p || p.h === undefined || p.a === undefined) return;
-      // Real winner side (H or A) — null if draw with no pen
-      const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : res.pen === 'A' ? 'A' : null);
-      if (!realWin) return;
-      // User predicted winner side (H or A)
-      const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen === 'H' ? 'H' : p.pen === 'A' ? 'A' : null);
+      // Real winner side — use pen only if score is actually a draw
+      const realIsDraw = +res.h === +res.a;
+      const realWin = +res.h > +res.a ? 'H' : +res.a > +res.h ? 'A' : (realIsDraw && res.pen === 'H' ? 'H' : realIsDraw && res.pen === 'A' ? 'A' : null);
+      if (!realWin) return; // draw with no pen = no bonus
+      // User predicted winner side — use pen only if their score is a draw
+      const userIsDraw = +p.h === +p.a;
+      const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (userIsDraw && p.pen === 'H' ? 'H' : userIsDraw && p.pen === 'A' ? 'A' : null);
       if (!userWin) return;
       // Same side wins → user predicted the correct team advancing
       if (realWin === userWin) bonus += pts;
@@ -2853,8 +2855,10 @@ function calcBonusPts(userPalpites) {
     const res = state.results[finalMatch.id];
     const p = userPalpites?.[finalMatch.id];
     if (res && p && p.h !== undefined && p.a !== undefined) {
-      const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : res.pen === 'A' ? 'A' : null);
-      const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen === 'H' ? 'H' : p.pen === 'A' ? 'A' : null);
+      const rIsDraw = +res.h === +res.a;
+      const realWin = +res.h > +res.a ? 'H' : +res.a > +res.h ? 'A' : (rIsDraw && res.pen === 'H' ? 'H' : rIsDraw && res.pen === 'A' ? 'A' : null);
+      const uIsDraw = +p.h === +p.a;
+      const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (uIsDraw && p.pen === 'H' ? 'H' : uIsDraw && p.pen === 'A' ? 'A' : null);
       if (realWin && userWin && realWin === userWin) bonus += 20;
     }
   }
@@ -6184,50 +6188,6 @@ async function openScoreModal(uid) {
   // ── Recalc totals cleanly ────────────────────────────────────────
   const {pts: totalPts, ac: totalAc, ex: totalEx} = calcPts(pal);
   const bonusPts = calcBonusPts(pal);
-  // DEBUG - remover depois
-  console.log('=== BONUS DEBUG ===');
-  console.log('bonusPts calculado:', bonusPts);
-  // Re-run r32 manually to see what's happening
-  {
-    buildResolvedTeams(pal, null, false);
-    const realR32 = new Set();
-    MATCHES.filter(m=>m.group==='32-avos').forEach(m=>{
-      const res=state.results[m.id]; if(!res) return;
-      if(res.homeTeam) realR32.add(res.homeTeam);
-      if(res.awayTeam) realR32.add(res.awayTeam);
-    });
-    const userR32 = new Set();
-    const grps=['A','B','C','D','E','F','G','H','I','J','K','L'];
-    grps.forEach(g=>{
-      const s=calcGroupStandings(g,pal);
-      if(s[0]&&s[0].j>0&&s[0].name) userR32.add(s[0].name);
-      if(s[1]&&s[1].j>0&&s[1].name) userR32.add(s[1].name);
-    });
-    const thirds=grps.map(g=>{const s=calcGroupStandings(g,pal);return s[2]&&s[2].j>0?Object.assign({},s[2],{group:g}):null;}).filter(Boolean);
-    sortThirds(thirds,pal);
-    thirds.slice(0,8).forEach(t=>{if(t.name) userR32.add(t.name);});
-    let r32bonus=0;
-    userR32.forEach(t=>{if(realR32.has(t)) r32bonus+=2;});
-    console.log('realR32 size:', realR32.size, [...realR32]);
-    console.log('userR32 size:', userR32.size, [...userR32]);
-    console.log('r32 bonus:', r32bonus);
-    // KO bonuses
-    const wb={'32-avos':4,'Oitavas':6,'Quartas':8,'Semifinais':12};
-    let koBonus=0;
-    Object.entries(wb).forEach(([phase,pts])=>{
-      MATCHES.filter(m=>m.group===phase).forEach(m=>{
-        const res=state.results[m.id]; if(!res) return;
-        const p=pal[m.id]; if(!p||p.h===undefined||p.a===undefined) return;
-        const rW=res.h>res.a?'H':res.a>res.h?'A':(res.pen==='H'?'H':res.pen==='A'?'A':null);
-        if(!rW) return;
-        const uW=+p.h>+p.a?'H':+p.a>+p.h?'A':(p.pen==='H'?'H':p.pen==='A'?'A':null);
-        if(!uW) return;
-        if(rW===uW){koBonus+=pts;console.log('KO bonus +'+pts+' for',m.id,'rW='+rW,'uW='+uW,'p='+p.h+':'+p.a,'res='+res.h+':'+res.a);}
-      });
-    });
-    console.log('KO bonus total:', koBonus);
-    console.log('Expected total:', r32bonus+koBonus);
-  }
   const qa = pal._qa || {};
   const qaAnswers = state.results._qaAnswers || {};
   let extraPts = 0;
@@ -6483,6 +6443,7 @@ async function openScoreModal(uid) {
   if (!html.includes('score-phase-title')) {
     html += '<div class="empty" style="padding:30px 0;"><div class="empty-icon">📊</div><p>Nenhum resultado registrado ainda.</p></div>';
   }
+
 
   document.getElementById('score-modal-body').innerHTML = html;
   document.getElementById('score-modal').classList.add('open');
