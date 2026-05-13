@@ -3756,7 +3756,7 @@ function renderRanking() {
   takeSnapshot();
   const names = Object.keys(state.users).filter(u => !state.users[u]._deleted);
   const scores = names.map(u=>{
-    buildResolvedTeams(state.palpites[u] || {});
+    buildResolvedTeams(state.palpites[u] || {}, null, true);
     return {u,...calcPts(state.palpites[u])};
   }).sort((a,b)=>b.pts-a.pts);
   // Restaurar resolvedTeams para o usuário atual
@@ -3777,7 +3777,7 @@ function renderRanking() {
     const cls=i===0?'color:#FFD700':i===1?'color:#C0C0C0':i===2?'color:#CD7F32':'color:var(--gray)';
     const clickable = `onclick="openScoreModal('${s.u}')" style="cursor:pointer;"`;
     const hint = '<span style="font-size:10px;color:var(--gold);margin-left:4px;">▸ detalhes</span>';
-    buildResolvedTeams(state.palpites[s.u] || {});
+    buildResolvedTeams(state.palpites[s.u] || {}, null, true);
     const maxP = calcMaxPts(state.palpites[s.u]);
     return `<div class="rank-row" ${clickable}>
       <span class="rank-num" style="${cls}">${medal}</span>
@@ -5089,7 +5089,7 @@ function viewPalpites(wpp) {
   const usr = state.users[wpp];
   if (!usr) return;
   const userPalpites = state.palpites[wpp] || {};
-  buildResolvedTeams(userPalpites);
+  buildResolvedTeams(userPalpites, null, true);
   const {pts, ac, ex} = calcPts(userPalpites);
 
   // Header
@@ -5158,7 +5158,7 @@ function viewMatchPalpites(matchId) {
   // Get all participants sorted by current ranking
   const sorted = Object.keys(state.users)
     .map(w => {
-      buildResolvedTeams(state.palpites[w] || {});
+      buildResolvedTeams(state.palpites[w] || {}, null, true);
       return { w, pts: calcPts(state.palpites[w]).pts };
     })
     .sort((a,b) => b.pts - a.pts);
@@ -6144,7 +6144,7 @@ function openScoreModal(uid) {
   document.getElementById('score-modal-name').textContent = name;
 
   // Build resolvedTeams for this user AND real teams
-  buildResolvedTeams(pal);
+  buildResolvedTeams(pal, null, true); // penFallback=true: mesmo critério do adminViewPalpites
   buildResolvedTeamsFromResults();
 
   // ── Recalc totals cleanly ────────────────────────────────────────
