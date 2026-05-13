@@ -2814,34 +2814,52 @@ function calcBonusPts(userPalpites) {
     });
   }
 
-  // BONUS OITAVAS (+4 per team = 64pts max): winner of each r32 match
-  // BONUS QUARTAS (+6 per team = 48pts max): winner of each oitavas match
-  // BONUS SEMI (+8 per team = 32pts max): winner of each quartas match
-  // BONUS FINAL (+12 per team = 24pts max): winner of each semi match
+  // BONUS OITAVAS (+4): user predicted correct winner of each r32 match
+  // BONUS QUARTAS (+6): user predicted correct winner of each oitavas match
+  // BONUS SEMIS (+8): user predicted correct winner of each quartas match
+  // BONUS FINAL (+12): user predicted correct winner of each semis match
+  // Logic: compare user's predicted winner (from resolvedTeams) vs real winner
   const winnerBonus = {'32-avos':4, 'Oitavas':6, 'Quartas':8, 'Semifinais':12};
   Object.entries(winnerBonus).forEach(([phase, pts]) => {
     MATCHES.filter(m => m.group === phase).forEach(m => {
       const res = state.results[m.id];
       if (!res) return;
+      // Real winner of this match
+      const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : res.pen === 'A' ? 'A' : null);
+      if (!realWin) return; // draw with no pen = no bonus
+      // Real winner team name
+      const rtr = resolvedTeamsReal[m.id];
+      const realWinName = realWin === 'H' ? rtr?.home?.name : rtr?.away?.name;
+      if (!realWinName) return;
+      // User's predicted winner = winner of this match per user's palpite
       const p = userPalpites?.[m.id];
       if (!p || p.h === undefined || p.a === undefined) return;
-      // Only award bonus if there's a definitive real winner (no fallback for draws without pen)
-      const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : res.pen === 'A' ? 'A' : null);
       const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen === 'H' ? 'H' : p.pen === 'A' ? 'A' : null);
-      if (realWin && userWin && realWin === userWin) bonus += pts;
-      // Note: if realWin===null (draw, no pen recorded yet), no bonus awarded
+      if (!userWin) return;
+      // User's predicted winner team name (from their bracket)
+      const rt = resolvedTeams[m.id];
+      const userWinName = userWin === 'H' ? rt?.home?.name : rt?.away?.name;
+      if (!userWinName) return;
+      // Award bonus if same team
+      if (realWinName === userWinName) bonus += pts;
     });
   });
 
-  // BONUS CAMPEÃ (+20pts): winner of Final
+  // BONUS CAMPEÃ (+20pts): user predicted correct winner of Final
   const finalMatch = MATCHES.find(m => m.group === 'Final');
   if (finalMatch) {
     const res = state.results[finalMatch.id];
-    const p = userPalpites?.[finalMatch.id];
-    if (res && p && p.h !== undefined && p.a !== undefined) {
-      const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : 'A');
-      const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen === 'H' ? 'H' : 'A');
-      if (realWin === userWin) bonus += 20;
+    if (res) {
+      const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : res.pen === 'A' ? 'A' : null);
+      const rtr = resolvedTeamsReal[finalMatch.id];
+      const realChamp = realWin === 'H' ? rtr?.home?.name : realWin === 'A' ? rtr?.away?.name : null;
+      const p = userPalpites?.[finalMatch.id];
+      if (realChamp && p && p.h !== undefined && p.a !== undefined) {
+        const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen === 'H' ? 'H' : p.pen === 'A' ? 'A' : null);
+        const rt = resolvedTeams[finalMatch.id];
+        const userChamp = userWin === 'H' ? rt?.home?.name : userWin === 'A' ? rt?.away?.name : null;
+        if (realChamp && userChamp && realChamp === userChamp) bonus += 20;
+      }
     }
   }
 
@@ -6310,9 +6328,9 @@ async function openScoreModal(uid) {
             // User's predicted r32 teams = both teams in each r32 slot (from resolvedTeams)
             MATCHES.filter(function(m){ return m.group==='32-avos'; }).forEach(function(m){
               const rt2 = resolvedTeams[m.id]; if (!rt2) return;
-              const rtr2 = resolvedTeamsReal[m.id];
-              if (rt2.home?.name) userTeams.set(rt2.home.name, rtr2?.home?.flag||rt2.home.flag||'un');
-              if (rt2.away?.name) userTeams.set(rt2.away.name, rtr2?.away?.flag||rt2.away.flag||'un');
+              // Use ONLY user's bracket for both name and flag — rtr2 is the real team, not user's
+              if (rt2.home?.name) userTeams.set(rt2.home.name, rt2.home.flag||'un');
+              if (rt2.away?.name) userTeams.set(rt2.away.name, rt2.away.flag||'un');
             });
           } else {
             // User's predicted winners of previous phase = winner of each match per user palpite
@@ -6321,16 +6339,20 @@ async function openScoreModal(uid) {
             MATCHES.filter(function(m){ return m.group===prevGrp2; }).forEach(function(m){
               const p2 = pal[m.id]; if (!p2||p2.h===undefined||p2.a===undefined) return;
               const res2 = state.results[m.id]; if (!res2) return;
-              const rtr2 = resolvedTeamsReal[m.id];
-              // User predicted winner of this match
+              const rt2 = resolvedTeams[m.id];   // user's bracket
+              const rtr2 = resolvedTeamsReal[m.id]; // real teams
+              // User predicted winner (H or A side in user's bracket)
               const uW = +p2.h>+p2.a?'H':+p2.a>+p2.h?'A':(p2.pen==='H'?'H':p2.pen==='A'?'A':null);
               if (!uW) return;
-              const uName = uW==='H'?(rtr2?.home?.name||resolvedTeams[m.id]?.home?.name||null):(rtr2?.away?.name||resolvedTeams[m.id]?.away?.name||null);
-              const uFlag = uW==='H'?(rtr2?.home?.flag||'un'):(rtr2?.away?.flag||'un');
-              // Real winner of this match
-              const rW2 = res2.h>res2.a?'H':res2.a>res2.h?'A':(res2.pen==='H'?'H':'A');
-              // Only add if user correctly predicted the winner (matches calcBonusPts)
-              if (uName && uW===rW2) userTeams.set(uName, uFlag);
+              // Name and flag from USER's bracket (not real)
+              const uName = uW==='H'?(rt2?.home?.name||null):(rt2?.away?.name||null);
+              const uFlag = uW==='H'?(rt2?.home?.flag||'un'):(rt2?.away?.flag||'un');
+              // Real winner name (from real bracket)
+              const rW2 = res2.h>res2.a?'H':res2.a>res2.h?'A':(res2.pen==='H'?'H':res2.pen==='A'?'A':null);
+              if (!rW2) return;
+              const rName = rW2==='H'?(rtr2?.home?.name||null):(rtr2?.away?.name||null);
+              // Only show in userTeams (regardless of hit) — hit determined later by realTeams lookup
+              if (uName) userTeams.set(uName, uFlag);
             });
           }
 
