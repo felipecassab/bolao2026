@@ -3430,6 +3430,28 @@ async function syncDraft() {
   if (isPastDeadline()) { showToast('Prazo encerrado!', true); return; }
   if (isSubmitted()) { showToast('Palpites já enviados à Comissão!', true); return; }
 
+  // Verificar pênaltis pendentes em jogos de mata-mata empatados
+  {
+    const pal = state.palpites[state.user] || {};
+    const missingPen = [];
+    MATCHES.filter(m => m.phase === 'knockout').forEach(m => {
+      const p = pal[m.id];
+      if (!p || p.h === undefined || p.a === undefined) return;
+      if (+p.h === +p.a && !p.pen) {
+        // Try DOM too
+        const hEl = document.getElementById('p_' + m.id + '_h');
+        const aEl = document.getElementById('p_' + m.id + '_a');
+        const hv = hEl ? hEl.value : String(p.h);
+        const av = aEl ? aEl.value : String(p.a);
+        if (+hv === +av) missingPen.push(m.home + ' × ' + m.away);
+      }
+    });
+    if (missingPen.length > 0) {
+      showToast('⚠️ Falta selecionar o vencedor nos pênaltis em ' + missingPen.length + ' jogo(s) empatado(s) no mata-mata. Corrija antes de enviar.', true);
+      return;
+    }
+  }
+
   // Carregar pen de todas as fontes locais disponíveis
   let localDraft = {};
   try { localDraft = JSON.parse(localStorage.getItem('bolao_draft_' + state.user) || '{}'); } catch(e) {}
@@ -3681,6 +3703,34 @@ async function savePalpites() {
   if (!state.user) { openModal('login'); return; }
   if (isPastDeadline()) { showToast('Prazo encerrado!', true); return; }
   if (isSubmitted()) { showToast('Palpites já enviados à Comissão!', true); return; }
+  // Verificar pagamento
+  const userObj = state.users[state.user];
+  if (userObj && userObj.paid === false) {
+    showToast('⚠️ Seus palpites não podem ser enviados pois sua inscrição ainda não foi paga. Entre em contato com a comissão.', true);
+    return;
+  }
+
+  // Verificar pênaltis pendentes em jogos de mata-mata empatados
+  {
+    const pal = state.palpites[state.user] || {};
+    const missingPen = [];
+    MATCHES.filter(m => m.phase === 'knockout').forEach(m => {
+      const p = pal[m.id];
+      if (!p || p.h === undefined || p.a === undefined) return;
+      if (+p.h === +p.a && !p.pen) {
+        // Try DOM too
+        const hEl = document.getElementById('p_' + m.id + '_h');
+        const aEl = document.getElementById('p_' + m.id + '_a');
+        const hv = hEl ? hEl.value : String(p.h);
+        const av = aEl ? aEl.value : String(p.a);
+        if (+hv === +av) missingPen.push(m.home + ' × ' + m.away);
+      }
+    });
+    if (missingPen.length > 0) {
+      showToast('⚠️ Falta selecionar o vencedor nos pênaltis em ' + missingPen.length + ' jogo(s) empatado(s) no mata-mata. Corrija antes de enviar.', true);
+      return;
+    }
+  }
 
   // Carregar pen de todas as fontes locais disponíveis
   let localDraft = {};
@@ -4844,6 +4894,14 @@ async function adminClear(id) {
   buildResolvedTeamsFromResults();
   showToast('Resultado removido'); renderAdminTabs(); renderAdminGames(); renderAdminFP3Block(); renderRanking();
 }
+async function adminTogglePaid(uid) {
+  if (!state.users[uid]) return;
+  state.users[uid].paid = !state.users[uid].paid;
+  await saveGlobal();
+  renderAdminParticipants();
+  showToast(state.users[uid].paid ? '💰 Pagamento confirmado!' : '⏳ Marcado como pendente');
+}
+
 async function renderAdminParticipants() {
   // Buscar dados frescos do Firebase
   try {
@@ -4891,7 +4949,9 @@ async function renderAdminParticipants() {
 
   // Approved participants
   if (approved.length) {
-    html += `<p style="font-size:11px;color:var(--green);font-weight:700;letter-spacing:1px;margin-bottom:8px;">✓ APROVADOS (${approved.length})</p>`;
+    const paidCount = approved.filter(([,u]) => u.paid).length;
+    const pendingPayCount = approved.length - paidCount;
+    html += `<p style="font-size:11px;color:var(--green);font-weight:700;letter-spacing:1px;margin-bottom:8px;">✓ APROVADOS (${approved.length}) &nbsp;·&nbsp; <span style="color:var(--green);">💰 ${paidCount} pagos</span> &nbsp;·&nbsp; <span style="color:#f5a623;">⏳ ${pendingPayCount} pendentes</span></p>`;
     html += approved.map(([uid,u]) => {
       const submitted = state.palpites[uid]?._submitted;
       return `
@@ -4901,6 +4961,7 @@ async function renderAdminParticipants() {
           <p style="font-size:14px;font-weight:500;">${uApelido(u,uid)} ${submitted ? '<span style="font-size:10px;color:var(--green);font-weight:700;background:rgba(0,200,83,0.12);border:1px solid rgba(0,200,83,0.3);padding:2px 6px;border-radius:50px;">✅ ENVIADO</span>' : ''}</p>
           <p style="font-size:12px;color:var(--gray);">📱 ${uWpp(u,uid)}</p>
         </div>
+        <button onclick="adminTogglePaid('${uid}')" title="${u.paid ? 'Marcar como pendente' : 'Marcar como pago'}" style="padding:5px 10px;border-radius:8px;font-size:14px;cursor:pointer;border:1px solid ${u.paid ? 'rgba(0,200,83,0.4)' : 'rgba(255,255,255,0.15)'};background:${u.paid ? 'rgba(0,200,83,0.12)' : 'rgba(255,255,255,0.04)'};">${u.paid ? '💰' : '⏳'}</button>
         <button onclick="adminViewPalpites('${uid}')" style="padding:5px 10px;background:rgba(126,184,245,0.12);color:#7eb8f5;border:1px solid rgba(126,184,245,0.3);border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;">👁 Ver</button>
         ${submitted ? `<button onclick="adminUnsubmit('${uid}')" style="padding:5px 10px;background:rgba(245,197,24,0.12);color:var(--gold);border:1px solid rgba(245,197,24,0.3);border-radius:8px;font-size:12px;cursor:pointer;">🔓 Desbloquear</button>` : `<button onclick="adminMarkSubmitted('${uid}')" style="padding:5px 10px;background:rgba(0,200,83,0.1);color:var(--green);border:1px solid rgba(0,200,83,0.3);border-radius:8px;font-size:12px;cursor:pointer;">✅ Marcar enviado</button>`}
         <button onclick="adminResetPwd('${uid}')" style="padding:5px 10px;background:transparent;border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--gray);font-size:12px;cursor:pointer;">Resetar senha</button>
