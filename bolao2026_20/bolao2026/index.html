@@ -3834,7 +3834,10 @@ async function savePalpites() {
 // ═══════════════════════════════════════════════════════════════════
 function renderRanking() {
   takeSnapshot();
-  const names = Object.keys(state.users).filter(u => !state.users[u]._deleted);
+  const names = Object.keys(state.users).filter(u => {
+    const usr = state.users[u];
+    return !usr._deleted && usr.status !== 'pending' && usr.status !== 'rejected';
+  });
   const scores = names.map(u=>{
     buildResolvedTeams(state.palpites[u] || {}, null, false);
     return {u,...calcPts(state.palpites[u])};
