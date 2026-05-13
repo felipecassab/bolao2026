@@ -5089,6 +5089,7 @@ function viewPalpites(wpp) {
   const usr = state.users[wpp];
   if (!usr) return;
   const userPalpites = state.palpites[wpp] || {};
+  buildResolvedTeams(userPalpites);
   const {pts, ac, ex} = calcPts(userPalpites);
 
   // Header
@@ -5156,8 +5157,12 @@ function viewMatchPalpites(matchId) {
 
   // Get all participants sorted by current ranking
   const sorted = Object.keys(state.users)
-    .map(w => ({ w, pts: calcPts(state.palpites[w]).pts }))
+    .map(w => {
+      buildResolvedTeams(state.palpites[w] || {});
+      return { w, pts: calcPts(state.palpites[w]).pts };
+    })
     .sort((a,b) => b.pts - a.pts);
+  buildResolvedTeams(state.palpites[state.user] || {});
 
   let html = '';
   sorted.forEach((s, i) => {
@@ -5242,7 +5247,11 @@ async function adminViewPalpites(wpp) {
 
   let html = '';
 
-  // Stats summary
+  // Construir resolvedTeams para esta pessoa ANTES de calcPts (que usa resolvedTeams global)
+  const viewerResolved = {};
+  buildResolvedTeams(p, viewerResolved, true); // true = usar fallback H para empates sem pen
+
+  // Stats summary — agora com resolvedTeams correto
   const stats = calcPts(p);
   html += `<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
     <div class="card" style="flex:1;min-width:80px;text-align:center;padding:10px;">
@@ -5262,10 +5271,6 @@ async function adminViewPalpites(wpp) {
       <div style="font-size:11px;color:var(--gray);">jogos</div>
     </div>
   </div>`;
-
-  // Construir resolvedTeams para esta pessoa sem afetar o estado global
-  const viewerResolved = {};
-  buildResolvedTeams(p, viewerResolved, true); // true = usar fallback H para empates sem pen
 
   // Group matches
   const groups = {};
@@ -5606,7 +5611,7 @@ function exportPalpites() {
 
   // ── Sheet 4: RANKING ─────────────────────────────────────────────
   const scores = users
-    .map(([wpp, u]) => ({ name: u.nome, ...calcPts(state.palpites[wpp]) }))
+    .map(([wpp, u]) => { buildResolvedTeams(state.palpites[wpp] || {}); return { name: u.nome, ...calcPts(state.palpites[wpp]) }; })
     .sort((a,b) => b.pts - a.pts);
   const rankRows = [['Pos', 'Participante', 'Pontos', 'Acertos', 'Exatos']];
   scores.forEach((s, i) => rankRows.push([i+1, s.name, s.pts, s.ac, s.ex]));
