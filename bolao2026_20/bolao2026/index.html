@@ -3755,7 +3755,12 @@ async function savePalpites() {
 function renderRanking() {
   takeSnapshot();
   const names = Object.keys(state.users).filter(u => !state.users[u]._deleted);
-  const scores = names.map(u=>({u,...calcPts(state.palpites[u])})).sort((a,b)=>b.pts-a.pts);
+  const scores = names.map(u=>{
+    buildResolvedTeams(state.palpites[u] || {});
+    return {u,...calcPts(state.palpites[u])};
+  }).sort((a,b)=>b.pts-a.pts);
+  // Restaurar resolvedTeams para o usuário atual
+  buildResolvedTeams(state.palpites[state.user] || {});
   const done = MATCHES.filter(m=>state.results[m.id]).length;
   const qaAnswers = state.results._qaAnswers || {};
   const extrasCorrigidas = EXTRA_QS.filter(q => qaAnswers[q.id] && qaAnswers[q.id].correct).length;
@@ -3772,6 +3777,7 @@ function renderRanking() {
     const cls=i===0?'color:#FFD700':i===1?'color:#C0C0C0':i===2?'color:#CD7F32':'color:var(--gray)';
     const clickable = `onclick="openScoreModal('${s.u}')" style="cursor:pointer;"`;
     const hint = '<span style="font-size:10px;color:var(--gold);margin-left:4px;">▸ detalhes</span>';
+    buildResolvedTeams(state.palpites[s.u] || {});
     const maxP = calcMaxPts(state.palpites[s.u]);
     return `<div class="rank-row" ${clickable}>
       <span class="rank-num" style="${cls}">${medal}</span>
