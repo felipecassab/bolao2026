@@ -2784,84 +2784,90 @@ function getKnockoutWinnerReal(matchId) {
 function calcBonusPts(userPalpites) {
   let bonus = 0;
 
-  // Build resolvedTeams WITHOUT penFallback for bonus calculation
-  // penFallback=true changes group standings for draws, causing incorrect bonus counts
+  // Build resolvedTeams without penFallback for correct group standings
   buildResolvedTeams(userPalpites, null, false);
 
-  // BONUS 32-AVOS (+2 per team qualifying from groups = 64pts max):
-  // User gets +2 for each team they predicted would reach the r32,
-  // collected directly from group standings (top 2 + best 8 thirds)
-  // to avoid duplicates or errors from resolvedTeams slot assignment.
-  {
-    // Real teams in r32 (from homeTeam/awayTeam stored in results)
-    const realR32Teams = new Set();
-    MATCHES.filter(m => m.group === '32-avos').forEach(m => {
-      const res = state.results[m.id];
-      if (!res) return;
-      if (res.homeTeam) realR32Teams.add(res.homeTeam);
-      if (res.awayTeam) realR32Teams.add(res.awayTeam);
-    });
-    // User's predicted r32 teams: top 2 from each group + best 8 thirds
-    const userR32Teams = new Set();
-    const groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
-    groups.forEach(g => {
-      const s = calcGroupStandings(g, userPalpites);
-      if (s[0] && s[0].j > 0 && s[0].name) userR32Teams.add(s[0].name);
-      if (s[1] && s[1].j > 0 && s[1].name) userR32Teams.add(s[1].name);
-    });
-    // Best 8 thirds (already sorted in resolvedTeams via allThirds)
-    const allThirdsBonus = groups.map(g => {
-      const s = calcGroupStandings(g, userPalpites);
-      return s[2] && s[2].j > 0 ? Object.assign({}, s[2], {group: g}) : null;
-    }).filter(Boolean);
-    sortThirds(allThirdsBonus, userPalpites);
-    allThirdsBonus.slice(0, 8).forEach(t => { if (t.name) userR32Teams.add(t.name); });
-    // +2 for each user-predicted team that actually qualified
-    userR32Teams.forEach(team => {
-      if (realR32Teams.has(team)) bonus += 2;
-    });
-  }
-
-  // BONUS OITAVAS (+4): user correctly predicted winner of each r32 match
-  // BONUS QUARTAS (+6): user correctly predicted winner of each oitavas match  
-  // BONUS SEMIS (+8): user correctly predicted winner of each quartas match
-  // BONUS FINAL (+12): user correctly predicted winner of each semis match
-  // Logic: user predicted the winner (H or A) of a match via their palpite score
-  //        real winner determined by result score — compare H/A positions directly
-  //        since both user and real reference the same match slot
-  const winnerBonus = {'32-avos':4, 'Oitavas':6, 'Quartas':8, 'Semifinais':12};
-  Object.entries(winnerBonus).forEach(([phase, pts]) => {
-    MATCHES.filter(m => m.group === phase).forEach(m => {
-      const res = state.results[m.id];
-      if (!res) return;
-      const p = userPalpites?.[m.id];
-      if (!p || p.h === undefined || p.a === undefined) return;
-      // Real winner side — use pen only if score is actually a draw
-      const realIsDraw = +res.h === +res.a;
-      const realWin = +res.h > +res.a ? 'H' : +res.a > +res.h ? 'A' : (realIsDraw && res.pen === 'H' ? 'H' : realIsDraw && res.pen === 'A' ? 'A' : null);
-      if (!realWin) return; // draw with no pen = no bonus
-      // User predicted winner side — use pen only if their score is a draw
-      const userIsDraw = +p.h === +p.a;
-      const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (userIsDraw && p.pen === 'H' ? 'H' : userIsDraw && p.pen === 'A' ? 'A' : null);
-      if (!userWin) return;
-      // Same side wins → user predicted the correct team advancing
-      if (realWin === userWin) bonus += pts;
-    });
-  });
-
-  // BONUS CAMPEÃ (+20pts): user predicted correct winner of Final
-  const finalMatch = MATCHES.find(m => m.group === 'Final');
-  if (finalMatch) {
-    const res = state.results[finalMatch.id];
-    const p = userPalpites?.[finalMatch.id];
-    if (res && p && p.h !== undefined && p.a !== undefined) {
-      const rIsDraw = +res.h === +res.a;
-      const realWin = +res.h > +res.a ? 'H' : +res.a > +res.h ? 'A' : (rIsDraw && res.pen === 'H' ? 'H' : rIsDraw && res.pen === 'A' ? 'A' : null);
-      const uIsDraw = +p.h === +p.a;
-      const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (uIsDraw && p.pen === 'H' ? 'H' : uIsDraw && p.pen === 'A' ? 'A' : null);
-      if (realWin && userWin && realWin === userWin) bonus += 20;
+  // Helper: collect real teams that reached each phase (by name)
+  function realTeamsInPhase(phase) {
+    const teams = new Set();
+    if (phase === '32-avos') {
+      MATCHES.filter(m => m.group === '32-avos').forEach(m => {
+        const res = state.results[m.id]; if (!res) return;
+        if (res.homeTeam) teams.add(res.homeTeam);
+        if (res.awayTeam) teams.add(res.awayTeam);
+      });
+    } else {
+      // Winners of previous phase matches
+      const prev = {'Oitavas':'32-avos','Quartas':'Oitavas','Semifinais':'Quartas','Final':'Semifinais','Campeã':'Final'}[phase];
+      MATCHES.filter(m => m.group === prev).forEach(m => {
+        const res = state.results[m.id]; if (!res) return;
+        const rtr = resolvedTeamsReal[m.id]; if (!rtr) return;
+        const isDraw = +res.h === +res.a;
+        const winSide = +res.h > +res.a ? 'H' : +res.a > +res.h ? 'A' : (isDraw && res.pen === 'H' ? 'H' : isDraw && res.pen === 'A' ? 'A' : null);
+        if (!winSide) return;
+        const name = winSide === 'H' ? rtr.home?.name : rtr.away?.name;
+        if (name) teams.add(name);
+      });
     }
+    return teams;
   }
+
+  // Helper: collect user-predicted teams for each phase (by name)
+  function userTeamsInPhase(phase) {
+    const teams = new Set();
+    const groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+    if (phase === '32-avos') {
+      // Top 2 from each group + best 8 thirds
+      groups.forEach(g => {
+        const s = calcGroupStandings(g, userPalpites);
+        if (s[0] && s[0].j > 0 && s[0].name) teams.add(s[0].name);
+        if (s[1] && s[1].j > 0 && s[1].name) teams.add(s[1].name);
+      });
+      const thirds = groups.map(g => {
+        const s = calcGroupStandings(g, userPalpites);
+        return s[2] && s[2].j > 0 ? Object.assign({}, s[2], {group: g}) : null;
+      }).filter(Boolean);
+      sortThirds(thirds, userPalpites);
+      thirds.slice(0, 8).forEach(t => { if (t.name) teams.add(t.name); });
+    } else {
+      // Winners of previous phase matches per user's palpites
+      const prev = {'Oitavas':'32-avos','Quartas':'Oitavas','Semifinais':'Quartas','Final':'Semifinais','Campeã':'Final'}[phase];
+      MATCHES.filter(m => m.group === prev).forEach(m => {
+        const p = userPalpites?.[m.id]; if (!p || p.h === undefined || p.a === undefined) return;
+        const rt = resolvedTeams[m.id]; if (!rt) return;
+        const isDraw = +p.h === +p.a;
+        const winSide = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (isDraw && p.pen === 'H' ? 'H' : isDraw && p.pen === 'A' ? 'A' : null);
+        if (!winSide) return;
+        const name = winSide === 'H' ? rt.home?.name : rt.away?.name;
+        if (name) teams.add(name);
+      });
+    }
+    return teams;
+  }
+
+  // +2 per team user predicted in r32 that actually made it
+  const real32 = realTeamsInPhase('32-avos');
+  userTeamsInPhase('32-avos').forEach(t => { if (real32.has(t)) bonus += 2; });
+
+  // +4 per team user predicted in Oitavas that actually made it
+  const realOit = realTeamsInPhase('Oitavas');
+  userTeamsInPhase('Oitavas').forEach(t => { if (realOit.has(t)) bonus += 4; });
+
+  // +6 per team user predicted in Quartas that actually made it
+  const realQrt = realTeamsInPhase('Quartas');
+  userTeamsInPhase('Quartas').forEach(t => { if (realQrt.has(t)) bonus += 6; });
+
+  // +8 per team user predicted in Semis that actually made it
+  const realSem = realTeamsInPhase('Semifinais');
+  userTeamsInPhase('Semifinais').forEach(t => { if (realSem.has(t)) bonus += 8; });
+
+  // +12 per team user predicted in Final that actually made it
+  const realFin = realTeamsInPhase('Final');
+  userTeamsInPhase('Final').forEach(t => { if (realFin.has(t)) bonus += 12; });
+
+  // +20 if user predicted the champion
+  const realChamps = realTeamsInPhase('Campeã');
+  userTeamsInPhase('Campeã').forEach(t => { if (realChamps.has(t)) bonus += 20; });
 
   return bonus;
 }
