@@ -4958,17 +4958,21 @@ async function renderAdminParticipants() {
     html += approved.map(([uid,u]) => {
       const submitted = state.palpites[uid]?._submitted;
       return `
-      <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
-        <div class="avatar" style="background:${u.color||COLORS[0]};color:${u.colorT||COLORS_T[0]};">${initials(uApelido(u,uid))}</div>
-        <div style="flex:1;">
-          <p style="font-size:14px;font-weight:500;">${uApelido(u,uid)} ${submitted ? '<span style="font-size:10px;color:var(--green);font-weight:700;background:rgba(0,200,83,0.12);border:1px solid rgba(0,200,83,0.3);padding:2px 6px;border-radius:50px;">✅ ENVIADO</span>' : ''}</p>
-          <p style="font-size:12px;color:var(--gray);">📱 ${uWpp(u,uid)}</p>
+      <div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <div class="avatar" style="background:${u.color||COLORS[0]};color:${u.colorT||COLORS_T[0]};flex-shrink:0;">${initials(uApelido(u,uid))}</div>
+          <div style="flex:1;min-width:0;">
+            <p style="font-size:14px;font-weight:500;">${uApelido(u,uid)} ${submitted ? '<span style="font-size:10px;color:var(--green);font-weight:700;background:rgba(0,200,83,0.12);border:1px solid rgba(0,200,83,0.3);padding:2px 6px;border-radius:50px;">✅ ENVIADO</span>' : ''}</p>
+            <p style="font-size:12px;color:var(--gray);">📱 ${uWpp(u,uid)}</p>
+          </div>
         </div>
-        <button onclick="adminTogglePaid('${uid}')" title="${u.paid ? 'Marcar como pendente' : 'Marcar como pago'}" style="padding:5px 10px;border-radius:8px;font-size:14px;cursor:pointer;border:1px solid ${u.paid ? 'rgba(0,200,83,0.4)' : 'rgba(255,255,255,0.15)'};background:${u.paid ? 'rgba(0,200,83,0.12)' : 'rgba(255,255,255,0.04)'};">${u.paid ? '💰' : '⏳'}</button>
-        <button onclick="adminViewPalpites('${uid}')" style="padding:5px 10px;background:rgba(126,184,245,0.12);color:#7eb8f5;border:1px solid rgba(126,184,245,0.3);border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;">👁 Ver</button>
-        ${submitted ? `<button onclick="adminUnsubmit('${uid}')" style="padding:5px 10px;background:rgba(245,197,24,0.12);color:var(--gold);border:1px solid rgba(245,197,24,0.3);border-radius:8px;font-size:12px;cursor:pointer;">🔓 Desbloquear</button>` : `<button onclick="adminMarkSubmitted('${uid}')" style="padding:5px 10px;background:rgba(0,200,83,0.1);color:var(--green);border:1px solid rgba(0,200,83,0.3);border-radius:8px;font-size:12px;cursor:pointer;">✅ Marcar enviado</button>`}
-        <button onclick="adminResetPwd('${uid}')" style="padding:5px 10px;background:transparent;border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--gray);font-size:12px;cursor:pointer;">Resetar senha</button>
-        <button onclick="adminDeleteUser('${uid}','${uApelido(u,uid)}')" style="padding:5px 10px;background:transparent;border:1px solid rgba(244,67,54,0.3);border-radius:8px;color:var(--red);font-size:12px;cursor:pointer;">🗑️</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button onclick="adminTogglePaid('${uid}')" title="${u.paid ? 'Marcar como pendente' : 'Marcar como pago'}" style="padding:5px 10px;border-radius:8px;font-size:13px;cursor:pointer;border:1px solid ${u.paid ? 'rgba(0,200,83,0.4)' : 'rgba(255,255,255,0.15)'};background:${u.paid ? 'rgba(0,200,83,0.12)' : 'rgba(255,255,255,0.04)'};color:${u.paid ? 'var(--green)' : 'var(--gray)'}; font-weight:700;">${u.paid ? '💰 Pago' : '⏳ Pendente'}</button>
+          <button onclick="adminViewPalpites('${uid}')" style="padding:5px 10px;background:rgba(126,184,245,0.12);color:#7eb8f5;border:1px solid rgba(126,184,245,0.3);border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;">👁 Ver</button>
+          ${submitted ? `<button onclick="adminUnsubmit('${uid}')" style="padding:5px 10px;background:rgba(245,197,24,0.12);color:var(--gold);border:1px solid rgba(245,197,24,0.3);border-radius:8px;font-size:12px;cursor:pointer;">🔓 Desbloquear</button>` : `<button onclick="adminMarkSubmitted('${uid}')" style="padding:5px 10px;background:rgba(0,200,83,0.1);color:var(--green);border:1px solid rgba(0,200,83,0.3);border-radius:8px;font-size:12px;cursor:pointer;">✅ Marcar enviado</button>`}
+          <button onclick="adminResetPwd('${uid}')" style="padding:5px 10px;background:transparent;border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--gray);font-size:12px;cursor:pointer;">🔑 Senha</button>
+          <button onclick="adminDeleteUser('${uid}','${uApelido(u,uid)}')" style="padding:5px 10px;background:transparent;border:1px solid rgba(244,67,54,0.3);border-radius:8px;color:var(--red);font-size:12px;cursor:pointer;">🗑️</button>
+        </div>
       </div>`;
     }).join('');
   }
