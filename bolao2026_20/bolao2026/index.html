@@ -2784,6 +2784,10 @@ function getKnockoutWinnerReal(matchId) {
 function calcBonusPts(userPalpites) {
   let bonus = 0;
 
+  // Build resolvedTeams WITHOUT penFallback for bonus calculation
+  // penFallback=true changes group standings for draws, causing incorrect bonus counts
+  buildResolvedTeams(userPalpites, null, false);
+
   // BONUS 32-AVOS (+2 per team qualifying from groups = 64pts max):
   // User gets +2 for each team they predicted would reach the r32,
   // regardless of which slot/match — just whether that team is among the real 32 qualifiers.
@@ -2821,9 +2825,11 @@ function calcBonusPts(userPalpites) {
       if (!res) return;
       const p = userPalpites?.[m.id];
       if (!p || p.h === undefined || p.a === undefined) return;
+      // Only award bonus if there's a definitive real winner (no fallback for draws without pen)
       const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : res.pen === 'A' ? 'A' : null);
       const userWin = +p.h > +p.a ? 'H' : +p.a > +p.h ? 'A' : (p.pen === 'H' ? 'H' : p.pen === 'A' ? 'A' : null);
       if (realWin && userWin && realWin === userWin) bonus += pts;
+      // Note: if realWin===null (draw, no pen recorded yet), no bonus awarded
     });
   });
 
@@ -3756,7 +3762,7 @@ function renderRanking() {
   takeSnapshot();
   const names = Object.keys(state.users).filter(u => !state.users[u]._deleted);
   const scores = names.map(u=>{
-    buildResolvedTeams(state.palpites[u] || {}, null, true);
+    buildResolvedTeams(state.palpites[u] || {}, null, false);
     return {u,...calcPts(state.palpites[u])};
   }).sort((a,b)=>b.pts-a.pts);
   // Restaurar resolvedTeams para o usuário atual
@@ -3777,7 +3783,7 @@ function renderRanking() {
     const cls=i===0?'color:#FFD700':i===1?'color:#C0C0C0':i===2?'color:#CD7F32':'color:var(--gray)';
     const clickable = `onclick="openScoreModal('${s.u}')" style="cursor:pointer;"`;
     const hint = '<span style="font-size:10px;color:var(--gold);margin-left:4px;">▸ detalhes</span>';
-    buildResolvedTeams(state.palpites[s.u] || {}, null, true);
+    buildResolvedTeams(state.palpites[s.u] || {}, null, false);
     const maxP = calcMaxPts(state.palpites[s.u]);
     return `<div class="rank-row" ${clickable}>
       <span class="rank-num" style="${cls}">${medal}</span>
@@ -5089,7 +5095,7 @@ function viewPalpites(wpp) {
   const usr = state.users[wpp];
   if (!usr) return;
   const userPalpites = state.palpites[wpp] || {};
-  buildResolvedTeams(userPalpites, null, true);
+  buildResolvedTeams(userPalpites, null, false);
   const {pts, ac, ex} = calcPts(userPalpites);
 
   // Header
@@ -5158,7 +5164,7 @@ function viewMatchPalpites(matchId) {
   // Get all participants sorted by current ranking
   const sorted = Object.keys(state.users)
     .map(w => {
-      buildResolvedTeams(state.palpites[w] || {}, null, true);
+      buildResolvedTeams(state.palpites[w] || {}, null, false);
       return { w, pts: calcPts(state.palpites[w]).pts };
     })
     .sort((a,b) => b.pts - a.pts);
@@ -6132,9 +6138,24 @@ function closeScoreModal() {
   document.getElementById('score-modal').classList.remove('open');
 }
 
-function openScoreModal(uid) {
-  const pal  = state.palpites[uid] || {};
+async function openScoreModal(uid) {
   const name = uName(uid);
+
+  // Show loading state immediately
+  document.getElementById('score-modal-avatar').textContent = '…';
+  document.getElementById('score-modal-name').textContent = name;
+  document.getElementById('score-modal-sub').textContent = '';
+  document.getElementById('score-modal-body').innerHTML = '<div style="padding:40px;text-align:center;color:var(--gray);">Carregando...</div>';
+  document.getElementById('score-modal').classList.add('open');
+
+  // Fetch fresh data from Firebase
+  try {
+    const fresh = await fbGet();
+    if (fresh && fresh.palpites) state.palpites = fresh.palpites;
+    if (fresh && fresh.results) state.results = fresh.results;
+  } catch(e) {}
+
+  const pal  = state.palpites[uid] || {};
 
   // Avatar
   const av = document.getElementById('score-modal-avatar');
@@ -6144,7 +6165,7 @@ function openScoreModal(uid) {
   document.getElementById('score-modal-name').textContent = name;
 
   // Build resolvedTeams for this user AND real teams
-  buildResolvedTeams(pal, null, true); // penFallback=true: mesmo critério do adminViewPalpites
+  buildResolvedTeams(pal, null, false); // sem penFallback para cálculo correto
   buildResolvedTeamsFromResults();
 
   // ── Recalc totals cleanly ────────────────────────────────────────
