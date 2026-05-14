@@ -4236,8 +4236,15 @@ function histTab(tab, btn) {
     el.innerHTML='<div class="empty"><div class="empty-icon">⏳</div><p>Carregando dados...</p></div>';
     return;
   }
-  const done = MATCHES.filter(m=>state.results[m.id]);
-  if (!done.length) { el.innerHTML='<div class="empty"><div class="empty-icon">⏳</div><p>Nenhum resultado registrado ainda</p></div>'; return; }
+  // Verificar se há resultados em state.results (excluindo chaves especiais como _qaAnswers)
+  const resultKeys = Object.keys(state.results || {}).filter(k => k !== '_qaAnswers' && typeof state.results[k] === 'object' && state.results[k] !== null && 'h' in state.results[k]);
+  const done = MATCHES.filter(m => resultKeys.includes(m.id));
+  if (!done.length) {
+    // Diagnóstico: mostrar quantos resultados existem no state
+    const totalResults = resultKeys.length;
+    el.innerHTML=`<div class="empty"><div class="empty-icon">⏳</div><p>${totalResults > 0 ? 'Resultados no banco: ' + totalResults + ' (IDs não coincidem com MATCHES)' : 'Nenhum resultado registrado ainda'}</p></div>`;
+    return;
+  }
   const users = tab==='eu'&&state.user
     ? [state.user]
     : Object.keys(state.users).filter(u => {
