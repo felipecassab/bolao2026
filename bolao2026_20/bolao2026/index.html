@@ -309,6 +309,7 @@ body{display:flex;flex-direction:column}
     <div class="avatar" id="hdr-avatar" style="background:#1a3a6e;color:#8eb8f5;">?</div>
     <span id="hdr-name">Entrar</span>
   </div>
+  <input type="file" id="avatar-file-input" accept="image/*" style="display:none;">
 </div>
 
 <!-- SCROLL AREA -->
@@ -536,7 +537,7 @@ body{display:flex;flex-direction:column}
   <div class="modal-box">
     <div class="modal-handle"></div>
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
-      <div class="avatar" id="profile-avatar" style="width:48px;height:48px;font-size:18px;"></div>
+      <div class="avatar" id="profile-avatar" style="width:48px;height:48px;font-size:18px;cursor:pointer;position:relative;" onclick="document.getElementById('avatar-file-input').click()" title="Trocar foto"></div>
       <div>
         <p id="profile-name-display" style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:var(--gold);"></p>
         <p id="profile-wpp-display" style="font-size:12px;color:var(--gray);margin-top:1px;"></p>
@@ -546,6 +547,14 @@ body{display:flex;flex-direction:column}
 
     <!-- Menu options -->
     <div id="profile-menu">
+      <button onclick="document.getElementById('avatar-file-input').click()" style="width:100%;display:flex;align-items:center;gap:12px;padding:14px;background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius-sm);margin-bottom:10px;cursor:pointer;text-align:left;">
+        <span style="font-size:20px;">📸</span>
+        <div>
+          <p style="font-size:14px;font-weight:500;color:var(--light);">Trocar foto de perfil</p>
+          <p style="font-size:12px;color:var(--gray);margin-top:1px;">Escolha uma foto da galeria</p>
+        </div>
+        <span style="margin-left:auto;color:var(--gray);">›</span>
+      </button>
       <button onclick="showProfileView('edit-name')" style="width:100%;display:flex;align-items:center;gap:12px;padding:14px;background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius-sm);margin-bottom:10px;cursor:pointer;text-align:left;">
         <span style="font-size:20px;">✏️</span>
         <div>
@@ -2575,20 +2584,87 @@ function doForgot() {
 // ═══════════════════════════════════════════════════════════════════
 // HEADER
 // ═══════════════════════════════════════════════════════════════════
+// Avatar helper: returns img tag if photo exists, else initials div content
+function setAvatarEl(el, u) {
+  if (!el) return;
+  if (u && u.photo) {
+    el.style.background = 'transparent';
+    el.style.padding = '0';
+    el.style.overflow = 'hidden';
+    el.innerHTML = '<img src="' + u.photo + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
+  } else if (u) {
+    el.style.background = u.color||COLORS[0];
+    el.style.color = u.colorT||COLORS_T[0];
+    el.style.padding = '';
+    el.innerHTML = initials(u.apelido || u.nome || u.name || '');
+  } else {
+    el.style.background = '#1a3a6e';
+    el.style.color = '#8eb8f5';
+    el.innerHTML = '?';
+  }
+}
+
+// Returns avatar HTML string (for use in innerHTML contexts)
+function avatarHtml(u, uid, extraStyle) {
+  const usr = u || (uid ? state.users[uid] : null);
+  const style = extraStyle || '';
+  if (usr && usr.photo) {
+    return '<div class="avatar" style="background:transparent;padding:0;overflow:hidden;' + style + '"><img src="' + usr.photo + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"></div>';
+  }
+  const bg = usr ? (usr.color||COLORS[0]) : COLORS[0];
+  const cl = usr ? (usr.colorT||COLORS_T[0]) : COLORS_T[0];
+  const txt = usr ? initials(usr.apelido||usr.nome||usr.name||'') : '?';
+  return '<div class="avatar" style="background:' + bg + ';color:' + cl + ';' + style + '">' + txt + '</div>';
+}
+
+async function uploadAvatar(file) {
+  if (!state.user) return;
+  // Resize to 80×80 using canvas
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = async function() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 80; canvas.height = 80;
+    const ctx = canvas.getContext('2d');
+    // Cover crop
+    const size = Math.min(img.width, img.height);
+    const sx = (img.width - size) / 2;
+    const sy = (img.height - size) / 2;
+    ctx.drawImage(img, sx, sy, size, size, 0, 0, 80, 80);
+    URL.revokeObjectURL(url);
+    const base64 = canvas.toDataURL('image/jpeg', 0.7);
+    // Check size (~10KB max)
+    if (base64.length > 15000) {
+      showToast('Foto muito grande mesmo após compressão. Tente outra imagem.', true);
+      return;
+    }
+    state.users[state.user].photo = base64;
+    await saveGlobal();
+    updateHeader();
+    showToast('✅ Foto de perfil atualizada!');
+  };
+  img.src = url;
+}
+
 function updateHeader() {
   const u = state.user ? state.users[state.user] : null;
   const av = document.getElementById('hdr-avatar');
   const nm = document.getElementById('hdr-name');
   if (u) {
-    av.textContent = initials(u.apelido || u.nome || u.name || '');
-    av.style.background = u.color||COLORS[0];
-    av.style.color = u.colorT||COLORS_T[0];
+    setAvatarEl(av, u);
     nm.textContent = u.apelido || (u.nome||u.name||'').split(' ')[0];
   } else {
-    av.textContent='?'; av.style.background='#1a3a6e'; av.style.color='#8eb8f5';
+    setAvatarEl(av, null);
     nm.textContent='Entrar';
   }
 }
+
+// Avatar file input handler
+document.getElementById('avatar-file-input').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (file) uploadAvatar(file);
+  e.target.value = '';
+});
 document.getElementById('header-user-btn').addEventListener('click', ()=>{
   if (state.user) { openProfileModal(); }
   else { openModal('login'); }
@@ -2917,7 +2993,11 @@ function takeSnapshot() {
   const today = new Date().toISOString().slice(0,10);
   state.snapshots = state.snapshots.filter(s=>s.date!==today);
   const scores = {};
-  Object.keys(state.users).forEach(w=>{ scores[w]=calcPts(state.palpites[w]).pts; });
+  Object.keys(state.users).forEach(w=>{
+    const u = state.users[w];
+    if (u._deleted || u.status==='pending' || u.status==='rejected') return;
+    scores[w]=calcPts(state.palpites[w]).pts;
+  });
   state.snapshots.push({date:today, scores});
   if (state.snapshots.length>60) state.snapshots=state.snapshots.slice(-60);
 }
@@ -3888,7 +3968,7 @@ function renderRanking() {
     const maxP = calcMaxPts(state.palpites[s.u]);
     return `<div class="rank-row" ${clickable}>
       <span class="rank-num" style="${cls}">${medal}</span>
-      <div class="avatar" style="background:${uColor(s.u)};color:${uColorT(s.u)};">${initials(uName(s.u))}</div>
+      ${avatarHtml(state.users[s.u], s.u)}
       <div style="flex:1;">
         <div class="rank-name">${uName(s.u)}${hint}</div>
         <div class="rank-sub">${s.ac} acertos · ${s.ex} exatos</div>
@@ -3922,7 +4002,10 @@ function renderEvolucao() {
     MATCHES.filter(m => state.results[m.id]).map(m => matchDateKey2(m.date))
   )].sort();
 
-  const users = Object.keys(state.users).filter(w => state.users[w] && !state.users[w]._deleted);
+  const users = Object.keys(state.users).filter(w => {
+    const u = state.users[w];
+    return u && !u._deleted && u.status !== 'pending' && u.status !== 'rejected';
+  });
 
   if (!daysWithResults.length) {
     canvas.style.display='none'; legend.innerHTML='';
@@ -5008,7 +5091,7 @@ async function renderAdminParticipants() {
       return `
       <div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-          <div class="avatar" style="background:${u.color||COLORS[0]};color:${u.colorT||COLORS_T[0]};flex-shrink:0;">${initials(uApelido(u,uid))}</div>
+          ${avatarHtml(u, uid, 'flex-shrink:0;')}
           <div style="flex:1;min-width:0;">
             <p style="font-size:14px;font-weight:500;">${uApelido(u,uid)} ${submitted ? '<span style="font-size:10px;color:var(--green);font-weight:700;background:rgba(0,200,83,0.12);border:1px solid rgba(0,200,83,0.3);padding:2px 6px;border-radius:50px;">✅ ENVIADO</span>' : ''}</p>
             <p style="font-size:12px;color:var(--gray);">📱 ${uWpp(u,uid)}</p>
@@ -5155,9 +5238,7 @@ function openProfileModal() {
   if (!u) return;
   // Fill header info
   const av = document.getElementById('profile-avatar');
-  av.textContent = initials(u.apelido || u.nome);
-  av.style.background = u.color || COLORS[0];
-  av.style.color = u.colorT || COLORS_T[0];
+  setAvatarEl(av, u);
   document.getElementById('profile-name-display').textContent = u.name;
   document.getElementById('profile-wpp-display').textContent = '+55 ' + (u.wpp || state.user);
   // Pre-fill name field
@@ -6299,9 +6380,7 @@ async function openScoreModal(uid) {
 
   // Avatar
   const av = document.getElementById('score-modal-avatar');
-  av.style.background = uColor(uid);
-  av.style.color = uColorT(uid);
-  av.textContent = initials(name);
+  setAvatarEl(av, state.users[uid]);
   document.getElementById('score-modal-name').textContent = name;
   // Build resolvedTeams for this user AND real teams
   buildResolvedTeams(pal, null, false); // sem penFallback para cálculo correto
