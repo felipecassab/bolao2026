@@ -3085,10 +3085,41 @@ function renderMatches() {
   buildResolvedTeams(userP);
   const groups = {};
   MATCHES.forEach(m=>{ if(!groups[m.group]) groups[m.group]=[]; groups[m.group].push(m); });
-  let html = locked ? (isSubmitted()
+  // ── Score summary cards ─────────────────────────────────────────
+  let summaryHtml = '';
+  if (state.user && locked) {
+    buildResolvedTeams(userP, null, false);
+    const {pts: totalPts} = calcPts(userP);
+    const bonusPts = calcBonusPts(userP);
+    const qa = userP._qa || {};
+    const qaAnswers = state.results?._qaAnswers || {};
+    let extraPts = 0;
+    Object.keys(qa).forEach(qid => { if (qa[qid]?.correct === true) extraPts += 3; });
+    const scorePts = totalPts - bonusPts - extraPts;
+    summaryHtml = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 8px;text-align:center;">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:900;color:var(--gold);">${totalPts}</div>
+        <div style="font-size:10px;color:var(--gray);margin-top:2px;">Total</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 8px;text-align:center;">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:900;color:#f5a623;">${scorePts}</div>
+        <div style="font-size:10px;color:var(--gray);margin-top:2px;">Placares</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 8px;text-align:center;">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:900;color:#7eb8f5;">${bonusPts}</div>
+        <div style="font-size:10px;color:var(--gray);margin-top:2px;">Bônus</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 8px;text-align:center;">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:900;color:var(--green);">${extraPts}</div>
+        <div style="font-size:10px;color:var(--gray);margin-top:2px;">Extras</div>
+      </div>
+    </div>`;
+  }
+
+  let html = summaryHtml + (locked ? (isSubmitted()
     ? `<div style="background:rgba(0,200,83,0.08);border:1px solid rgba(0,200,83,0.3);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">✅</span><div><p style="font-size:13px;font-weight:600;color:var(--green);">Palpites enviados à Comissão</p><p style="font-size:12px;color:var(--gray);margin-top:2px;">Seus palpites foram enviados. Apenas visualização disponível.</p></div></div>`
     : `<div style="background:rgba(244,67,54,0.1);border:1px solid rgba(244,67,54,0.3);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">🔒</span><div><p style="font-size:13px;font-weight:600;color:var(--red);">Palpites encerrados</p><p style="font-size:12px;color:var(--gray);margin-top:2px;">Prazo encerrado em 10/06 às 23h59.</p></div></div>`)
-    : '';
+    : '');
 
   Object.keys(groups).forEach(g=>{
     html += `<div class="card"><div class="card-header"><span class="group-label">${g.length<=1?'Grupo ':''}${g}</span></div><div class="card-body">`;
@@ -3134,17 +3165,10 @@ function renderMatches() {
             const pA = p.a !== undefined ? p.a : null;
             if (pH === null || pA === null) return '';
             const pW = pH>pA?'H':pH<pA?'A':'E';
-            const bonusMap = {'32-avos':2,'Oitavas':4,'Quartas':6,'Semifinais':8,'Final':12};
-            const phaseBonus = bonusMap[m.group] || 0;
             if (+pH===+res.h && +pA===+res.a) {
-              // Exact score: 5pts + bonus if winner correct
-              const rWinner = res.h>res.a?'H':res.h<res.a?'A':'E';
-              const pWinner = pH>pA?'H':pH<pA?'A':'E';
-              const gotBonus = m.phase==='knockout' && rWinner===pWinner ? phaseBonus : 0;
-              return '<span style="font-family:\'Barlow Condensed\',sans-serif;font-weight:900;font-size:15px;color:var(--green);">+' + (5+gotBonus) + ' pts</span>';
+              return '<span style="font-family:\'Barlow Condensed\',sans-serif;font-weight:900;font-size:15px;color:var(--green);">+5 pts</span>';
             } else if (rW===pW) {
-              const gotBonus = m.phase==='knockout' ? phaseBonus : 0;
-              return '<span style="font-family:\'Barlow Condensed\',sans-serif;font-weight:900;font-size:15px;color:#f5a623;">+' + (3+gotBonus) + ' pts</span>';
+              return '<span style="font-family:\'Barlow Condensed\',sans-serif;font-weight:900;font-size:15px;color:#f5a623;">+3 pts</span>';
             } else {
               return '<span style="font-family:\'Barlow Condensed\',sans-serif;font-weight:700;font-size:13px;color:var(--gray);">0 pts</span>';
             }
@@ -4158,18 +4182,42 @@ function renderExtras() {
       : '🔒 Prazo encerrado — respostas bloqueadas para edição.';
     html += `<div style="background:rgba(0,200,83,0.08);border:1px solid rgba(0,200,83,0.25);border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:13px;color:var(--green);font-weight:600;">${msg}</div>`;
   }
+  const qaAnswers = state.results?._qaAnswers || {};
   EXTRA_QS.forEach(q => {
     const val = saved[q.id]?.answer || '';
     const ok = !!val.trim();
     const missing = !ok && !locked;
-    html += `<div class="extra-card" style="border-color:${missing ? 'rgba(245,166,35,0.4)' : ok ? 'rgba(0,200,83,0.3)' : 'rgba(255,255,255,0.07)'};">
+    const correct = saved[q.id]?.correct;
+    const graded = correct === true || correct === false;
+    const ansObj = qaAnswers[q.id];
+    const officialAnswer = ansObj?.correct || '';
+    // Badge de resultado
+    let resultBadge = '';
+    if (ok && graded) {
+      resultBadge = correct === true
+        ? '<span style="font-size:11px;font-weight:700;color:var(--green);">+3 pts ✓</span>'
+        : '<span style="font-size:11px;font-weight:700;color:var(--red);">0 pts ✗</span>';
+    } else if (ok && !graded) {
+      resultBadge = '<span style="font-size:11px;color:var(--gray);">⏳ aguardando</span>';
+    } else if (missing) {
+      resultBadge = '<span style="font-size:11px;color:#f5a623;font-weight:600;">obrigatória</span>';
+    }
+    // Gabarito oficial (só mostra se houver)
+    const officialBlock = officialAnswer
+      ? `<div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:${correct===true?'rgba(0,200,83,0.08)':'rgba(255,255,255,0.04)'};border:1px solid ${correct===true?'rgba(0,200,83,0.25)':'rgba(255,255,255,0.08)'};">
+           <span style="font-size:10px;color:var(--gray);font-weight:600;letter-spacing:0.5px;">GABARITO OFICIAL: </span>
+           <span style="font-size:13px;font-weight:700;color:${correct===true?'var(--green)':'var(--light)'};">${officialAnswer}</span>
+         </div>`
+      : '';
+    html += `<div class="extra-card" style="border-color:${missing ? 'rgba(245,166,35,0.4)' : correct===true ? 'rgba(0,200,83,0.4)' : correct===false ? 'rgba(244,67,54,0.3)' : ok ? 'rgba(0,200,83,0.3)' : 'rgba(255,255,255,0.07)'};">
       <div class="card-body">
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <p style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:1px;">PERGUNTA ${q.label} · 3 pts</p>
-          ${ok ? '<span style="font-size:11px;color:var(--green);font-weight:600;">✓</span>' : missing ? '<span style="font-size:11px;color:#f5a623;font-weight:600;">obrigatória</span>' : ''}
+          ${resultBadge}
         </div>
         <p style="font-size:14px;font-weight:500;color:var(--light);margin-bottom:10px;line-height:1.4;">${q.q}</p>
         <input class="name-input" type="text" id="extra_${q.id}" placeholder="Sua resposta..." value="${val}" ${locked ? 'disabled style="opacity:0.6;cursor:not-allowed;"' : ''}/>
+        ${officialBlock}
       </div>
     </div>`;
   });
