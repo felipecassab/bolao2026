@@ -2275,6 +2275,7 @@ async function loadState() {
     } catch(e2) {}
   }
   showLoading(false);
+  state._loaded = true;
   // Migration: fix correct:false -> correct:null for unvalidated extras
   let migrated = false;
   Object.keys(state.users).forEach(wpp => {
@@ -4228,10 +4229,21 @@ function histTab(tab, btn) {
   if (!btn) return;
   document.querySelectorAll('#page-historico .tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active'); btn.dataset.tab=tab;
-  const done = MATCHES.filter(m=>state.results[m.id]);
   const el = document.getElementById('hist-content');
+  if (!el) return;
+  // Se ainda não carregou dados do Firebase, mostra loading
+  if (!state._loaded) {
+    el.innerHTML='<div class="empty"><div class="empty-icon">⏳</div><p>Carregando dados...</p></div>';
+    return;
+  }
+  const done = MATCHES.filter(m=>state.results[m.id]);
   if (!done.length) { el.innerHTML='<div class="empty"><div class="empty-icon">⏳</div><p>Nenhum resultado registrado ainda</p></div>'; return; }
-  const users = tab==='eu'&&state.user?[state.user]:Object.keys(state.users);
+  const users = tab==='eu'&&state.user
+    ? [state.user]
+    : Object.keys(state.users).filter(u => {
+        const usr = state.users[u];
+        return usr && !usr._deleted && usr.status !== 'pending' && usr.status !== 'rejected';
+      });
   let html='';
   done.forEach(m=>{
     const res=state.results[m.id];
@@ -4270,10 +4282,18 @@ function renderExtras() {
     const val = saved[q.id]?.answer || '';
     const ok = !!val.trim();
     const missing = !ok && !locked;
-    const correct = saved[q.id]?.correct;
-    const graded = correct === true || correct === false;
     const ansObj = qaAnswers[q.id];
     const officialAnswer = ansObj?.correct || '';
+    // Determinar resultado: usa correct individual se existir, senão deriva do gabarito via matchScore
+    let correct = saved[q.id]?.correct; // true/false/null
+    if (correct === null || correct === undefined) {
+      if (ok && officialAnswer) {
+        // Deriva o resultado pelo matchScore (>=0.8 = acerto, <0.8 = erro)
+        const score = matchScore(val, officialAnswer);
+        correct = score >= 0.8 ? true : false;
+      }
+    }
+    const graded = officialAnswer ? (correct === true || correct === false) : (saved[q.id]?.correct === true || saved[q.id]?.correct === false);
     // Badge de resultado
     let resultBadge = '';
     if (ok && graded) {
@@ -4324,8 +4344,12 @@ async function saveExtras() {
 // RENDER PREMIACAO
 // ═══════════════════════════════════════════════════════════════════
 function renderPremiacao() {
-  const total=Object.keys(state.users).length, arrecadado=total*TAXA;
-  const scores=Object.keys(state.users).map(u=>({u,pts:calcPts(state.palpites[u]).pts})).sort((a,b)=>b.pts-a.pts);
+  const activeUsers = Object.keys(state.users).filter(u => {
+    const usr = state.users[u];
+    return usr && !usr._deleted && usr.status !== 'pending' && usr.status !== 'rejected';
+  });
+  const total=activeUsers.length, arrecadado=total*TAXA;
+  const scores=activeUsers.map(u=>{ buildResolvedTeams(state.palpites[u], null, false); return {u,pts:calcPts(state.palpites[u]).pts}; }).sort((a,b)=>b.pts-a.pts);
   const prizes=[{medal:'🥇',place:'1º lugar',pct:60,cls:'gold'},{medal:'🥈',place:'2º lugar',pct:30,cls:'silver'},{medal:'🥉',place:'3º lugar',pct:10,cls:'bronze'}];
   let html=`<div class="prize-total"><div style="font-size:11px;color:rgba(245,197,24,0.7);font-weight:600;letter-spacing:1px;margin-bottom:8px;">TOTAL ARRECADADO</div><div class="prize-total-val">${fmt(arrecadado)}</div><p style="font-size:13px;color:var(--gray);margin-top:6px;">${total} participante${total!==1?'s':''} × R$ 300,00</p></div>`;
   html+=`<div class="card" style="margin-bottom:12px;"><div style="padding:14px 16px;"><p style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:1px;margin-bottom:10px;">DETALHES</p>`;
