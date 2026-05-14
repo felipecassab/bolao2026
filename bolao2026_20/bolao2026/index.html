@@ -4223,7 +4223,8 @@ function renderEvolucao() {
 // ═══════════════════════════════════════════════════════════════════
 function renderHistorico() {
   const tab = document.querySelector('#page-historico .tab-btn.active')?.dataset?.tab||'todos';
-  histTab(tab, document.querySelector(`#page-historico .tab-btn[data-tab="${tab}"]`)||document.querySelector('#page-historico .tab-btn'));
+  const el = document.getElementById('hist-content');
+  if (el) _histTabRender(tab, el);
 }
 function histTab(tab, btn) {
   if (!btn) return;
@@ -4231,18 +4232,18 @@ function histTab(tab, btn) {
   btn.classList.add('active'); btn.dataset.tab=tab;
   const el = document.getElementById('hist-content');
   if (!el) return;
-  // Se ainda não carregou dados do Firebase, mostra loading
-  if (!state._loaded) {
-    el.innerHTML='<div class="empty"><div class="empty-icon">⏳</div><p>Carregando dados...</p></div>';
-    return;
-  }
-  // Verificar se há resultados em state.results (excluindo chaves especiais como _qaAnswers)
-  const resultKeys = Object.keys(state.results || {}).filter(k => k !== '_qaAnswers' && typeof state.results[k] === 'object' && state.results[k] !== null && 'h' in state.results[k]);
-  const done = MATCHES.filter(m => resultKeys.includes(m.id));
+  // Renderiza imediatamente com o que tiver no state
+  _histTabRender(tab, el);
+}
+function _histTabRender(tab, el) {
+  const done = MATCHES.filter(m => {
+    const r = state.results[m.id];
+    return r && typeof r === 'object' && r !== null;
+  });
+  // Mostrar info na tela independente do resultado
+  const debugInfo = 'done:' + done.length + ' results:' + Object.keys(state.results||{}).length + ' users:' + Object.keys(state.users||{}).length;
   if (!done.length) {
-    // Diagnóstico: mostrar quantos resultados existem no state
-    const totalResults = resultKeys.length;
-    el.innerHTML=`<div class="empty"><div class="empty-icon">⏳</div><p>${totalResults > 0 ? 'Resultados no banco: ' + totalResults + ' (IDs não coincidem com MATCHES)' : 'Nenhum resultado registrado ainda'}</p></div>`;
+    el.innerHTML='<div style="padding:16px;color:#aaa;font-size:13px;">Nenhum resultado registrado ainda<br><small>' + debugInfo + '</small></div>';
     return;
   }
   const users = tab==='eu'&&state.user
@@ -4252,19 +4253,38 @@ function histTab(tab, btn) {
         return usr && !usr._deleted && usr.status !== 'pending' && usr.status !== 'rejected';
       });
   let html='';
-  done.forEach(m=>{
-    const res=state.results[m.id];
-    html+=`<div class="hist-card"><div class="hist-header"><span style="font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px;">${flagImg(m.fH,'flag')} ${m.home} × ${m.away} ${flagImg(m.fA,'flag')}</span><span class="hist-result">${res.h}:${res.a}</span></div>`;
-    users.forEach(u=>{
-      const p=state.palpites[u]?.[m.id];
-      const usr=state.users[u]; if(!usr) return;
-      const rW=res.h>res.a?'H':res.h<res.a?'A':'E';
-      let badge='',guess='–';
-      if(p){ guess=`${p.h}:${p.a}`; const pW=p.h>p.a?'H':p.h<p.a?'A':'E'; if(p.h===res.h&&p.a===res.a) badge='<span class="badge badge-gold">+5 Exato</span>'; else if(rW===pW) badge='<span class="badge badge-green">+3 Vencedor</span>'; else badge='<span class="badge badge-gray">0 pts</span>'; }
-      html+=`<div class="hist-row"><div class="avatar" style="width:26px;height:26px;font-size:10px;background:${usr.color||COLORS[0]};color:${usr.colorT||COLORS_T[0]};">${initials(usr.name)}</div><span style="font-size:13px;flex:1;">${usr.name.split(' ')[0]}</span><span style="font-family:'Barlow Condensed';font-size:15px;margin-right:8px;">${guess}</span>${badge}</div>`;
+  try {
+    done.forEach(m=>{
+      const res=state.results[m.id];
+      if (!res || res.h === undefined || res.a === undefined) return;
+      const flag_h = typeof flagImg === 'function' ? flagImg(m.fH,'flag') : '';
+      const flag_a = typeof flagImg === 'function' ? flagImg(m.fA,'flag') : '';
+      html+=`<div class="hist-card"><div class="hist-header"><span style="font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px;">${flag_h} ${m.home||''} × ${m.away||''} ${flag_a}</span><span class="hist-result">${res.h}:${res.a}</span></div>`;
+      users.forEach(u=>{
+        const p=state.palpites[u]?.[m.id];
+        const usr=state.users[u]; if(!usr) return;
+        const rW=res.h>res.a?'H':res.h<res.a?'A':'E';
+        let badge='',guess='–';
+        if(p && p.h!==undefined && p.a!==undefined){
+          guess=`${p.h}:${p.a}`;
+          const pW=p.h>p.a?'H':p.h<p.a?'A':'E';
+          if(+p.h===+res.h&&+p.a===+res.a) badge='<span class="badge badge-gold">+5 Exato</span>';
+          else if(rW===pW) badge='<span class="badge badge-green">+3 Vencedor</span>';
+          else badge='<span class="badge badge-gray">0 pts</span>';
+        }
+        const bg=usr.color||COLORS[0]; const cl=usr.colorT||COLORS_T[0];
+        const displayName = usr.apelido || usr.nome || usr.name || u;
+        const avatarEl = usr.photo
+          ? `<div class="avatar" style="width:26px;height:26px;font-size:10px;padding:0;overflow:hidden;border-radius:50%;"><img src="${usr.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"></div>`
+          : `<div class="avatar" style="width:26px;height:26px;font-size:10px;background:${bg};color:${cl};">${initials(displayName)}</div>`;
+        html+=`<div class="hist-row">${avatarEl}<span style="font-size:13px;flex:1;">${displayName.split(' ')[0]}</span><span style="font-family:'Barlow Condensed';font-size:15px;margin-right:8px;">${guess}</span>${badge}</div>`;
+      });
+      html+='</div>';
     });
-    html+='</div>';
-  });
+  } catch(e) {
+    el.innerHTML='<div style="padding:16px;color:red;font-size:12px;">Erro: '+e.message+'</div>';
+    return;
+  }
   el.innerHTML=html||'<div class="empty"><div class="empty-icon">👥</div><p>Nenhum participante ainda</p></div>';
 }
 
