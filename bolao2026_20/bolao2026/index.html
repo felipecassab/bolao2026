@@ -4719,7 +4719,16 @@ function adminSelectGroup(g,btn) {
   adminGroup=g;
   document.querySelectorAll('#admin-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  if (g==='__settings__') { renderAdminSettings(); return; }
+  if (g==='__settings__') {
+    document.getElementById('admin-games').innerHTML = '';
+    document.getElementById('admin-fp3-block').innerHTML = '';
+    document.getElementById('admin-thirds').style.display = 'none';
+    document.getElementById('admin-thirds').innerHTML = '';
+    document.getElementById('admin-extras').style.display = 'none';
+    document.getElementById('admin-extras').innerHTML = '';
+    renderAdminSettings();
+    return;
+  }
   if (g === '__extras__') {
     document.getElementById('admin-games').innerHTML = '';
     document.getElementById('admin-fp3-block').innerHTML = '';
@@ -5083,7 +5092,7 @@ async function adminClear(id) {
 }
 function renderAdminSettings() {
   const visible = state.results?._palpitesVisiveis === true;
-  document.getElementById('admin-game-area').innerHTML = `
+  document.getElementById('admin-games').innerHTML = `
     <div style="padding:16px;">
       <p style="font-size:13px;color:var(--gray);margin-bottom:16px;">Configurações gerais do bolão</p>
       <div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;">
