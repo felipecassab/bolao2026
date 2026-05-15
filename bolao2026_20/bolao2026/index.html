@@ -2372,7 +2372,8 @@ async function saveGlobal() {
     state.palpites[state.user]._savedAt = new Date().toISOString();
   }
   // Garantir que _submitted nunca é perdido — verificar backup local
-  if (state.user && !state.palpites[state.user]?._submitted) {
+  // Mas só restaurar se não foi explicitamente removido pelo admin (flag _adminUnsubmitted)
+  if (state.user && !state.palpites[state.user]?._submitted && !state.palpites[state.user]?._adminUnsubmitted) {
     try {
       const bk = JSON.parse(localStorage.getItem('bolao_backup') || '{}');
       if (bk.palpites?.[state.user]?._submitted) {
@@ -5278,10 +5279,13 @@ async function adminMarkSubmitted(uid) {
 
 async function adminUnsubmit(uid) {
   if (!confirm('Desbloquear palpites de ' + (state.users[uid]?.apelido||uid) + '? O participante poderá editar novamente.')) return;
-  if (state.palpites[uid]) {
-    delete state.palpites[uid]._submitted;
-  }
+  if (!state.palpites[uid]) state.palpites[uid] = {};
+  delete state.palpites[uid]._submitted;
+  // Flag para evitar restauração automática pelo saveGlobal
+  state.palpites[uid]._adminUnsubmitted = true;
   await saveGlobal();
+  // Limpar o flag temporário após salvar
+  delete state.palpites[uid]._adminUnsubmitted;
   renderAdminParticipants();
   showToast('Palpites desbloqueados! ✓');
 }
