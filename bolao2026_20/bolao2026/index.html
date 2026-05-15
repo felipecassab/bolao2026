@@ -2808,13 +2808,19 @@ function calcMaxPts(userPalpites) {
   EXTRA_QS.forEach(q => {
     const qa = userPalpites?._qa?.[q.id];
     const answered = qa && qa.answer && qa.answer.trim() !== '';
-    if (!answered) return; // não respondeu → 0
+    const ansObj = qaAnswersMax[q.id];
+    const hasGabarito = ansObj && ansObj.correct;
+    if (!answered) {
+      // Não respondeu: só soma 0 se o gabarito já foi definido (prazo passou)
+      // Se ainda não há gabarito, ainda pode responder → soma 3 (melhor caso)
+      if (!hasGabarito) maxPts += 3;
+      return;
+    }
     if (qa.correct === true)  { maxPts += 3; return; }
     if (qa.correct === false) { return; } // já marcado errado
     // correct === null: ainda não confirmado pelo admin
     // Se há gabarito, usa matchScore para ver se há chance
-    const ansObj = qaAnswersMax[q.id];
-    if (ansObj && ansObj.correct) {
+    if (hasGabarito) {
       const score = matchScore(qa.answer, ansObj.correct);
       if (score === 0) return; // gabarito existe e resposta está claramente errada
     }
@@ -4292,6 +4298,16 @@ function _histTabRender(tab, el) {
 // ═══════════════════════════════════════════════════════════════════
 // RENDER EXTRAS
 // ═══════════════════════════════════════════════════════════════════
+async function clearExtras() {
+  if (!state.user) return;
+  if (!confirm('Tem certeza que deseja apagar todas as respostas das perguntas extras? Esta ação não pode ser desfeita.')) return;
+  if (!state.palpites[state.user]) state.palpites[state.user] = {};
+  state.palpites[state.user]._qa = {};
+  await saveGlobal();
+  renderExtras();
+  showToast('🗑️ Respostas apagadas.');
+}
+
 function renderExtras() {
   const locked = isLocked();
   const saved = state.user ? (state.palpites[state.user]?._qa || {}) : {};
@@ -4304,6 +4320,12 @@ function renderExtras() {
       ? '✅ Palpites enviados à Comissão — respostas bloqueadas para edição.'
       : '🔒 Prazo encerrado — respostas bloqueadas para edição.';
     html += `<div style="background:rgba(0,200,83,0.08);border:1px solid rgba(0,200,83,0.25);border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:13px;color:var(--green);font-weight:600;">${msg}</div>`;
+  } else if (answered > 0) {
+    html += `<div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+      <button onclick="clearExtras()" style="display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:20px;background:rgba(244,67,54,0.08);border:1px solid rgba(244,67,54,0.25);color:var(--red);font-size:12px;font-weight:600;cursor:pointer;">
+        🗑️ Limpar todas as respostas
+      </button>
+    </div>`;
   }
   const qaAnswers = state.results?._qaAnswers || {};
   EXTRA_QS.forEach(q => {
