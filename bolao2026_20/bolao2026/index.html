@@ -6411,6 +6411,15 @@ function closeScoreModal() {
 }
 
 async function openScoreModal(uid) {
+  // Bloquear antes do prazo (exceto para o próprio usuário)
+  if (!isLocked() && uid !== state.user) {
+    document.getElementById('score-modal-avatar').textContent = '🔒';
+    document.getElementById('score-modal-name').textContent = 'Palpites bloqueados';
+    document.getElementById('score-modal-sub').textContent = '';
+    document.getElementById('score-modal-body').innerHTML = '<div style="padding:40px;text-align:center;color:var(--gray);line-height:1.6;">Os palpites dos participantes ficam<br>visíveis após o encerramento do prazo.<br><br><span style="font-size:22px;">🔒</span></div>';
+    document.getElementById('score-modal').classList.add('open');
+    return;
+  }
   const name = uName(uid);
 
   // Show loading state immediately
