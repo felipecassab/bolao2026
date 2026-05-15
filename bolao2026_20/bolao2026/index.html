@@ -4712,12 +4712,14 @@ function renderAdminTabs() {
     return `<button class="tab-btn${g===adminGroup?' active':''}" style="font-size:12px;padding:6px 10px;white-space:nowrap;" onclick="adminSelectGroup('${g}',this)">${g.length<=1?'Gr.':''}${g} <span style="opacity:0.6;">${done}/${total}</span></button>`;
   });
   tabs.push(`<button class="tab-btn${adminGroup==='__extras__'?' active':''}" style="font-size:12px;padding:6px 10px;white-space:nowrap;border-left:1px solid rgba(255,255,255,0.1);" onclick="adminSelectGroup('__extras__',this)">❓ Extras</button>`);
+  tabs.push(`<button class="tab-btn${adminGroup==='__settings__'?' active':''}" style="font-size:12px;padding:6px 10px;white-space:nowrap;border-left:1px solid rgba(255,255,255,0.1);" onclick="adminSelectGroup('__settings__',this)">⚙️ Config</button>`);
   document.getElementById('admin-tabs').innerHTML = tabs.join('');
 }
 function adminSelectGroup(g,btn) {
   adminGroup=g;
   document.querySelectorAll('#admin-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
+  if (g==='__settings__') { renderAdminSettings(); return; }
   if (g === '__extras__') {
     document.getElementById('admin-games').innerHTML = '';
     document.getElementById('admin-fp3-block').innerHTML = '';
@@ -5079,6 +5081,31 @@ async function adminClear(id) {
   buildResolvedTeamsFromResults();
   showToast('Resultado removido'); renderAdminTabs(); renderAdminGames(); renderAdminFP3Block(); renderRanking();
 }
+function renderAdminSettings() {
+  const visible = state.results?._palpitesVisiveis === true;
+  document.getElementById('admin-game-area').innerHTML = `
+    <div style="padding:16px;">
+      <p style="font-size:13px;color:var(--gray);margin-bottom:16px;">Configurações gerais do bolão</p>
+      <div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;">
+        <div>
+          <p style="font-size:14px;font-weight:600;color:var(--light);">👁️ Palpites visíveis no ranking</p>
+          <p style="font-size:12px;color:var(--gray);margin-top:3px;">Permite que participantes vejam os palpites uns dos outros</p>
+        </div>
+        <button onclick="adminTogglePalpitesVisiveis()" style="padding:10px 18px;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid ${visible?'rgba(0,200,83,0.4)':'rgba(255,255,255,0.15)'};background:${visible?'rgba(0,200,83,0.15)':'rgba(255,255,255,0.04)'};color:${visible?'var(--green)':'var(--gray)'};">
+          ${visible ? '✅ Liberado' : '🔒 Bloqueado'}
+        </button>
+      </div>
+    </div>`;
+}
+
+async function adminTogglePalpitesVisiveis() {
+  if (!state.results) state.results = {};
+  state.results._palpitesVisiveis = !(state.results._palpitesVisiveis === true);
+  await saveGlobal();
+  renderAdminSettings();
+  showToast(state.results._palpitesVisiveis ? '✅ Palpites liberados para visualização' : '🔒 Palpites bloqueados');
+}
+
 async function adminTogglePaid(uid) {
   if (!state.users[uid]) return;
   state.users[uid].paid = !state.users[uid].paid;
@@ -6411,12 +6438,12 @@ function closeScoreModal() {
 }
 
 async function openScoreModal(uid) {
-  // Bloquear antes do prazo (exceto para o próprio usuário)
-  if (!isLocked() && uid !== state.user) {
+  // Bloquear se admin não liberou (exceto para o próprio usuário)
+  if (!state.results?._palpitesVisiveis && uid !== state.user) {
     document.getElementById('score-modal-avatar').textContent = '🔒';
     document.getElementById('score-modal-name').textContent = 'Palpites bloqueados';
     document.getElementById('score-modal-sub').textContent = '';
-    document.getElementById('score-modal-body').innerHTML = '<div style="padding:40px;text-align:center;color:var(--gray);line-height:1.6;">Os palpites dos participantes ficam<br>visíveis após o encerramento do prazo.<br><br><span style="font-size:22px;">🔒</span></div>';
+    document.getElementById('score-modal-body').innerHTML = '<div style="padding:40px;text-align:center;color:var(--gray);line-height:1.6;">Os palpites dos participantes ainda<br>não foram liberados pela comissão.<br><br><span style="font-size:22px;">🔒</span></div>';
     document.getElementById('score-modal').classList.add('open');
     return;
   }
