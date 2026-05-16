@@ -6490,6 +6490,8 @@ async function openScoreModal(uid) {
   document.getElementById('score-modal-sub').textContent = '';
   document.getElementById('score-modal-body').innerHTML = '<div style="padding:40px;text-align:center;color:var(--gray);">Carregando...</div>';
   document.getElementById('score-modal').classList.add('open');
+  // Reset scroll ao topo
+  document.querySelector('.score-modal-box').scrollTop = 0;
 
   // Fetch fresh data from Firebase
   try {
@@ -6548,15 +6550,13 @@ async function openScoreModal(uid) {
 
     phase.groups.forEach(grp => {
       MATCHES.filter(m => m.group === grp).forEach(m => {
-        const res = state.results[m.id];
-        if (!res) return;
+        const res = state.results[m.id]; // pode ser undefined (jogo ainda não ocorreu)
         const p   = pal[m.id];
+        if (!res && (!p || p.h === undefined)) return; // sem resultado e sem palpite → pula
         const rtr = resolvedTeamsReal[m.id] || null;
         const rt  = resolvedTeams[m.id] || null;
         const isKO = m.phase === 'knockout';
 
-        // For KO matches: show user's predicted teams (from their bracket)
-        // For group matches: use real team names (fixed, same for everyone)
         const homeName = isKO
           ? ((rt && rt.home && rt.home.name) ? rt.home.name : m.home)
           : ((rtr && rtr.home && rtr.home.name) ? rtr.home.name : m.home);
@@ -6570,41 +6570,42 @@ async function openScoreModal(uid) {
           ? ((rt && rt.away && rt.away.flag) ? rt.away.flag : m.fA)
           : ((rtr && rtr.away && rtr.away.flag) ? rtr.away.flag : m.fA);
 
-        // User predicted team names = same as above for KO (already using user bracket)
-        const userHomeName = homeName;
-        const userAwayName = awayName;
-        const userHomeFlag = homeFlag;
-        const userAwayFlag = awayFlag;
-
-        // ── Match points ─────────────────────────────────────────
+        // ── Match points (só calcula se há resultado) ────────────
         let pts = 0, type = 'zero';
         const userScore = (p && p.h !== undefined && p.a !== undefined) ? p.h + ':' + p.a : '—';
-        const realScore = res.h + ':' + res.a;
 
-        if (p && p.h !== undefined && p.a !== undefined) {
-          const rW = res.h > res.a ? 'H' : res.h < res.a ? 'A' : 'E';
-          const pW = +p.h > +p.a ? 'H' : +p.h < +p.a ? 'A' : 'E';
-          if (+p.h === res.h && +p.a === res.a) { pts = 5; type = 'exact'; }
-          else if (rW === pW) { pts = 3; type = 'winner'; }
+        if (res) {
+          const realScore = res.h + ':' + res.a;
+          if (p && p.h !== undefined && p.a !== undefined) {
+            const rW = res.h > res.a ? 'H' : res.h < res.a ? 'A' : 'E';
+            const pW = +p.h > +p.a ? 'H' : +p.h < +p.a ? 'A' : 'E';
+            if (+p.h === res.h && +p.a === res.a) { pts = 5; type = 'exact'; }
+            else if (rW === pW) { pts = 3; type = 'winner'; }
+          }
+          const ptsClass = type === 'exact' ? 'score-pts-exact' : type === 'winner' ? 'score-pts-winner' : 'score-pts-zero';
+          phaseHtml += '<div class="score-match-row">' +
+            '<span class="score-pts-badge ' + ptsClass + '">' + (pts > 0 ? '+' + pts : '0') + '</span>' +
+            '<img src="https://flagcdn.com/w20/' + homeFlag + '.png" style="width:16px;height:11px;border-radius:1px;flex-shrink:0;" onerror="this.style.display=&quot;none&quot;">' +
+            '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--light);">' + homeName + '</span>' +
+            '<span style="font-family:var(--font-cond),sans-serif;font-size:13px;color:var(--gray);margin:0 2px;">×</span>' +
+            '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--light);text-align:right;">' + awayName + '</span>' +
+            '<img src="https://flagcdn.com/w20/' + awayFlag + '.png" style="width:16px;height:11px;border-radius:1px;flex-shrink:0;" onerror="this.style.display=&quot;none&quot;">' +
+            '<span style="font-size:11px;color:var(--gray);margin:0 4px;white-space:nowrap;">Palp:<b style="color:var(--light);">' + userScore + '</b></span>' +
+            '<span style="font-size:11px;color:var(--gray);white-space:nowrap;">Real:<b style="color:var(--light);">' + realScore + '</b></span>' +
+            '</div>';
+        } else {
+          // Jogo ainda não ocorreu — mostra só o palpite, sem resultado
+          phaseHtml += '<div class="score-match-row">' +
+            '<span class="score-pts-badge score-pts-zero" style="background:rgba(255,255,255,0.05);color:var(--gray);">—</span>' +
+            '<img src="https://flagcdn.com/w20/' + homeFlag + '.png" style="width:16px;height:11px;border-radius:1px;flex-shrink:0;" onerror="this.style.display=&quot;none&quot;">' +
+            '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--light);">' + homeName + '</span>' +
+            '<span style="font-family:var(--font-cond),sans-serif;font-size:13px;color:var(--gray);margin:0 2px;">×</span>' +
+            '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--light);text-align:right;">' + awayName + '</span>' +
+            '<img src="https://flagcdn.com/w20/' + awayFlag + '.png" style="width:16px;height:11px;border-radius:1px;flex-shrink:0;" onerror="this.style.display=&quot;none&quot;">' +
+            '<span style="font-size:11px;color:var(--gray);margin:0 4px;white-space:nowrap;">Palp:<b style="color:var(--light);">' + userScore + '</b></span>' +
+            '<span style="font-size:11px;color:var(--gray);white-space:nowrap;font-style:italic;">a jogar</span>' +
+            '</div>';
         }
-
-        const ptsClass = type === 'exact' ? 'score-pts-exact' : type === 'winner' ? 'score-pts-winner' : 'score-pts-zero';
-
-        phaseHtml += '<div class="score-match-row">' +
-          '<span class="score-pts-badge ' + ptsClass + '">' + (pts > 0 ? '+' + pts : '0') + '</span>' +
-          '<img src="https://flagcdn.com/w20/' + homeFlag + '.png" style="width:16px;height:11px;border-radius:1px;flex-shrink:0;" onerror="this.style.display=&quot;none&quot;">' +
-          '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--light);">' + homeName + '</span>' +
-          '<span style="font-family:var(--font-cond),sans-serif;font-size:13px;color:var(--gray);margin:0 2px;">×</span>' +
-          '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--light);text-align:right;">' + awayName + '</span>' +
-          '<img src="https://flagcdn.com/w20/' + awayFlag + '.png" style="width:16px;height:11px;border-radius:1px;flex-shrink:0;" onerror="this.style.display=&quot;none&quot;">' +
-          '<span style="font-size:11px;color:var(--gray);margin:0 4px;white-space:nowrap;">Palp:<b style="color:var(--light);">' + userScore + '</b></span>' +
-          '<span style="font-size:11px;color:var(--gray);white-space:nowrap;">Real:<b style="color:var(--light);">' + realScore + '</b></span>' +
-          '</div>';
-
-        // ── Bonus rows ───────────────────────────────────────────
-        // 32-avos: bonus shown as a summary after all matches (see below)
-
-        // Bônus por avanço de fase mostrado no bloco resumo abaixo (ver após o forEach)
       });
     });
 
@@ -6770,6 +6771,8 @@ async function openScoreModal(uid) {
 
   document.getElementById('score-modal-body').innerHTML = html;
   document.getElementById('score-modal').classList.add('open');
+  // Reset scroll ao topo após injetar conteúdo
+  document.querySelector('.score-modal-box').scrollTop = 0;
 }
 
 </script>
