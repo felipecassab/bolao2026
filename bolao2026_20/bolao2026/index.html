@@ -6552,7 +6552,7 @@ async function openScoreModal(uid) {
       MATCHES.filter(m => m.group === grp).forEach(m => {
         const res = state.results[m.id]; // pode ser undefined (jogo ainda não ocorreu)
         const p   = pal[m.id];
-        if (!res && (!p || p.h === undefined)) return; // sem resultado e sem palpite → pula
+        // Mostra todos os jogos sempre (com ou sem palpite/resultado)
         const rtr = resolvedTeamsReal[m.id] || null;
         const rt  = resolvedTeams[m.id] || null;
         const isKO = m.phase === 'knockout';
