@@ -2382,6 +2382,20 @@ async function saveGlobal() {
       }
     } catch(e) {}
   }
+
+  // ── PROTEÇÃO CRÍTICA: nunca salvar menos usuários que o backup local ──
+  try {
+    const bk = JSON.parse(localStorage.getItem('bolao_backup') || '{}');
+    const bkUserCount = Object.keys(bk.users || {}).length;
+    const stateUserCount = Object.keys(state.users || {}).length;
+    if (bkUserCount > stateUserCount + 2) {
+      // State tem muito menos usuários que o backup — provável corrupção, abortar
+      console.error('SAVE ABORTADO: state.users tem ' + stateUserCount + ' usuários mas backup tem ' + bkUserCount + '. Possível corrupção.');
+      showToast('⚠️ Erro de segurança: dados incompletos detectados. Recarregue a página.', true);
+      return;
+    }
+  } catch(e) {}
+
   const data = {users: state.users, palpites: state.palpites, results: state.results, snapshots: state.snapshots};
   try {
     await fbSet(data);
