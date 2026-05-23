@@ -2453,14 +2453,18 @@ async function saveGlobal() {
   }
 
   // ── PROTEÇÃO CRÍTICA: nunca salvar menos usuários que o backup local ──
+  // Só bloqueia se o state tiver MENOS usuários (possível corrupção)
+  // Nunca bloqueia se tiver mais (novos cadastros são válidos)
   try {
     const bk = JSON.parse(localStorage.getItem('bolao_backup') || '{}');
     const bkUserCount = Object.keys(bk.users || {}).length;
     const stateUserCount = Object.keys(state.users || {}).length;
-    if (bkUserCount > stateUserCount + 2) {
-      // State tem muito menos usuários que o backup — provável corrupção, abortar
+    // Só bloqueia se o state tiver menos usuários E não for o admin logado
+    // (admin pode excluir usuários legitimamente)
+    const isAdmin = state.user && state.users[state.user]?.status === 'approved';
+    if (!isAdmin && bkUserCount > stateUserCount + 2) {
       console.error('SAVE ABORTADO: state.users tem ' + stateUserCount + ' usuários mas backup tem ' + bkUserCount + '. Possível corrupção.');
-      showToast('⚠️ Erro de segurança: dados incompletos detectados. Recarregue a página.', true);
+      showToast('⚠️ Erro de segurança: dados incompletos. Recarregue a página.', true);
       return;
     }
   } catch(e) {}
