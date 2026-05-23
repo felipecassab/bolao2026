@@ -956,6 +956,75 @@ const EXTRA_QS = [
 
 
 // ═══════════════════════════════════════════════════════════════════
+// BACKUP FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════
+
+// Opção 1+2: Backup no Firestore (diário e horário)
+async function fbBackup(data) {
+  try {
+    const now = new Date();
+    const dateKey = now.toISOString().slice(0,10); // 2026-05-23
+    const hourKey = now.toISOString().slice(0,13).replace('T','_'); // 2026-05-23_14
+    const year = now.getFullYear();
+    const week = Math.ceil(((now - new Date(year,0,1)) / 86400000 + new Date(year,0,1).getDay() + 1) / 7);
+    const weekKey = year + '-W' + String(week).padStart(2,'0'); // 2026-W21
+
+    const fields = {};
+    for (const [k,v] of Object.entries(data)) fields[k] = toFS(v);
+    // Add timestamp
+    fields._backedUpAt = toFS(now.toISOString());
+    fields._userCount  = toFS(Object.keys(data.users||{}).length);
+    const body = JSON.stringify({fields});
+
+    const baseUrl = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents/bolao_backups`;
+
+    // Backup diário (Opção 1)
+    fetch(`${baseUrl}/daily_${dateKey}?key=${FB_APIKEY}`, {
+      method: 'PATCH', headers: {'Content-Type':'application/json'}, body
+    }).catch(e => console.warn('Backup diário falhou:', e));
+
+    // Backup horário (Opção 2) — só salva a cada hora cheia
+    const minutes = now.getMinutes();
+    if (minutes < 10) { // janela de 10 min após hora cheia
+      fetch(`${baseUrl}/hourly_${hourKey}?key=${FB_APIKEY}`, {
+        method: 'PATCH', headers: {'Content-Type':'application/json'}, body
+      }).catch(e => console.warn('Backup horário falhou:', e));
+    }
+
+    // Backup semanal
+    fetch(`${baseUrl}/weekly_${weekKey}?key=${FB_APIKEY}`, {
+      method: 'PATCH', headers: {'Content-Type':'application/json'}, body
+    }).catch(e => console.warn('Backup semanal falhou:', e));
+
+  } catch(e) {
+    console.warn('fbBackup error:', e);
+  }
+}
+
+// Opção 3: Backup no Google Sheets
+let _sheetsBackupUrl = null; // definido via adminSetSheetsUrl()
+async function fbBackupSheets(data) {
+  if (!_sheetsBackupUrl) return;
+  try {
+    const payload = {
+      timestamp: new Date().toISOString(),
+      userCount: Object.keys(data.users||{}).length,
+      palpiteCount: Object.keys(data.palpites||{}).length,
+      users: JSON.stringify(data.users||{}),
+      palpites: JSON.stringify(data.palpites||{}),
+    };
+    fetch(_sheetsBackupUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    }).catch(e => console.warn('Sheets backup falhou:', e));
+  } catch(e) {
+    console.warn('fbBackupSheets error:', e);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════════
 let state = { user: null, users: {}, palpites: {}, results: {}, snapshots: [] };
@@ -2400,6 +2469,10 @@ async function saveGlobal() {
   try {
     await fbSet(data);
     localStorage.setItem('bolao_backup', JSON.stringify(data));
+    // Opções 1+2: backup automático no Firestore (não bloqueia o save principal)
+    fbBackup(data);
+    // Opção 3: backup no Google Sheets (se configurado)
+    fbBackupSheets(data);
   } catch(e) {
     console.warn('Save error:', e);
     showToast('Erro ao salvar. Verifique conexão.', true);
@@ -2674,6 +2747,9 @@ function updateHeader() {
     nm.textContent='Entrar';
   }
 }
+
+// Carregar URL do Google Sheets do localStorage
+_sheetsBackupUrl = localStorage.getItem('bolao_sheets_url') || null;
 
 // Avatar file input handler
 document.getElementById('avatar-file-input').addEventListener('change', function(e) {
@@ -5160,10 +5236,13 @@ async function adminClear(id) {
 }
 function renderAdminSettings() {
   const visible = state.results?._palpitesVisiveis === true;
+  const sheetsUrl = _sheetsBackupUrl || '';
   document.getElementById('admin-games').innerHTML = `
     <div style="padding:16px;">
       <p style="font-size:13px;color:var(--gray);margin-bottom:16px;">Configurações gerais do bolão</p>
-      <div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;">
+
+      <!-- Toggle palpites visíveis -->
+      <div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px;">
         <div>
           <p style="font-size:14px;font-weight:600;color:var(--light);">👁️ Palpites visíveis no ranking</p>
           <p style="font-size:12px;color:var(--gray);margin-top:3px;">Permite que participantes vejam os palpites uns dos outros</p>
@@ -5172,7 +5251,44 @@ function renderAdminSettings() {
           ${visible ? '✅ Liberado' : '🔒 Bloqueado'}
         </button>
       </div>
+
+      <!-- Google Sheets backup URL -->
+      <div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:16px;margin-bottom:12px;">
+        <p style="font-size:14px;font-weight:600;color:var(--light);margin-bottom:4px;">📊 Backup Google Sheets</p>
+        <p style="font-size:12px;color:var(--gray);margin-bottom:10px;">Cole a URL do Google Apps Script para backup automático na planilha</p>
+        <input id="sheets-url-input" type="text" placeholder="https://script.google.com/macros/s/..." value="${sheetsUrl}"
+          style="width:100%;padding:10px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:var(--light);font-size:12px;box-sizing:border-box;margin-bottom:10px;">
+        <button onclick="adminSaveSheetsUrl()" style="padding:10px 18px;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid rgba(0,200,83,0.4);background:rgba(0,200,83,0.12);color:var(--green);">
+          💾 Salvar URL
+        </button>
+        ${sheetsUrl ? '<span style="font-size:11px;color:var(--green);margin-left:10px;">✅ Configurado</span>' : '<span style="font-size:11px;color:var(--gray);margin-left:10px;">Não configurado</span>'}
+      </div>
+
+      <!-- Backup manual -->
+      <div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:16px;margin-bottom:12px;">
+        <p style="font-size:14px;font-weight:600;color:var(--light);margin-bottom:4px;">💾 Backup Manual</p>
+        <p style="font-size:12px;color:var(--gray);margin-bottom:10px;">Força um backup imediato em todos os destinos configurados</p>
+        <button onclick="adminForceBackup()" style="padding:10px 18px;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid rgba(100,150,255,0.4);background:rgba(100,150,255,0.12);color:#7eb8f5;">
+          🔄 Fazer backup agora
+        </button>
+      </div>
     </div>`;
+}
+
+function adminSaveSheetsUrl() {
+  const url = document.getElementById('sheets-url-input')?.value?.trim();
+  if (!url) { showToast('Cole a URL do Apps Script primeiro', true); return; }
+  _sheetsBackupUrl = url;
+  localStorage.setItem('bolao_sheets_url', url);
+  showToast('✅ URL do Google Sheets salva!');
+  renderAdminSettings();
+}
+
+async function adminForceBackup() {
+  const data = {users: state.users, palpites: state.palpites, results: state.results, snapshots: state.snapshots};
+  await fbBackup(data);
+  await fbBackupSheets(data);
+  showToast('✅ Backup realizado em todos os destinos!');
 }
 
 async function adminTogglePalpitesVisiveis() {
