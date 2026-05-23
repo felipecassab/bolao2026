@@ -2672,6 +2672,37 @@ document.getElementById('header-user-btn').addEventListener('click', ()=>{
   else { openModal('login'); }
 });
 
+// ── Página de Recuperação de Dados ──────────────────────────────
+if (window.location.hash === '#recuperar') {
+  window.addEventListener('load', function() {
+    setTimeout(function() {
+      try {
+        const bk = JSON.parse(localStorage.getItem('bolao_backup') || '{}');
+        const users = bk.users || {};
+        const uCount = Object.keys(users).length;
+        const pCount = Object.keys(bk.palpites || {}).length;
+        const msg = uCount === 0
+          ? 'Nenhum dado encontrado neste dispositivo.'
+          : 'DADOS ENCONTRADOS!\n\nUsuários: ' + uCount + '\nPalpites: ' + pCount + '\n\nParticipantes:\n' +
+            Object.entries(users).map(([uid, u]) => (u.apelido||u.nome||uid) + ' (' + uid + ')').join('\n');
+        window._copyBk = function() {
+          var txt = localStorage.getItem('bolao_backup') || 'vazio';
+          navigator.clipboard.writeText(txt).then(function(){ alert('Copiado! Cole e manda pro Felipe.'); });
+        };
+        document.body.innerHTML = '<div style="background:#0d1b2a;color:#eee;padding:20px;font-family:monospace;min-height:100vh;">' +
+          '<h2 style="color:#f5c518;">🔍 Recuperação de Dados</h2>' +
+          '<pre style="background:#1a2a3a;padding:16px;border-radius:8px;white-space:pre-wrap;word-break:break-all;font-size:12px;">' + msg + '</pre>' +
+          '<button onclick="window._copyBk()" ' +
+          'style="background:#f5c518;color:#000;border:none;padding:16px 24px;border-radius:8px;font-size:16px;font-weight:bold;cursor:pointer;margin-top:12px;width:100%;">📋 Copiar TUDO e mandar pro Felipe</button>' +
+          '<br><br><pre style="background:#1a2a3a;padding:12px;border-radius:8px;font-size:10px;white-space:pre-wrap;word-break:break-all;">' +
+          JSON.stringify(bk, null, 2) + '</pre></div>';
+      } catch(e) {
+        document.body.innerHTML = '<div style="padding:20px;color:red;">Erro: ' + e.message + '</div>';
+      }
+    }, 500);
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════════════════════
