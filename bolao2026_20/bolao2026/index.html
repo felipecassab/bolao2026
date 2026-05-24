@@ -6051,12 +6051,14 @@ function exportPalpites() {
   if (typeof XLSX === 'undefined') { showToast('Aguarde, carregando biblioteca...', true); return; }
 
   const wb = XLSX.utils.book_new();
-  const users = Object.entries(state.users).filter(([,u]) => u.status !== 'rejected');
+  const users = Object.entries(state.users)
+    .filter(([,u]) => u.status !== 'rejected')
+    .sort(([,a],[,b]) => (a.apelido||a.nome||'').localeCompare(b.apelido||b.nome||'', 'pt-BR'));
 
   // ── Sheet 1: GRUPOS ──────────────────────────────────────────────
   const groupMatches = MATCHES.filter(m => m.phase === 'group');
   const groupHeader = ['Grupo', 'Jogo', 'Time A', 'Time B'];
-  users.forEach(([,u]) => groupHeader.push(u.nome));
+  users.forEach(([,u]) => groupHeader.push(u.nome + (u.apelido && u.apelido !== u.nome ? ' (' + u.apelido + ')' : '')));
 
   const groupRows = [groupHeader];
   groupMatches.forEach(m => {
@@ -6079,7 +6081,7 @@ function exportPalpites() {
   // ── Sheet 2: MATA-MATA ────────────────────────────────────────────
   const koMatches = MATCHES.filter(m => m.phase === 'knockout');
   const koHeader = ['Fase', 'Data', 'Time A', 'Time B'];
-  users.forEach(([,u]) => koHeader.push(u.nome));
+  users.forEach(([,u]) => koHeader.push(u.nome + (u.apelido && u.apelido !== u.nome ? ' (' + u.apelido + ')' : '')));
 
   const koRows = [koHeader];
   koMatches.forEach(m => {
@@ -6100,7 +6102,7 @@ function exportPalpites() {
 
   // ── Sheet 3: EXTRAS ───────────────────────────────────────────────
   const extHeader = ['Pergunta'];
-  users.forEach(([,u]) => extHeader.push(u.nome));
+  users.forEach(([,u]) => extHeader.push(u.nome + (u.apelido && u.apelido !== u.nome ? ' (' + u.apelido + ')' : '')));
   const extRows = [extHeader];
   EXTRA_QS.forEach(q => {
     const row = ['(' + q.label + ') ' + q.q];
@@ -6116,12 +6118,12 @@ function exportPalpites() {
 
   // ── Sheet 4: RANKING ─────────────────────────────────────────────
   const scores = users
-    .map(([wpp, u]) => { buildResolvedTeams(state.palpites[wpp] || {}); return { name: u.nome, ...calcPts(state.palpites[wpp]) }; })
+    .map(([wpp, u]) => { buildResolvedTeams(state.palpites[wpp] || {}); return { name: u.nome, apelido: u.apelido||u.nome, ...calcPts(state.palpites[wpp]) }; })
     .sort((a,b) => b.pts - a.pts);
-  const rankRows = [['Pos', 'Participante', 'Pontos', 'Acertos', 'Exatos']];
-  scores.forEach((s, i) => rankRows.push([i+1, s.name, s.pts, s.ac, s.ex]));
+  const rankRows = [['Pos', 'Nome', 'Apelido', 'Pontos', 'Acertos', 'Exatos']];
+  scores.forEach((s, i) => rankRows.push([i+1, s.name, s.apelido, s.pts, s.ac, s.ex]));
   const wsRank = XLSX.utils.aoa_to_sheet(rankRows);
-  wsRank['!cols'] = [{wch:5},{wch:25},{wch:10},{wch:10},{wch:10}];
+  wsRank['!cols'] = [{wch:5},{wch:25},{wch:20},{wch:10},{wch:10},{wch:10}];
   XLSX.utils.book_append_sheet(wb, wsRank, 'Ranking');
 
   // Download
