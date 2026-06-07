@@ -956,75 +956,6 @@ const EXTRA_QS = [
 
 
 // ═══════════════════════════════════════════════════════════════════
-// BACKUP FUNCTIONS
-// ═══════════════════════════════════════════════════════════════════
-
-// Opção 1+2: Backup no Firestore (diário e horário)
-async function fbBackup(data) {
-  try {
-    const now = new Date();
-    const dateKey = now.toISOString().slice(0,10); // 2026-05-23
-    const hourKey = now.toISOString().slice(0,13).replace('T','_'); // 2026-05-23_14
-    const year = now.getFullYear();
-    const week = Math.ceil(((now - new Date(year,0,1)) / 86400000 + new Date(year,0,1).getDay() + 1) / 7);
-    const weekKey = year + '-W' + String(week).padStart(2,'0'); // 2026-W21
-
-    const fields = {};
-    for (const [k,v] of Object.entries(data)) fields[k] = toFS(v);
-    // Add timestamp
-    fields._backedUpAt = toFS(now.toISOString());
-    fields._userCount  = toFS(Object.keys(data.users||{}).length);
-    const body = JSON.stringify({fields});
-
-    const baseUrl = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents/bolao_backups`;
-
-    // Backup diário (Opção 1)
-    fetch(`${baseUrl}/daily_${dateKey}?key=${FB_APIKEY}`, {
-      method: 'PATCH', headers: {'Content-Type':'application/json'}, body
-    }).catch(e => console.warn('Backup diário falhou:', e));
-
-    // Backup horário (Opção 2) — só salva a cada hora cheia
-    const minutes = now.getMinutes();
-    if (minutes < 10) { // janela de 10 min após hora cheia
-      fetch(`${baseUrl}/hourly_${hourKey}?key=${FB_APIKEY}`, {
-        method: 'PATCH', headers: {'Content-Type':'application/json'}, body
-      }).catch(e => console.warn('Backup horário falhou:', e));
-    }
-
-    // Backup semanal
-    fetch(`${baseUrl}/weekly_${weekKey}?key=${FB_APIKEY}`, {
-      method: 'PATCH', headers: {'Content-Type':'application/json'}, body
-    }).catch(e => console.warn('Backup semanal falhou:', e));
-
-  } catch(e) {
-    console.warn('fbBackup error:', e);
-  }
-}
-
-// Opção 3: Backup no Google Sheets
-let _sheetsBackupUrl = null; // definido via adminSetSheetsUrl()
-async function fbBackupSheets(data) {
-  if (!_sheetsBackupUrl) return;
-  try {
-    const payload = {
-      timestamp: new Date().toISOString(),
-      userCount: Object.keys(data.users||{}).length,
-      palpiteCount: Object.keys(data.palpites||{}).length,
-      users: JSON.stringify(data.users||{}),
-      palpites: JSON.stringify(data.palpites||{}),
-    };
-    fetch(_sheetsBackupUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(payload)
-    }).catch(e => console.warn('Sheets backup falhou:', e));
-  } catch(e) {
-    console.warn('fbBackupSheets error:', e);
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════════
 let state = { user: null, users: {}, palpites: {}, results: {}, snapshots: [] };
@@ -2451,32 +2382,10 @@ async function saveGlobal() {
       }
     } catch(e) {}
   }
-
-  // ── PROTEÇÃO CRÍTICA: nunca salvar menos usuários que o backup local ──
-  // Só bloqueia se o state tiver MENOS usuários (possível corrupção)
-  // Nunca bloqueia se tiver mais (novos cadastros são válidos)
-  try {
-    const bk = JSON.parse(localStorage.getItem('bolao_backup') || '{}');
-    const bkUserCount = Object.keys(bk.users || {}).length;
-    const stateUserCount = Object.keys(state.users || {}).length;
-    // Só bloqueia se o state tiver menos usuários E não for o admin logado
-    // (admin pode excluir usuários legitimamente)
-    const isAdmin = state.user && state.users[state.user]?.status === 'approved';
-    if (!isAdmin && bkUserCount > stateUserCount + 2) {
-      console.error('SAVE ABORTADO: state.users tem ' + stateUserCount + ' usuários mas backup tem ' + bkUserCount + '. Possível corrupção.');
-      showToast('⚠️ Erro de segurança: dados incompletos. Recarregue a página.', true);
-      return;
-    }
-  } catch(e) {}
-
   const data = {users: state.users, palpites: state.palpites, results: state.results, snapshots: state.snapshots};
   try {
     await fbSet(data);
     localStorage.setItem('bolao_backup', JSON.stringify(data));
-    // Opções 1+2: backup automático no Firestore (não bloqueia o save principal)
-    fbBackup(data);
-    // Opção 3: backup no Google Sheets (se configurado)
-    fbBackupSheets(data);
   } catch(e) {
     console.warn('Save error:', e);
     showToast('Erro ao salvar. Verifique conexão.', true);
@@ -2752,9 +2661,6 @@ function updateHeader() {
   }
 }
 
-// Carregar URL do Google Sheets do localStorage
-_sheetsBackupUrl = localStorage.getItem('bolao_sheets_url') || null;
-
 // Avatar file input handler
 document.getElementById('avatar-file-input').addEventListener('change', function(e) {
   const file = e.target.files[0];
@@ -2766,41 +2672,32 @@ document.getElementById('header-user-btn').addEventListener('click', ()=>{
   else { openModal('login'); }
 });
 
-// ── Página de Recuperação de Dados ──────────────────────────────
-if (window.location.hash === '#recuperar') {
-  window.addEventListener('load', function() {
-    setTimeout(function() {
-      try {
-        const bk = JSON.parse(localStorage.getItem('bolao_backup') || '{}');
-        const users = bk.users || {};
-        const uCount = Object.keys(users).length;
-        const pCount = Object.keys(bk.palpites || {}).length;
-        const msg = uCount === 0
-          ? 'Nenhum dado encontrado neste dispositivo.'
-          : 'DADOS ENCONTRADOS!\n\nUsuários: ' + uCount + '\nPalpites: ' + pCount + '\n\nParticipantes:\n' +
-            Object.entries(users).map(([uid, u]) => (u.apelido||u.nome||uid) + ' (' + uid + ')').join('\n');
-        window._copyBk = function() {
-          var txt = localStorage.getItem('bolao_backup') || 'vazio';
-          navigator.clipboard.writeText(txt).then(function(){ alert('Copiado! Cole e manda pro Felipe.'); });
-        };
-        document.body.innerHTML = '<div style="background:#0d1b2a;color:#eee;padding:20px;font-family:monospace;min-height:100vh;">' +
-          '<h2 style="color:#f5c518;">🔍 Recuperação de Dados</h2>' +
-          '<pre style="background:#1a2a3a;padding:16px;border-radius:8px;white-space:pre-wrap;word-break:break-all;font-size:12px;">' + msg + '</pre>' +
-          '<button onclick="window._copyBk()" ' +
-          'style="background:#f5c518;color:#000;border:none;padding:16px 24px;border-radius:8px;font-size:16px;font-weight:bold;cursor:pointer;margin-top:12px;width:100%;">📋 Copiar TUDO e mandar pro Felipe</button>' +
-          '<br><br><pre style="background:#1a2a3a;padding:12px;border-radius:8px;font-size:10px;white-space:pre-wrap;word-break:break-all;">' +
-          JSON.stringify(bk, null, 2) + '</pre></div>';
-      } catch(e) {
-        document.body.innerHTML = '<div style="padding:20px;color:red;">Erro: ' + e.message + '</div>';
-      }
-    }, 500);
-  });
-}
-
 // ═══════════════════════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════════════════════
 function showPage(page, btn) {
+  // Antes de sair da aba palpites, salvar rascunho no state para não perder inputs
+  const currentPage = document.querySelector('.page.active')?.id?.replace('page-','');
+  if (currentPage === 'palpites' && page !== 'palpites' && state.user && !isLocked()) {
+    // Capturar todos os inputs preenchidos e salvar no state
+    MATCHES.forEach(m => {
+      const ih = document.getElementById('p_'+m.id+'_h');
+      const ia = document.getElementById('p_'+m.id+'_a');
+      if (ih && ia && ih.value !== '' && ia.value !== '') {
+        if (!state.palpites[state.user]) state.palpites[state.user] = {};
+        state.palpites[state.user][m.id] = {h: +ih.value, a: +ia.value};
+      }
+    });
+    // Atualizar cache de grupos
+    if (!state._groupDomCache) state._groupDomCache = {};
+    MATCHES.filter(m=>m.phase==='group').forEach(m=>{
+      const ih = document.getElementById('p_'+m.id+'_h');
+      const ia = document.getElementById('p_'+m.id+'_a');
+      if (ih && ia && ih.value !== '' && ia.value !== '') {
+        state._groupDomCache[m.id] = {h:+ih.value, a:+ia.value};
+      }
+    });
+  }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
@@ -2852,12 +2749,18 @@ function renderAll() {
   buildResolvedTeamsFromResults();
   renderAdminFP3Block();
   updateFAB();
-  // Only render matches if no inputs are currently filled (user not actively typing)
+  // Só re-renderiza palpites se não houver inputs preenchidos E
+  // a aba palpites estiver ativa (protege rascunhos quando o usuário navega)
+  const palpitesActive = document.getElementById('page-palpites')?.classList.contains('active');
   const hasFilledInput = MATCHES.some(m => {
     const h = document.getElementById('p_'+m.id+'_h');
     return h && h.value !== '';
   });
-  if (!hasFilledInput) renderMatches();
+  // Se a aba não está ativa, os inputs aparecem vazios mas podem ter rascunho
+  // Verifica também se há dados não salvos no DOM cache
+  const hasDraftData = state.user && state._groupDomCache && Object.keys(state._groupDomCache).length > 0;
+  if (!hasFilledInput && !hasDraftData) renderMatches();
+  else if (palpitesActive && !hasFilledInput && !hasDraftData) renderMatches();
   renderRanking();
   renderHistorico();
   if (adminGroup === '__extras__') renderAdminExtras();
@@ -5240,13 +5143,10 @@ async function adminClear(id) {
 }
 function renderAdminSettings() {
   const visible = state.results?._palpitesVisiveis === true;
-  const sheetsUrl = _sheetsBackupUrl || '';
   document.getElementById('admin-games').innerHTML = `
     <div style="padding:16px;">
       <p style="font-size:13px;color:var(--gray);margin-bottom:16px;">Configurações gerais do bolão</p>
-
-      <!-- Toggle palpites visíveis -->
-      <div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px;">
+      <div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;">
         <div>
           <p style="font-size:14px;font-weight:600;color:var(--light);">👁️ Palpites visíveis no ranking</p>
           <p style="font-size:12px;color:var(--gray);margin-top:3px;">Permite que participantes vejam os palpites uns dos outros</p>
@@ -5255,44 +5155,7 @@ function renderAdminSettings() {
           ${visible ? '✅ Liberado' : '🔒 Bloqueado'}
         </button>
       </div>
-
-      <!-- Google Sheets backup URL -->
-      <div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:16px;margin-bottom:12px;">
-        <p style="font-size:14px;font-weight:600;color:var(--light);margin-bottom:4px;">📊 Backup Google Sheets</p>
-        <p style="font-size:12px;color:var(--gray);margin-bottom:10px;">Cole a URL do Google Apps Script para backup automático na planilha</p>
-        <input id="sheets-url-input" type="text" placeholder="https://script.google.com/macros/s/..." value="${sheetsUrl}"
-          style="width:100%;padding:10px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:var(--light);font-size:12px;box-sizing:border-box;margin-bottom:10px;">
-        <button onclick="adminSaveSheetsUrl()" style="padding:10px 18px;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid rgba(0,200,83,0.4);background:rgba(0,200,83,0.12);color:var(--green);">
-          💾 Salvar URL
-        </button>
-        ${sheetsUrl ? '<span style="font-size:11px;color:var(--green);margin-left:10px;">✅ Configurado</span>' : '<span style="font-size:11px;color:var(--gray);margin-left:10px;">Não configurado</span>'}
-      </div>
-
-      <!-- Backup manual -->
-      <div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:16px;margin-bottom:12px;">
-        <p style="font-size:14px;font-weight:600;color:var(--light);margin-bottom:4px;">💾 Backup Manual</p>
-        <p style="font-size:12px;color:var(--gray);margin-bottom:10px;">Força um backup imediato em todos os destinos configurados</p>
-        <button onclick="adminForceBackup()" style="padding:10px 18px;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid rgba(100,150,255,0.4);background:rgba(100,150,255,0.12);color:#7eb8f5;">
-          🔄 Fazer backup agora
-        </button>
-      </div>
     </div>`;
-}
-
-function adminSaveSheetsUrl() {
-  const url = document.getElementById('sheets-url-input')?.value?.trim();
-  if (!url) { showToast('Cole a URL do Apps Script primeiro', true); return; }
-  _sheetsBackupUrl = url;
-  localStorage.setItem('bolao_sheets_url', url);
-  showToast('✅ URL do Google Sheets salva!');
-  renderAdminSettings();
-}
-
-async function adminForceBackup() {
-  const data = {users: state.users, palpites: state.palpites, results: state.results, snapshots: state.snapshots};
-  await fbBackup(data);
-  await fbBackupSheets(data);
-  showToast('✅ Backup realizado em todos os destinos!');
 }
 
 async function adminTogglePalpitesVisiveis() {
@@ -6051,14 +5914,12 @@ function exportPalpites() {
   if (typeof XLSX === 'undefined') { showToast('Aguarde, carregando biblioteca...', true); return; }
 
   const wb = XLSX.utils.book_new();
-  const users = Object.entries(state.users)
-    .filter(([,u]) => u.status !== 'rejected')
-    .sort(([,a],[,b]) => (a.apelido||a.nome||'').localeCompare(b.apelido||b.nome||'', 'pt-BR'));
+  const users = Object.entries(state.users).filter(([,u]) => u.status !== 'rejected');
 
   // ── Sheet 1: GRUPOS ──────────────────────────────────────────────
   const groupMatches = MATCHES.filter(m => m.phase === 'group');
   const groupHeader = ['Grupo', 'Jogo', 'Time A', 'Time B'];
-  users.forEach(([,u]) => groupHeader.push(u.nome + (u.apelido && u.apelido !== u.nome ? ' (' + u.apelido + ')' : '')));
+  users.forEach(([,u]) => groupHeader.push(u.nome));
 
   const groupRows = [groupHeader];
   groupMatches.forEach(m => {
@@ -6081,7 +5942,7 @@ function exportPalpites() {
   // ── Sheet 2: MATA-MATA ────────────────────────────────────────────
   const koMatches = MATCHES.filter(m => m.phase === 'knockout');
   const koHeader = ['Fase', 'Data', 'Time A', 'Time B'];
-  users.forEach(([,u]) => koHeader.push(u.nome + (u.apelido && u.apelido !== u.nome ? ' (' + u.apelido + ')' : '')));
+  users.forEach(([,u]) => koHeader.push(u.nome));
 
   const koRows = [koHeader];
   koMatches.forEach(m => {
@@ -6102,7 +5963,7 @@ function exportPalpites() {
 
   // ── Sheet 3: EXTRAS ───────────────────────────────────────────────
   const extHeader = ['Pergunta'];
-  users.forEach(([,u]) => extHeader.push(u.nome + (u.apelido && u.apelido !== u.nome ? ' (' + u.apelido + ')' : '')));
+  users.forEach(([,u]) => extHeader.push(u.nome));
   const extRows = [extHeader];
   EXTRA_QS.forEach(q => {
     const row = ['(' + q.label + ') ' + q.q];
@@ -6118,12 +5979,12 @@ function exportPalpites() {
 
   // ── Sheet 4: RANKING ─────────────────────────────────────────────
   const scores = users
-    .map(([wpp, u]) => { buildResolvedTeams(state.palpites[wpp] || {}); return { name: u.nome, apelido: u.apelido||u.nome, ...calcPts(state.palpites[wpp]) }; })
+    .map(([wpp, u]) => { buildResolvedTeams(state.palpites[wpp] || {}); return { name: u.nome, ...calcPts(state.palpites[wpp]) }; })
     .sort((a,b) => b.pts - a.pts);
-  const rankRows = [['Pos', 'Nome', 'Apelido', 'Pontos', 'Acertos', 'Exatos']];
-  scores.forEach((s, i) => rankRows.push([i+1, s.name, s.apelido, s.pts, s.ac, s.ex]));
+  const rankRows = [['Pos', 'Participante', 'Pontos', 'Acertos', 'Exatos']];
+  scores.forEach((s, i) => rankRows.push([i+1, s.name, s.pts, s.ac, s.ex]));
   const wsRank = XLSX.utils.aoa_to_sheet(rankRows);
-  wsRank['!cols'] = [{wch:5},{wch:25},{wch:20},{wch:10},{wch:10},{wch:10}];
+  wsRank['!cols'] = [{wch:5},{wch:25},{wch:10},{wch:10},{wch:10}];
   XLSX.utils.book_append_sheet(wb, wsRank, 'Ranking');
 
   // Download
