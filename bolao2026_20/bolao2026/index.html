@@ -2679,22 +2679,19 @@ function showPage(page, btn) {
   // Antes de sair da aba palpites, salvar rascunho no state para não perder inputs
   const currentPage = document.querySelector('.page.active')?.id?.replace('page-','');
   if (currentPage === 'palpites' && page !== 'palpites' && state.user && !isLocked()) {
-    // Capturar todos os inputs preenchidos e salvar no state
+    // Capturar TODOS os inputs (grupos + mata-mata) e salvar no state e no cache
+    if (!state.palpites[state.user]) state.palpites[state.user] = {};
+    if (!state._groupDomCache) state._groupDomCache = {};
     MATCHES.forEach(m => {
       const ih = document.getElementById('p_'+m.id+'_h');
       const ia = document.getElementById('p_'+m.id+'_a');
-      if (ih && ia && ih.value !== '' && ia.value !== '') {
-        if (!state.palpites[state.user]) state.palpites[state.user] = {};
-        state.palpites[state.user][m.id] = {h: +ih.value, a: +ia.value};
-      }
-    });
-    // Atualizar cache de grupos
-    if (!state._groupDomCache) state._groupDomCache = {};
-    MATCHES.filter(m=>m.phase==='group').forEach(m=>{
-      const ih = document.getElementById('p_'+m.id+'_h');
-      const ia = document.getElementById('p_'+m.id+'_a');
-      if (ih && ia && ih.value !== '' && ia.value !== '') {
-        state._groupDomCache[m.id] = {h:+ih.value, a:+ia.value};
+      if (!ih || !ia) return;
+      if (ih.value !== '' && ia.value !== '') {
+        const pen = (state.palpites[state.user][m.id] && state.palpites[state.user][m.id].pen) || null;
+        const entry = {h: +ih.value, a: +ia.value};
+        if (pen && +ih.value === +ia.value) entry.pen = pen;
+        state.palpites[state.user][m.id] = entry;
+        state._groupDomCache[m.id] = entry;
       }
     });
   }
@@ -3237,7 +3234,10 @@ function renderMatches() {
   Object.keys(groups).forEach(g=>{
     html += `<div class="card"><div class="card-header"><span class="group-label">${g.length<=1?'Grupo ':''}${g}</span></div><div class="card-body">`;
     groups[g].forEach(m=>{
-      const p = state.user && state.palpites[state.user] && state.palpites[state.user][m.id];
+      // Prioridade: rascunho do cache DOM > palpites salvos no Firebase
+      const _saved = state.user && state.palpites[state.user] && state.palpites[state.user][m.id];
+      const _cached = state._groupDomCache && state._groupDomCache[m.id];
+      const p = _cached || _saved;
       const res = state.results[m.id];
       const rt = resolvedTeams[m.id];
       const dispHome = (rt && rt.home && rt.home.name) ? rt.home.name : m.home;
