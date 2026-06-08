@@ -2704,6 +2704,7 @@ function showPage(page, btn) {
   btn.classList.add('active');
   document.getElementById('scroll-area').scrollTop=0;
   updateFAB();
+  if (page==='palpites') renderMatches();
   if (page==='ranking') renderRanking();
   if (page==='historico') renderHistorico();
   if (page==='premiacao') renderPremiacao();
@@ -2749,18 +2750,14 @@ function renderAll() {
   buildResolvedTeamsFromResults();
   renderAdminFP3Block();
   updateFAB();
-  // Só re-renderiza palpites se não houver inputs preenchidos E
-  // a aba palpites estiver ativa (protege rascunhos quando o usuário navega)
+  // Só bloqueia re-render se o usuário está com a aba Palpites ativa E já digitou algo
+  // (protege rascunhos não salvos durante atualizações ao vivo)
   const palpitesActive = document.getElementById('page-palpites')?.classList.contains('active');
-  const hasFilledInput = MATCHES.some(m => {
+  const hasFilledInput = palpitesActive && MATCHES.some(m => {
     const h = document.getElementById('p_'+m.id+'_h');
     return h && h.value !== '';
   });
-  // Se a aba não está ativa, os inputs aparecem vazios mas podem ter rascunho
-  // Verifica também se há dados não salvos no DOM cache
-  const hasDraftData = state.user && state._groupDomCache && Object.keys(state._groupDomCache).length > 0;
-  if (!hasFilledInput && !hasDraftData) renderMatches();
-  else if (palpitesActive && !hasFilledInput && !hasDraftData) renderMatches();
+  if (!hasFilledInput) renderMatches();
   renderRanking();
   renderHistorico();
   if (adminGroup === '__extras__') renderAdminExtras();
