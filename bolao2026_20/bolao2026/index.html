@@ -3950,8 +3950,7 @@ async function savePalpites() {
   document.getElementById('missing-alert').style.display='none';
   try {
     showToast('Sincronizando...');
-    await saveGlobal();
-    // Marcar como enviado
+    // Marcar como enviado ANTES do save — tudo num único saveGlobal
     state.palpites[state.user]._submitted = true;
     await saveGlobal();
     // Limpar localStorage após envio bem sucedido
@@ -3962,6 +3961,8 @@ async function savePalpites() {
     renderMatches();
     renderRanking();
   } catch(e) {
+    // Reverter _submitted local em caso de falha no save
+    if (state.palpites[state.user]) delete state.palpites[state.user]._submitted;
     showToast('Erro ao enviar. Verifique sua conexão.', true);
   }
 }
