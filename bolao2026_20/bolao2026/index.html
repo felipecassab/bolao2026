@@ -2373,6 +2373,18 @@ async function saveGlobal() {
   }
   // Garantir que _submitted nunca é perdido — verificar backup local
   // Mas só restaurar se não foi explicitamente removido pelo admin (flag _adminUnsubmitted)
+  // Varrer todos os usuários com _adminUnsubmitted para limpar o localStorage também
+  Object.keys(state.palpites).forEach(wpp => {
+    if (state.palpites[wpp]?._adminUnsubmitted) {
+      try {
+        const bk = JSON.parse(localStorage.getItem('bolao_backup') || '{}');
+        if (bk.palpites?.[wpp]) {
+          delete bk.palpites[wpp]._submitted;
+          localStorage.setItem('bolao_backup', JSON.stringify(bk));
+        }
+      } catch(e) {}
+    }
+  });
   if (state.user && !state.palpites[state.user]?._submitted && !state.palpites[state.user]?._adminUnsubmitted) {
     try {
       const bk = JSON.parse(localStorage.getItem('bolao_backup') || '{}');
@@ -2407,11 +2419,9 @@ function startPolling() {
       // to avoid overwriting inputs the user is currently filling
       const onPalpites = document.getElementById('page-palpites')?.classList.contains('active');
       if (!onPalpites) {
-        // Preservar _submitted do Firebase — nunca deixar o state local sobrescrever
-        const prevSubmitted = state.user && state.palpites[state.user]?._submitted;
         state.palpites = s.palpites || {};
-        // Se Firebase tem _submitted, garantir que está no state
-        if (state.user && s.palpites?.[state.user]?._submitted) {
+        // Se Firebase tem _submitted (e não foi desbloqueado pelo admin), garantir que está no state
+        if (state.user && s.palpites?.[state.user]?._submitted && !s.palpites?.[state.user]?._adminUnsubmitted) {
           if (!state.palpites[state.user]) state.palpites[state.user] = {};
           state.palpites[state.user]._submitted = true;
           // Salvar no localStorage como cache
@@ -3952,6 +3962,8 @@ async function savePalpites() {
     showToast('Sincronizando...');
     // Marcar como enviado ANTES do save — tudo num único saveGlobal
     state.palpites[state.user]._submitted = true;
+    // Limpar flag de desbloqueio pelo admin (participante está enviando novamente)
+    delete state.palpites[state.user]._adminUnsubmitted;
     await saveGlobal();
     // Limpar localStorage após envio bem sucedido
     localStorage.removeItem('bolao_draft_' + state.user);
@@ -5329,11 +5341,11 @@ async function adminUnsubmit(uid) {
   if (!confirm('Desbloquear palpites de ' + (state.users[uid]?.apelido||uid) + '? O participante poderá editar novamente.')) return;
   if (!state.palpites[uid]) state.palpites[uid] = {};
   delete state.palpites[uid]._submitted;
-  // Flag para evitar restauração automática pelo saveGlobal
+  // Flag persistido no Firebase — impede restauração automática do _submitted
+  // até o participante enviar novamente (savePalpites remove este flag)
   state.palpites[uid]._adminUnsubmitted = true;
   await saveGlobal();
-  // Limpar o flag temporário após salvar
-  delete state.palpites[uid]._adminUnsubmitted;
+  // NÃO deletar o flag aqui — ele precisa persistir no Firebase
   renderAdminParticipants();
   showToast('Palpites desbloqueados! ✓');
 }
