@@ -376,7 +376,7 @@ body{display:flex;flex-direction:column}
   <!-- PAGE: EXTRAS -->
   <div class="page" id="page-extras">
     <p class="sec-title">Perguntas Extras</p>
-    <p style="font-size:13px;color:var(--gray);margin-bottom:14px;line-height:1.5;">Cada resposta correta vale <b style="color:var(--gold);">3 pontos</b>. Envie pelo WhatsApp à Comissão até 10/06 às 23h59.</p>
+    <p style="font-size:13px;color:var(--gray);margin-bottom:14px;line-height:1.5;">Cada resposta correta vale <b style="color:var(--gold);">3 pontos</b>.</p>
     <div id="extras-answered" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <span style="font-size:13px;color:var(--gray);">Respondidas:</span>
       <span id="extras-count" style="font-size:14px;font-weight:700;color:var(--gold);">0/11</span>
@@ -5911,12 +5911,21 @@ function exportPalpites() {
   if (typeof XLSX === 'undefined') { showToast('Aguarde, carregando biblioteca...', true); return; }
 
   const wb = XLSX.utils.book_new();
-  const users = Object.entries(state.users).filter(([,u]) => u.status !== 'rejected');
+  // Ordenar alfabeticamente por apelido, excluindo rejeitados e pendentes
+  const users = Object.entries(state.users)
+    .filter(([,u]) => u.status === 'approved')
+    .sort((a, b) => {
+      const apA = (a[1].apelido || a[1].nome || '').toLowerCase();
+      const apB = (b[1].apelido || b[1].nome || '').toLowerCase();
+      return apA.localeCompare(apB, 'pt-BR');
+    });
+  // Rótulo "Nome (Apelido)" para cabeçalhos
+  const userLabel = ([, u]) => u.apelido ? u.nome + ' (' + u.apelido + ')' : u.nome;
 
   // ── Sheet 1: GRUPOS ──────────────────────────────────────────────
   const groupMatches = MATCHES.filter(m => m.phase === 'group');
   const groupHeader = ['Grupo', 'Jogo', 'Time A', 'Time B'];
-  users.forEach(([,u]) => groupHeader.push(u.nome));
+  users.forEach(u => groupHeader.push(userLabel(u)));
 
   const groupRows = [groupHeader];
   groupMatches.forEach(m => {
@@ -5929,17 +5938,16 @@ function exportPalpites() {
   });
 
   const wsGroups = XLSX.utils.aoa_to_sheet(groupRows);
-  // Style header row
   wsGroups['!cols'] = [
     {wch:10}, {wch:12}, {wch:18}, {wch:18},
-    ...users.map(() => ({wch:18}))
+    ...users.map(() => ({wch:22}))
   ];
   XLSX.utils.book_append_sheet(wb, wsGroups, 'Fase de Grupos');
 
   // ── Sheet 2: MATA-MATA ────────────────────────────────────────────
   const koMatches = MATCHES.filter(m => m.phase === 'knockout');
   const koHeader = ['Fase', 'Data', 'Time A', 'Time B'];
-  users.forEach(([,u]) => koHeader.push(u.nome));
+  users.forEach(u => koHeader.push(userLabel(u)));
 
   const koRows = [koHeader];
   koMatches.forEach(m => {
@@ -5955,12 +5963,12 @@ function exportPalpites() {
   });
 
   const wsKO = XLSX.utils.aoa_to_sheet(koRows);
-  wsKO['!cols'] = [{wch:12},{wch:12},{wch:20},{wch:20},...users.map(()=>({wch:20}))];
+  wsKO['!cols'] = [{wch:12},{wch:12},{wch:20},{wch:20},...users.map(()=>({wch:22}))];
   XLSX.utils.book_append_sheet(wb, wsKO, 'Mata-mata');
 
   // ── Sheet 3: EXTRAS ───────────────────────────────────────────────
   const extHeader = ['Pergunta'];
-  users.forEach(([,u]) => extHeader.push(u.nome));
+  users.forEach(u => extHeader.push(userLabel(u)));
   const extRows = [extHeader];
   EXTRA_QS.forEach(q => {
     const row = ['(' + q.label + ') ' + q.q];
@@ -5976,12 +5984,12 @@ function exportPalpites() {
 
   // ── Sheet 4: RANKING ─────────────────────────────────────────────
   const scores = users
-    .map(([wpp, u]) => { buildResolvedTeams(state.palpites[wpp] || {}); return { name: u.nome, ...calcPts(state.palpites[wpp]) }; })
+    .map(([wpp, u]) => { buildResolvedTeams(state.palpites[wpp] || {}); return { name: userLabel([wpp, u]), ...calcPts(state.palpites[wpp]) }; })
     .sort((a,b) => b.pts - a.pts);
   const rankRows = [['Pos', 'Participante', 'Pontos', 'Acertos', 'Exatos']];
   scores.forEach((s, i) => rankRows.push([i+1, s.name, s.pts, s.ac, s.ex]));
   const wsRank = XLSX.utils.aoa_to_sheet(rankRows);
-  wsRank['!cols'] = [{wch:5},{wch:25},{wch:10},{wch:10},{wch:10}];
+  wsRank['!cols'] = [{wch:5},{wch:30},{wch:10},{wch:10},{wch:10}];
   XLSX.utils.book_append_sheet(wb, wsRank, 'Ranking');
 
   // Download
