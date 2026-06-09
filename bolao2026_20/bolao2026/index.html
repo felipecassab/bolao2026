@@ -3781,6 +3781,13 @@ async function saveDraft() {
 
 function loadDraft() {
   if (!state.user) return;
+  // Se palpites já foram enviados, não fazer merge do localStorage
+  // (evita sobrescrever palpites finais com rascunho antigo)
+  if (state.palpites[state.user]?._submitted) {
+    localStorage.removeItem('bolao_draft_' + state.user);
+    localStorage.removeItem('bolao_draft_time_' + state.user);
+    return;
+  }
   const draft = localStorage.getItem('bolao_draft_' + state.user);
   // Se não há draft específico, tentar recuperar pen do backup global
   const backupStr = localStorage.getItem('bolao_backup');
@@ -3809,6 +3816,17 @@ function loadDraft() {
     const local = JSON.parse(draft);
     let changed = false;
 
+    // Se Firebase tem _savedAt mais recente que o rascunho local, não fazer merge
+    // (evita sobrescrever palpites finais com rascunho antigo)
+    const draftTime = localStorage.getItem('bolao_draft_time_' + state.user);
+    const fbSavedAt = fb._savedAt;
+    if (draftTime && fbSavedAt && new Date(fbSavedAt) > new Date(draftTime)) {
+      // Firebase é mais recente — descartar draft local silenciosamente
+      localStorage.removeItem('bolao_draft_' + state.user);
+      localStorage.removeItem('bolao_draft_time_' + state.user);
+      return;
+    }
+
     // Merge por jogo: para cada jogo no localStorage,
     // sempre aplicar pen se localStorage tem e Firebase não tem
     MATCHES.forEach(function(m) {
@@ -3820,7 +3838,7 @@ function loadDraft() {
         fb[m.id] = Object.assign({}, lp);
         changed = true;
       } else {
-        // Ambos têm — sempre aplicar pen do localStorage se Firebase não tem
+        // Ambos têm — só aplicar pen do localStorage se Firebase não tem
         if (lp.pen && !fp.pen) {
           fb[m.id] = Object.assign({}, fp, {pen: lp.pen});
           changed = true;
