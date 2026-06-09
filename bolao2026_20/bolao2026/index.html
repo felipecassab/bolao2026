@@ -1075,48 +1075,63 @@ function calcGroupStandings(group, userPalpites) {
     return h2h;
   }
 
-  teamList.sort((a, b) => {
-    // Step 1: overall points
-    if (b.pt !== a.pt) return b.pt - a.pt;
+  // Ordenação em duas passagens para tratar empates de forma atômica
+  // Passagem 1: separar por pontos
+  teamList.sort((a, b) => b.pt - a.pt);
 
-    // Find all teams tied on same points
-    const tied = teamList.filter(t => t.pt === a.pt);
+  // Passagem 2: dentro de cada grupo de pontos iguais, aplicar critérios FIFA
+  const result = [];
+  let i = 0;
+  while (i < teamList.length) {
+    // Coletar todos com mesmos pontos
+    let j = i + 1;
+    while (j < teamList.length && teamList[j].pt === teamList[i].pt) j++;
+    const group_tied = teamList.slice(i, j);
 
-    if (tied.length >= 2) {
-      const h2h = getH2H(tied);
-      const ha = h2h[a.name], hb = h2h[b.name];
+    if (group_tied.length === 1) {
+      result.push(group_tied[0]);
+    } else {
+      // Calcular H2H uma única vez para todo o grupo empatado
+      const h2h = getH2H(group_tied);
 
-      // Step 2a: H2H points
-      if (hb.pt !== ha.pt) return hb.pt - ha.pt;
+      // Ordenar o grupo usando critérios FIFA em sequência
+      group_tied.sort((a, b) => {
+        const ha = h2h[a.name], hb = h2h[b.name];
 
-      // Step 2b: H2H goal difference
-      const h2hSgA = ha.gp - ha.gc, h2hSgB = hb.gp - hb.gc;
-      if (h2hSgB !== h2hSgA) return h2hSgB - h2hSgA;
+        // Step 2a: H2H points
+        if (hb.pt !== ha.pt) return hb.pt - ha.pt;
 
-      // Step 2c: H2H goals scored
-      if (hb.gp !== ha.gp) return hb.gp - ha.gp;
+        // Step 2b: H2H goal difference
+        const h2hSgA = ha.gp - ha.gc, h2hSgB = hb.gp - hb.gc;
+        if (h2hSgB !== h2hSgA) return h2hSgB - h2hSgA;
+
+        // Step 2c: H2H goals scored
+        if (hb.gp !== ha.gp) return hb.gp - ha.gp;
+
+        // Step 3a: overall goal difference
+        const sgA = a.gp - a.gc, sgB = b.gp - b.gc;
+        if (sgB !== sgA) return sgB - sgA;
+
+        // Step 3b: overall goals scored
+        if (b.gp !== a.gp) return b.gp - a.gp;
+
+        // Step 3c: fair play (user choice or admin choice)
+        const fp = (userPalpites && userPalpites._fp && userPalpites._fp[group]) ||
+                   (userPalpites && userPalpites._fpAdmin && userPalpites._fpAdmin[group]) || [];
+        const fpA = fp.indexOf(a.name), fpB = fp.indexOf(b.name);
+        if (fpA !== -1 && fpB !== -1) return fpA - fpB;
+        if (fpA !== -1) return -1;
+        if (fpB !== -1) return 1;
+
+        // Step 4: FIFA ranking
+        return (FIFA_RANKING[a.name]||99) - (FIFA_RANKING[b.name]||99);
+      });
+      group_tied.forEach(t => result.push(t));
     }
+    i = j;
+  }
 
-    // Step 3a: overall goal difference
-    const sgA = a.gp - a.gc, sgB = b.gp - b.gc;
-    if (sgB !== sgA) return sgB - sgA;
-
-    // Step 3b: overall goals scored
-    if (b.gp !== a.gp) return b.gp - a.gp;
-
-    // Step 3c: fair play (user choice or admin choice)
-    const fp = (userPalpites && userPalpites._fp && userPalpites._fp[group]) ||
-               (userPalpites && userPalpites._fpAdmin && userPalpites._fpAdmin[group]) || [];
-    const fpA = fp.indexOf(a.name), fpB = fp.indexOf(b.name);
-    if (fpA !== -1 && fpB !== -1) return fpA - fpB; // lower index = better fair play
-    if (fpA !== -1) return -1;
-    if (fpB !== -1) return 1;
-
-    // Step 4: FIFA ranking
-    return (FIFA_RANKING[a.name]||99) - (FIFA_RANKING[b.name]||99);
-  });
-
-  return teamList;
+  return result;
 }
 
 function renderThirdsStandings(userPalpites) {
