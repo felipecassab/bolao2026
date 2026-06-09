@@ -2419,12 +2419,25 @@ function startPolling() {
       // to avoid overwriting inputs the user is currently filling
       const onPalpites = document.getElementById('page-palpites')?.classList.contains('active');
       if (!onPalpites) {
+        // Preservar metadados locais que podem ser mais recentes que o Firebase
+        const prevQA   = state.user && state.palpites[state.user]?._qa;
+        const prevFP   = state.user && state.palpites[state.user]?._fp;
+        const prevFP3  = state.user && state.palpites[state.user]?._fp3;
+
         state.palpites = s.palpites || {};
+
+        // Restaurar metadados se Firebase não tem (save pode ter falhado silenciosamente)
+        if (state.user) {
+          if (!state.palpites[state.user]) state.palpites[state.user] = {};
+          if (prevQA  && !state.palpites[state.user]._qa)  state.palpites[state.user]._qa  = prevQA;
+          if (prevFP  && !state.palpites[state.user]._fp)  state.palpites[state.user]._fp  = prevFP;
+          if (prevFP3 && !state.palpites[state.user]._fp3) state.palpites[state.user]._fp3 = prevFP3;
+        }
+
         // Se Firebase tem _submitted (e não foi desbloqueado pelo admin), garantir que está no state
         if (state.user && s.palpites?.[state.user]?._submitted && !s.palpites?.[state.user]?._adminUnsubmitted) {
           if (!state.palpites[state.user]) state.palpites[state.user] = {};
           state.palpites[state.user]._submitted = true;
-          // Salvar no localStorage como cache
           try {
             const bk = JSON.parse(localStorage.getItem('bolao_backup') || '{}');
             if (bk.palpites && bk.palpites[state.user]) {
@@ -3846,10 +3859,18 @@ function loadDraft() {
       }
     });
 
-    // Metadados: _fp, _fp3, _qa do localStorage se Firebase não tem
+    // Metadados: _fp, _fp3, _qa do draft local se Firebase não tem
     ['_fp', '_fp3', '_qa'].forEach(function(k) {
       if (local[k] && !fb[k]) { fb[k] = local[k]; changed = true; }
     });
+    // Também verificar bolao_backup para _qa (caso saveGlobal tenha falhado silenciosamente)
+    if (!fb._qa && backupStr) {
+      try {
+        const bkParsed = JSON.parse(backupStr);
+        const bkQA = bkParsed.palpites?.[state.user]?._qa;
+        if (bkQA) { fb._qa = bkQA; changed = true; }
+      } catch(e2) {}
+    }
     // Nunca remover _submitted do Firebase via localStorage
     // (só o admin pode modificar _submitted)
 
