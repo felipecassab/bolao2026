@@ -3923,6 +3923,22 @@ async function savePalpites() {
     }
   });
 
+  // Incluir _groupDomCache (palpites digitados mas ainda não salvos no Firebase)
+  const domCache = state._groupDomCache || {};
+  Object.keys(domCache).forEach(k => {
+    const dc = domCache[k];
+    if (dc && dc.h !== undefined && dc.a !== undefined) {
+      if (!temp[k]) temp[k] = Object.assign({}, dc);
+      // Preservar pen já salvo
+      if (!temp[k].pen) {
+        const pen = (existing[k] && existing[k].pen) ||
+                    (localDraft[k] && localDraft[k].pen) ||
+                    (backupDraft[k] && backupDraft[k].pen) || null;
+        if (pen && temp[k].h === temp[k].a) temp[k].pen = pen;
+      }
+    }
+  });
+
   // Override com DOM (apenas se input existe e tem valor)
   MATCHES.forEach(m => {
     const ih = document.getElementById('p_'+m.id+'_h');
@@ -3938,8 +3954,11 @@ async function savePalpites() {
     }
   });
 
-  // Verificar jogos faltando
-  const missingM = MATCHES.filter(m => !temp[m.id]);
+  // Verificar jogos faltando (chave ausente OU valores indefinidos)
+  const missingM = MATCHES.filter(m => {
+    const p = temp[m.id];
+    return !p || p.h === undefined || p.a === undefined;
+  });
   const savedQA = existing._qa || {};
   const missingE = EXTRA_QS.filter(q => !savedQA[q.id]?.answer?.trim());
   if (missingM.length || missingE.length) {
