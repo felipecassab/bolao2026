@@ -3215,7 +3215,7 @@ function renderMatches() {
   const userP = state.user ? (state.palpites[state.user] || {}) : {};
   // Palpites completos (salvo + cache DOM) para cálculos de terceiros
   const userPFull = Object.assign({}, userP, state._groupDomCache || {}, domP);
-  buildResolvedTeams(userP);
+  buildResolvedTeams(userPFull);
   const groups = {};
   MATCHES.forEach(m=>{ if(!groups[m.group]) groups[m.group]=[]; groups[m.group].push(m); });
   // ── Score summary cards ─────────────────────────────────────────
@@ -3315,7 +3315,7 @@ function renderMatches() {
     });
     // Add standings for group phase
     if (g.length === 1) {
-      html += renderGroupStandings(g, userP);
+      html += renderGroupStandings(g, userPFull);
     }
     html += '</div></div>';
     // Inserir bloco FP3 após o último grupo (Grupo L)
