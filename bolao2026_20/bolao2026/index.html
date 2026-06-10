@@ -2283,11 +2283,27 @@ async function loadState() {
       localStorage.setItem('bolao_backup', JSON.stringify(s));
     }
   } catch(e) {
-    console.warn('Firebase error, using backup:', e);
+    console.warn('Firebase error, retrying once...', e);
+    // Tentar uma segunda vez antes de usar backup local
     try {
-      const bk = localStorage.getItem('bolao_backup');
-      if (bk) { const s = JSON.parse(bk); state.users=s.users||{}; state.palpites=s.palpites||{}; state.results=s.results||{}; state.snapshots=s.snapshots||[]; }
-    } catch(e2) {}
+      const s2 = await fbGet();
+      if (s2 && Object.keys(s2.users || {}).length > 0) {
+        state.users = s2.users || {};
+        state.palpites = s2.palpites || {};
+        state.results = s2.results || {};
+        state.snapshots = s2.snapshots || [];
+        localStorage.setItem('bolao_backup', JSON.stringify(s2));
+        console.log('Firebase retry succeeded');
+      } else {
+        throw new Error('Firebase retry returned empty');
+      }
+    } catch(e2) {
+      console.warn('Firebase retry failed, using backup:', e2);
+      try {
+        const bk = localStorage.getItem('bolao_backup');
+        if (bk) { const s = JSON.parse(bk); state.users=s.users||{}; state.palpites=s.palpites||{}; state.results=s.results||{}; state.snapshots=s.snapshots||[]; }
+      } catch(e3) {}
+    }
   }
   showLoading(false);
   state._loaded = true;
@@ -3936,11 +3952,9 @@ function loadDraft() {
     // Nunca remover _submitted do Firebase via localStorage
     // (só o admin pode modificar _submitted)
 
-    if (changed) {
-      // Antes de salvar, garantir que _submitted não foi perdido
-      // (pode ter sido definido pelo admin enquanto o usuário estava offline)
-      saveGlobal().catch(function(){});
-    }
+    // NÃO chamar saveGlobal aqui — perigoso demais
+    // loadDraft só lê e mescla dados no state local; o save acontece quando o usuário
+    // explicitamente salva rascunho ou envia palpites
     // Limpar localStorage após merge
     localStorage.removeItem('bolao_draft_' + state.user);
     localStorage.removeItem('bolao_draft_time_' + state.user);
