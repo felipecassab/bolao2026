@@ -4071,38 +4071,60 @@ async function savePalpites() {
   if (meta._fp3) state.palpites[state.user]._fp3 = meta._fp3;
 
   document.getElementById('missing-alert').style.display='none';
+
+  // Contar palpites que estamos enviando (referência para verificação)
+  const expectedJogos = Object.keys(temp).filter(k => !k.startsWith('_')).length;
+  const expectedQA    = Object.keys(meta._qa || {}).length;
+
+  // Função auxiliar: verifica se Firebase recebeu pelo menos 90% dos dados
+  async function verifyFirebase() {
+    const fb = await fbGet();
+    if (!fb || !fb.palpites?.[state.user]) return { ok: false, reason: 'Participante não encontrado no Firebase' };
+    const fbP = fb.palpites[state.user];
+    if (!fbP._submitted) return { ok: false, reason: '_submitted não confirmado' };
+    const fbJogos = Object.keys(fbP).filter(k => !k.startsWith('_')).length;
+    const fbQA    = Object.keys(fbP._qa || {}).length;
+    const jogosOk = expectedJogos === 0 || fbJogos >= expectedJogos * 0.9;
+    const qaOk    = expectedQA === 0    || fbQA    >= expectedQA    * 0.9;
+    if (!jogosOk) return { ok: false, reason: `Jogos: enviados=${expectedJogos}, Firebase=${fbJogos}` };
+    if (!qaOk)    return { ok: false, reason: `Extras: enviados=${expectedQA}, Firebase=${fbQA}` };
+    return { ok: true };
+  }
+
   try {
-    showToast('Sincronizando...');
-    // Marcar como enviado ANTES do save — tudo num único saveGlobal
+    showToast('⏳ Enviando palpites...');
+    // Marcar como enviado junto com os palpites — único saveGlobal
     state.palpites[state.user]._submitted = true;
-    // Limpar flag de desbloqueio pelo admin (participante está enviando novamente)
     delete state.palpites[state.user]._adminUnsubmitted;
     await saveGlobal();
 
-    // Verificar confirmação no Firebase — garantir que _submitted chegou lá
-    const verify = await fbGet();
-    if (!verify || !verify.palpites?.[state.user]?._submitted) {
-      // Firebase não confirmou — tentar mais uma vez
-      showToast('Verificando envio...');
+    // Passo 2: verificar se Firebase confirmou
+    showToast('🔍 Verificando confirmação...');
+    let check = await verifyFirebase();
+
+    if (!check.ok) {
+      // Passo 3: segunda tentativa
+      showToast('⚠️ Tentando novamente...');
       await saveGlobal();
-      const verify2 = await fbGet();
-      if (!verify2 || !verify2.palpites?.[state.user]?._submitted) {
-        throw new Error('Firebase não confirmou o envio após 2 tentativas');
-      }
+      check = await verifyFirebase();
     }
 
-    // Limpar localStorage após envio confirmado
+    if (!check.ok) {
+      // Passo 4: falhou — reverter e avisar
+      throw new Error(check.reason);
+    }
+
+    // Passo 5: confirmado ✅
     localStorage.removeItem('bolao_draft_' + state.user);
     localStorage.removeItem('bolao_draft_time_' + state.user);
-    const count = Object.keys(temp).filter(k => !k.startsWith('_')).length;
-    showToast('✅ ' + count + ' palpites enviados à Comissão!');
+    showToast('✅ ' + expectedJogos + ' palpites enviados e confirmados!');
     renderMatches();
     renderRanking();
   } catch(e) {
-    // Reverter _submitted local em caso de falha confirmada no Firebase
+    // Reverter _submitted local — participante pode tentar novamente
     if (state.palpites[state.user]) delete state.palpites[state.user]._submitted;
     console.error('Erro no envio:', e);
-    showToast('❌ Erro ao enviar. Verifique sua conexão e tente novamente.', true);
+    showToast('⚠️ Erro: palpites não confirmados pelo servidor. Verifique sua conexão e tente novamente.', true);
   }
 }
 
