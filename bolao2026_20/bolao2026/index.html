@@ -2435,32 +2435,37 @@ function startPolling() {
       // to avoid overwriting inputs the user is currently filling
       const onPalpites = document.getElementById('page-palpites')?.classList.contains('active');
       if (!onPalpites) {
-        // Preservar metadados locais que podem ser mais recentes que o Firebase
-        const prevQA   = state.user && state.palpites[state.user]?._qa;
-        const prevFP   = state.user && state.palpites[state.user]?._fp;
-        const prevFP3  = state.user && state.palpites[state.user]?._fp3;
+        // Preservar dados do usuário logado que podem estar mais completos no state local
+        const prevUserData = state.user ? Object.assign({}, state.palpites[state.user] || {}) : null;
 
         state.palpites = s.palpites || {};
 
-        // Restaurar metadados se Firebase não tem (save pode ter falhado silenciosamente)
-        if (state.user) {
+        // Restaurar dados do usuário logado se Firebase tem menos jogos (race condition)
+        if (state.user && prevUserData) {
           if (!state.palpites[state.user]) state.palpites[state.user] = {};
-          if (prevQA  && !state.palpites[state.user]._qa)  state.palpites[state.user]._qa  = prevQA;
-          if (prevFP  && !state.palpites[state.user]._fp)  state.palpites[state.user]._fp  = prevFP;
-          if (prevFP3 && !state.palpites[state.user]._fp3) state.palpites[state.user]._fp3 = prevFP3;
-        }
+          const fbUserData = state.palpites[state.user];
 
-        // Se Firebase tem _submitted (e não foi desbloqueado pelo admin), garantir que está no state
-        if (state.user && s.palpites?.[state.user]?._submitted && !s.palpites?.[state.user]?._adminUnsubmitted) {
-          if (!state.palpites[state.user]) state.palpites[state.user] = {};
-          state.palpites[state.user]._submitted = true;
-          try {
-            const bk = JSON.parse(localStorage.getItem('bolao_backup') || '{}');
-            if (bk.palpites && bk.palpites[state.user]) {
-              bk.palpites[state.user]._submitted = true;
-              localStorage.setItem('bolao_backup', JSON.stringify(bk));
-            }
-          } catch(e) {}
+          // Contar jogos em cada fonte
+          const prevJogos = Object.keys(prevUserData).filter(k => !k.startsWith('_')).length;
+          const fbJogos   = Object.keys(fbUserData).filter(k => !k.startsWith('_')).length;
+
+          if (prevJogos > fbJogos) {
+            // State local tem mais jogos — fazer merge (local preenche o que Firebase não tem)
+            Object.keys(prevUserData).forEach(k => {
+              if (k.startsWith('_')) return;
+              if (!fbUserData[k]) fbUserData[k] = prevUserData[k];
+            });
+          }
+
+          // Sempre preservar metadados se Firebase não tem
+          if (prevUserData._qa  && !fbUserData._qa)  fbUserData._qa  = prevUserData._qa;
+          if (prevUserData._fp  && !fbUserData._fp)  fbUserData._fp  = prevUserData._fp;
+          if (prevUserData._fp3 && !fbUserData._fp3) fbUserData._fp3 = prevUserData._fp3;
+
+          // Preservar _submitted se Firebase tem (nunca perder)
+          if (s.palpites?.[state.user]?._submitted && !s.palpites?.[state.user]?._adminUnsubmitted) {
+            fbUserData._submitted = true;
+          }
         }
       }
       renderRanking();
