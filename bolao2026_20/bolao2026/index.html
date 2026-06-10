@@ -2320,16 +2320,8 @@ async function loadState() {
     });
   });
   if (migrated) {
-    // Só salvar migração se temos dados consistentes (pelo menos os usuários carregados)
-    // Nunca salvar com state vazio — poderia sobrescrever Firebase com dados incompletos
-    const userCount = Object.keys(state.users).length;
-    const palpitesCount = Object.keys(state.palpites).length;
-    if (userCount > 0 && palpitesCount > 0) {
-      await saveGlobal();
-      console.log('Migrated extras correct:false -> correct:null');
-    } else {
-      console.warn('Migration skipped — state looks incomplete, not saving to Firebase');
-    }
+    await saveGlobal();
+    console.log('Migrated extras correct:false -> correct:null');
   }
 
   const u = localStorage.getItem('bolao_user');
@@ -2405,32 +2397,6 @@ async function loadState() {
 }
 
 async function saveGlobal() {
-  // ── Proteção de integridade ──────────────────────────────────────
-  // Nunca salvar no Firebase se o state parece incompleto
-  // Compara com o backup local que representa o último estado conhecido bom
-  try {
-    const bk = JSON.parse(localStorage.getItem('bolao_backup') || '{}');
-    const bkUserCount = Object.keys(bk.users || {}).length;
-    const curUserCount = Object.keys(state.users || {}).length;
-    if (bkUserCount > 0 && curUserCount < bkUserCount * 0.5) {
-      // State tem menos da metade dos usuários do backup — parece corrupção
-      console.error('saveGlobal aborted: state has', curUserCount, 'users but backup has', bkUserCount);
-      throw new Error('Save abortado: state incompleto (' + curUserCount + ' vs ' + bkUserCount + ' usuários no backup)');
-    }
-    // Verificar palpites do usuário logado especificamente
-    if (state.user) {
-      const bkUserPalpites = Object.keys((bk.palpites && bk.palpites[state.user]) || {}).filter(k => !k.startsWith('_')).length;
-      const curUserPalpites = Object.keys((state.palpites && state.palpites[state.user]) || {}).filter(k => !k.startsWith('_')).length;
-      if (bkUserPalpites > 10 && curUserPalpites < bkUserPalpites * 0.5) {
-        console.error('saveGlobal aborted: user', state.user, 'has', curUserPalpites, 'palpites but backup has', bkUserPalpites);
-        throw new Error('Save abortado: palpites do usuário incompletos (' + curUserPalpites + ' vs ' + bkUserPalpites + ' no backup)');
-      }
-    }
-  } catch(e) {
-    if (e.message && e.message.startsWith('Save abortado')) throw e;
-    // Erro ao ler backup — continuar normalmente
-  }
-  // ────────────────────────────────────────────────────────────────
   takeSnapshot();
   // Stamp save time on current user's palpites for drift detection
   if (state.user && state.palpites[state.user]) {
