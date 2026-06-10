@@ -2416,6 +2416,7 @@ async function saveGlobal() {
   } catch(e) {
     console.warn('Save error:', e);
     showToast('Erro ao salvar. Verifique conexão.', true);
+    throw e; // Relançar para que o chamador (ex: savePalpites) possa reverter
   }
 }
 
@@ -4038,7 +4039,20 @@ async function savePalpites() {
     // Limpar flag de desbloqueio pelo admin (participante está enviando novamente)
     delete state.palpites[state.user]._adminUnsubmitted;
     await saveGlobal();
-    // Limpar localStorage após envio bem sucedido
+
+    // Verificar confirmação no Firebase — garantir que _submitted chegou lá
+    const verify = await fbGet();
+    if (!verify || !verify.palpites?.[state.user]?._submitted) {
+      // Firebase não confirmou — tentar mais uma vez
+      showToast('Verificando envio...');
+      await saveGlobal();
+      const verify2 = await fbGet();
+      if (!verify2 || !verify2.palpites?.[state.user]?._submitted) {
+        throw new Error('Firebase não confirmou o envio após 2 tentativas');
+      }
+    }
+
+    // Limpar localStorage após envio confirmado
     localStorage.removeItem('bolao_draft_' + state.user);
     localStorage.removeItem('bolao_draft_time_' + state.user);
     const count = Object.keys(temp).filter(k => !k.startsWith('_')).length;
@@ -4046,9 +4060,10 @@ async function savePalpites() {
     renderMatches();
     renderRanking();
   } catch(e) {
-    // Reverter _submitted local em caso de falha no save
+    // Reverter _submitted local em caso de falha confirmada no Firebase
     if (state.palpites[state.user]) delete state.palpites[state.user]._submitted;
-    showToast('Erro ao enviar. Verifique sua conexão.', true);
+    console.error('Erro no envio:', e);
+    showToast('❌ Erro ao enviar. Verifique sua conexão e tente novamente.', true);
   }
 }
 
