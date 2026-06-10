@@ -3541,14 +3541,21 @@ function renderMatches() {
     if (ia) { ia.addEventListener('blur', onKoBlur); ia.addEventListener('input', onKoLiveInput); }
   });
 
-  // Progress counter
-  const filled = MATCHES.filter(m=>{
-    const h=document.getElementById('p_'+m.id+'_h')?.value;
-    const a=document.getElementById('p_'+m.id+'_a')?.value;
-    if (h===''||a==='') return false;
+  // Progress counter — lê DOM com fallback em state+cache para jogos fora da viewport
+  const _palState = (state.user && state.palpites[state.user]) || {};
+  const _palCache = state._groupDomCache || {};
+  const filled = MATCHES.filter(m => {
+    let h = document.getElementById('p_'+m.id+'_h')?.value;
+    let a = document.getElementById('p_'+m.id+'_a')?.value;
+    // Fallback: cache DOM ou state Firebase se input não existe ou está vazio
+    if (h === '' || h === undefined || a === '' || a === undefined) {
+      const fb = _palCache[m.id] || _palState[m.id];
+      if (fb && fb.h !== undefined && fb.a !== undefined) { h = String(fb.h); a = String(fb.a); }
+    }
+    if (h === '' || h === undefined || a === '' || a === undefined) return false;
     // Jogo knockout empatado exige pênaltis definidos para ser considerado completo
-    if (m.phase==='knockout' && +h===+a) {
-      const savedP = state.user && state.palpites[state.user] && state.palpites[state.user][m.id];
+    if (m.phase === 'knockout' && +h === +a) {
+      const savedP = _palCache[m.id] || _palState[m.id];
       if (!savedP || !savedP.pen) return false;
     }
     return true;
@@ -3947,7 +3954,18 @@ async function savePalpites() {
   const existing = state.palpites[state.user] || {};
   const temp = {};
 
-  // Base: palpites salvos no state (preserva pen)
+  // Base 1: palpites do localStorage draft (pode estar mais atualizado que Firebase)
+  [localDraft, backupDraft].forEach(src => {
+    Object.keys(src).forEach(k => {
+      if (k.startsWith('_')) return;
+      if (src[k] && src[k].h !== undefined && src[k].a !== undefined) {
+        if (!temp[k]) temp[k] = Object.assign({}, src[k]);
+        if (!temp[k].pen && src[k].pen && temp[k].h === temp[k].a) temp[k].pen = src[k].pen;
+      }
+    });
+  });
+
+  // Base 2: palpites salvos no state/Firebase (sobrescreve com prioridade)
   Object.keys(existing).forEach(k => {
     if (k.startsWith('_')) return;
     if (existing[k] && existing[k].h !== undefined && existing[k].a !== undefined) {
@@ -3996,8 +4014,9 @@ async function savePalpites() {
     const p = temp[m.id];
     return !p || p.h === undefined || p.a === undefined;
   });
-  const savedQA = existing._qa || {};
-  const missingE = EXTRA_QS.filter(q => !savedQA[q.id]?.answer?.trim());
+  // Sempre ler _qa do state atual (pode ter sido atualizado por saveExtras após existing foi capturado)
+  const currentQA = (state.palpites[state.user] && state.palpites[state.user]._qa) || existing._qa || {};
+  const missingE = EXTRA_QS.filter(q => !currentQA[q.id]?.answer?.trim());
   if (missingM.length || missingE.length) {
     const alertEl = document.getElementById('missing-alert');
     let html = '<span style="font-size:20px;flex-shrink:0;">⚠️</span><div style="flex:1;">';
@@ -4021,14 +4040,15 @@ async function savePalpites() {
 
   // Aplicar temp no state preservando metadados
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
+  // Usar state atual para _qa — pode ter sido atualizado por saveExtras após existing foi capturado
   const meta = {
-    _qa: existing._qa,
-    _fp: existing._fp,
-    _fp3: existing._fp3,
+    _qa:  (state.palpites[state.user]._qa)  || existing._qa,
+    _fp:  (state.palpites[state.user]._fp)  || existing._fp,
+    _fp3: (state.palpites[state.user]._fp3) || existing._fp3,
   };
   Object.assign(state.palpites[state.user], temp);
-  if (meta._qa) state.palpites[state.user]._qa = meta._qa;
-  if (meta._fp) state.palpites[state.user]._fp = meta._fp;
+  if (meta._qa)  state.palpites[state.user]._qa  = meta._qa;
+  if (meta._fp)  state.palpites[state.user]._fp  = meta._fp;
   if (meta._fp3) state.palpites[state.user]._fp3 = meta._fp3;
 
   document.getElementById('missing-alert').style.display='none';
@@ -5296,9 +5316,12 @@ async function renderAdminParticipants() {
   const rejected = users.filter(([,u]) => u.status === 'rejected' && !u._deleted).sort(sortAlpha);
   const deleted  = users.filter(([,u]) => u._deleted);
 
-  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
     <span style="font-size:11px;color:var(--gray);">${users.length} cadastro${users.length!==1?'s':''} no total</span>
-    <button onclick="renderAdminParticipants()" style="padding:6px 12px;background:rgba(126,184,245,0.1);border:1px solid rgba(126,184,245,0.2);border-radius:8px;color:#7eb8f5;font-size:12px;cursor:pointer;">🔄 Atualizar</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button onclick="adminRecoverPalpites()" style="padding:6px 12px;background:rgba(245,166,35,0.1);border:1px solid rgba(245,166,35,0.3);border-radius:8px;color:#f5a623;font-size:12px;cursor:pointer;">🔧 Recuperar palpites</button>
+      <button onclick="renderAdminParticipants()" style="padding:6px 12px;background:rgba(126,184,245,0.1);border:1px solid rgba(126,184,245,0.2);border-radius:8px;color:#7eb8f5;font-size:12px;cursor:pointer;">🔄 Atualizar</button>
+    </div>
   </div>`;
 
   // Pending approvals first
@@ -5423,6 +5446,71 @@ async function adminMarkSubmitted(uid) {
   } catch(e) {}
   renderAdminParticipants();
   showToast('Palpites de ' + nome + ' marcados como enviados! ✓');
+}
+
+async function adminRecoverPalpites() {
+  // Lê bolao_backup do localStorage deste dispositivo e mostra o que pode ser recuperado
+  let bk = null;
+  try { bk = JSON.parse(localStorage.getItem('bolao_backup') || '{}'); } catch(e) {}
+  if (!bk || !bk.palpites) { alert('Nenhum backup encontrado no localStorage deste dispositivo.'); return; }
+
+  // Identificar participantes com dados no backup mas sem palpites no Firebase (ou com menos jogos)
+  const fresh = await fbGet();
+  const fbPalpites = (fresh && fresh.palpites) || state.palpites || {};
+  const candidates = [];
+
+  Object.entries(bk.palpites).forEach(([wpp, bkP]) => {
+    const fbP = fbPalpites[wpp] || {};
+    const bkJogos = Object.keys(bkP).filter(k => !k.startsWith('_')).length;
+    const fbJogos = Object.keys(fbP).filter(k => !k.startsWith('_')).length;
+    const bkQA = bkP._qa ? Object.keys(bkP._qa).length : 0;
+    const fbQA = fbP._qa ? Object.keys(fbP._qa).length : 0;
+    const userName = state.users[wpp]?.apelido || state.users[wpp]?.nome || wpp;
+    if (bkJogos > fbJogos || bkQA > fbQA) {
+      candidates.push({ wpp, userName, bkJogos, fbJogos, bkQA, fbQA, bkP });
+    }
+  });
+
+  if (!candidates.length) {
+    alert('✅ Nenhuma divergência encontrada. Firebase está atualizado com o backup local.');
+    return;
+  }
+
+  const msg = candidates.map(c => {
+    const parts = [];
+    if (c.bkJogos > c.fbJogos) parts.push(`jogos: backup=${c.bkJogos} / Firebase=${c.fbJogos}`);
+    if (c.bkQA > c.fbQA) parts.push(`extras: backup=${c.bkQA} / Firebase=${c.fbQA}`);
+    return `• ${c.userName}: ${parts.join(' | ')}`;
+  }).join('\n');
+
+  if (!confirm(`🔧 Encontrei palpites no backup que não estão no Firebase:\n\n${msg}\n\nDeseja restaurar TODOS para o Firebase agora?`)) return;
+
+  // Restaurar cada candidato
+  for (const c of candidates) {
+    if (!state.palpites[c.wpp]) state.palpites[c.wpp] = {};
+    // Merge jogos: backup preenche os faltantes (Firebase tem prioridade)
+    Object.keys(c.bkP).forEach(k => {
+      if (k === '_qa') return; // _qa tratado separado abaixo
+      if (!state.palpites[c.wpp][k]) state.palpites[c.wpp][k] = c.bkP[k];
+    });
+    // Merge _qa: restaurar perguntas extras faltantes
+    if (c.bkP._qa) {
+      if (!state.palpites[c.wpp]._qa) state.palpites[c.wpp]._qa = {};
+      Object.keys(c.bkP._qa).forEach(qid => {
+        if (!state.palpites[c.wpp]._qa[qid]?.answer?.trim()) {
+          state.palpites[c.wpp]._qa[qid] = c.bkP._qa[qid];
+        }
+      });
+    }
+  }
+
+  try {
+    await saveGlobal();
+    showToast(`✅ ${candidates.length} participante(s) recuperado(s) com sucesso!`);
+    renderAdminParticipants();
+  } catch(e) {
+    showToast('❌ Erro ao salvar no Firebase. Tente novamente.', true);
+  }
 }
 
 async function adminUnsubmit(uid) {
