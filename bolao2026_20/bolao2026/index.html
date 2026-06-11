@@ -2587,7 +2587,13 @@ function isPastDeadline() { return new Date() > DEADLINE; }
 function isSubmitted() {
   return !!(state.user && state.palpites[state.user]?._submitted);
 }
-function isLocked() { return isPastDeadline() || isSubmitted(); }
+// adminEditMode: quando o admin está editando os palpites de um participante,
+// o bloqueio por prazo/envio é suspenso para permitir a edição
+let adminEditMode = false;
+function isLocked() {
+  if (adminEditMode && adminAuthed) return false; // admin pode editar mesmo após prazo
+  return isPastDeadline() || isSubmitted();
+}
 function hashPwd(p) { let h=0; for(let i=0;i<p.length;i++) h=(Math.imul(31,h)+p.charCodeAt(i))|0; return h.toString(36); }
 function phoneMask(inp) {
   let v=inp.value.replace(/\D/g,'');
@@ -5455,6 +5461,7 @@ async function renderAdminParticipants() {
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button onclick="adminTogglePaid('${uid}')" title="${u.paid ? 'Marcar como pendente' : 'Marcar como pago'}" style="padding:5px 10px;border-radius:8px;font-size:13px;cursor:pointer;border:1px solid ${u.paid ? 'rgba(0,200,83,0.4)' : 'rgba(255,255,255,0.15)'};background:${u.paid ? 'rgba(0,200,83,0.12)' : 'rgba(255,255,255,0.04)'};color:${u.paid ? 'var(--green)' : 'var(--gray)'}; font-weight:700;">${u.paid ? '💰 Pago' : '⏳ Pendente'}</button>
           <button onclick="adminViewPalpites('${uid}')" style="padding:5px 10px;background:rgba(126,184,245,0.12);color:#7eb8f5;border:1px solid rgba(126,184,245,0.3);border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;">👁 Ver</button>
+          <button onclick="adminEditPalpites('${uid}')" style="padding:5px 10px;background:rgba(167,139,250,0.12);color:#a78bfa;border:1px solid rgba(167,139,250,0.3);border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;">✏️ Editar</button>
           ${submitted ? `<button onclick="adminUnsubmit('${uid}')" style="padding:5px 10px;background:rgba(245,197,24,0.12);color:var(--gold);border:1px solid rgba(245,197,24,0.3);border-radius:8px;font-size:12px;cursor:pointer;">🔓 Desbloquear</button>` : `<button onclick="adminMarkSubmitted('${uid}')" style="padding:5px 10px;background:rgba(0,200,83,0.1);color:var(--green);border:1px solid rgba(0,200,83,0.3);border-radius:8px;font-size:12px;cursor:pointer;">✅ Marcar enviado</button>`}
           <button onclick="adminResetPwd('${uid}')" style="padding:5px 10px;background:transparent;border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--gray);font-size:12px;cursor:pointer;">🔑 Senha</button>
           <button onclick="adminDeleteUser('${uid}','${uApelido(u,uid)}')" style="padding:5px 10px;background:transparent;border:1px solid rgba(244,67,54,0.3);border-radius:8px;color:var(--red);font-size:12px;cursor:pointer;">🗑️</button>
@@ -5874,6 +5881,75 @@ document.getElementById('viewer-modal').addEventListener('click', function(e) {
 
 function closeAdminViewer() {
   document.getElementById('admin-viewer-modal').style.display = 'none';
+}
+
+async function adminEditPalpites(wpp) {
+  if (!adminAuthed) { showToast('Acesso negado', true); return; }
+  const u = state.users[wpp];
+  if (!u) return;
+  const nome = u.apelido || u.nome || u.name || wpp;
+
+  if (!confirm('✏️ Editar palpites de ' + nome + '?\n\nVocê entrará na conta deste participante e poderá editar os palpites mesmo após o prazo. Lembre-se de salvar/enviar ao terminar.')) return;
+
+  // Buscar dados frescos antes de entrar
+  try {
+    const fresh = await fbGet();
+    if (fresh) { state.users = fresh.users || state.users; state.palpites = fresh.palpites || state.palpites; }
+  } catch(e) {}
+
+  // Guardar quem era o usuário antes (para restaurar ao sair) e ativar modo de edição
+  state._adminPrevUser = state.user;
+  adminEditMode = true;
+  state.user = wpp;
+  localStorage.setItem('bolao_user', wpp);
+
+  // Limpar cache de rascunho para não misturar com palpites de outro usuário
+  state._groupDomCache = {};
+
+  updateHeader();
+  showPage('palpites');
+  renderMatches();
+  updateDeadlinePill();
+
+  // Banner visual de modo de edição
+  showAdminEditBanner(nome);
+  showToast('✏️ Editando palpites de ' + nome);
+}
+
+function showAdminEditBanner(nome) {
+  let banner = document.getElementById('admin-edit-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'admin-edit-banner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#7c3aed,#a78bfa);color:#fff;padding:8px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.4);';
+    document.body.appendChild(banner);
+  }
+  banner.innerHTML = `<span>✏️ MODO ADMIN — editando palpites de <b>${nome}</b></span>
+    <button onclick="exitAdminEditMode()" style="padding:5px 14px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);border-radius:8px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">✓ Sair do modo edição</button>`;
+  banner.style.display = 'flex';
+  document.body.style.paddingTop = '40px';
+}
+
+function exitAdminEditMode() {
+  adminEditMode = false;
+  // Restaurar usuário admin anterior
+  const prev = state._adminPrevUser || null;
+  state.user = prev;
+  if (prev) localStorage.setItem('bolao_user', prev);
+  else localStorage.removeItem('bolao_user');
+  delete state._adminPrevUser;
+  state._groupDomCache = {};
+
+  // Esconder banner
+  const banner = document.getElementById('admin-edit-banner');
+  if (banner) banner.style.display = 'none';
+  document.body.style.paddingTop = '';
+
+  updateHeader();
+  updateDeadlinePill();
+  showPage('admin');
+  renderAdminParticipants();
+  showToast('✓ Modo de edição encerrado');
 }
 
 async function adminViewPalpites(wpp) {
