@@ -2425,6 +2425,61 @@ async function saveGlobal() {
       }
     } catch(e) {}
   }
+  // ── MERGE-BEFORE-WRITE: evitar last-write-wins destrutivo ────────
+  // Antes de gravar, buscar a versão mais recente do Firebase e mesclar.
+  // Isso impede que o save de um participante sobrescreva dados de outro
+  // participante que enviou depois deste navegador ter carregado o state.
+  let fresh = null;
+  try { fresh = await fbGet(); } catch(e) { fresh = null; }
+
+  if (fresh) {
+    // PALPITES: mesclar por participante
+    const mergedPalpites = Object.assign({}, fresh.palpites || {});
+    Object.keys(state.palpites).forEach(wpp => {
+      const localP = state.palpites[wpp] || {};
+      const fbP = mergedPalpites[wpp] || {};
+
+      // Para o usuário logado: a versão local é a autoridade (ele acabou de editar)
+      if (wpp === state.user) {
+        mergedPalpites[wpp] = localP;
+        return;
+      }
+
+      // Se este navegador é ADMIN: a versão local é autoridade para qualquer participante
+      // (admin pode estar desbloqueando, recuperando ou ajustando palpites)
+      if (adminAuthed) {
+        mergedPalpites[wpp] = localP;
+        return;
+      }
+
+      // Para OUTROS participantes (navegador comum): Firebase é a autoridade.
+      // Só usar a versão local se o Firebase não tiver o participante.
+      if (!mergedPalpites[wpp]) {
+        mergedPalpites[wpp] = localP;
+        return;
+      }
+
+      // Firebase tem o participante — comparar qual versão é mais recente via _savedAt
+      const localTime = localP._savedAt ? new Date(localP._savedAt).getTime() : 0;
+      const fbTime    = fbP._savedAt    ? new Date(fbP._savedAt).getTime()    : 0;
+      // Manter a versão mais recente (Firebase ganha em empate)
+      mergedPalpites[wpp] = (localTime > fbTime) ? localP : fbP;
+    });
+    state.palpites = mergedPalpites;
+
+    // USERS: mesclar — admin pode ter mudado status; preservar mudanças locais do admin
+    // Se este navegador é admin, a versão local de users é autoridade; senão, Firebase ganha
+    if (!adminAuthed) {
+      state.users = Object.assign({}, state.users, fresh.users || {});
+    }
+
+    // RESULTS: admin é autoridade; se não é admin, Firebase ganha
+    if (!adminAuthed) {
+      state.results = fresh.results || state.results;
+    }
+  }
+  // ────────────────────────────────────────────────────────────────
+
   const data = {users: state.users, palpites: state.palpites, results: state.results, snapshots: state.snapshots};
   try {
     await fbSet(data);
