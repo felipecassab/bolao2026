@@ -324,7 +324,7 @@ body{display:flex;flex-direction:column}
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
           <span style="font-size:12px;background:rgba(245,197,24,0.15);color:var(--gold);padding:3px 10px;border-radius:50px;font-weight:600;">Placar exato: 5 pts</span>
           <span style="font-size:12px;background:rgba(245,197,24,0.15);color:var(--gold);padding:3px 10px;border-radius:50px;font-weight:600;">Vencedor: 3 pts</span>
-          <span id="deadline-pill" style="font-size:12px;background:rgba(0,200,83,0.12);color:var(--green);padding:3px 10px;border-radius:50px;font-weight:600;">⏳ Prazo: 11/06 às 02h59</span>
+          <span id="deadline-pill" style="font-size:12px;background:rgba(0,200,83,0.12);color:var(--green);padding:3px 10px;border-radius:50px;font-weight:600;">⏳ Prazo: 11/06 às 12h00</span>
         </div>
         <p style="font-size:11px;color:var(--gray);line-height:1.5;">Bônus: 2pts(32-avos) · 4pts(oitavas) · 6pts(quartas) · 8pts(semi) · 12pts(final) · 20pts(campeã) · 3pts por pergunta extra</p>
       </div>
@@ -456,7 +456,7 @@ body{display:flex;flex-direction:column}
 
         <div style="border-top:1px solid rgba(255,255,255,0.08);margin:14px 0;"></div>
 
-        <p style="font-size:13px;color:var(--light);margin-bottom:10px;line-height:1.6;"><b>7.</b> Os palpites deverão ser enviados até as <b style="color:var(--gold);">02h59 do dia 11.06.2026</b> através do APP disponibilizado pela Comissão Organizadora.</p>
+        <p style="font-size:13px;color:var(--light);margin-bottom:10px;line-height:1.6;"><b>7.</b> Os palpites deverão ser enviados até as <b style="color:var(--gold);">12h00 do dia 11.06.2026</b> através do APP disponibilizado pela Comissão Organizadora.</p>
 
         <p style="font-size:13px;color:var(--light);margin-bottom:10px;line-height:1.6;"><b>8.</b> Serão desclassificados os participantes que praticarem atos ilegais ou que atentem contra os objetivos e regras do Bolão. O participante perderá o valor pago a título de inscrição.</p>
 
@@ -802,7 +802,7 @@ const COLORS_T = [
   '#84ffff','#ffff8d','#ea80fc','#ffbe9f','#b9f6ca',
   '#b3e5fc','#f8bbff','#f4ff81','#ffd180','#e0f7fa'
 ];
-const DEADLINE = new Date('2026-06-11T05:59:00Z');
+const DEADLINE = new Date('2026-06-11T15:00:00Z');
 const ADMIN_PWD = 'aaa2026';
 const PTS_EXACT = 5, PTS_WINNER = 3;
 const TAXA = 300;
@@ -3349,7 +3349,7 @@ function renderMatches() {
 
   let html = summaryHtml + (locked ? (isSubmitted()
     ? `<div style="background:rgba(0,200,83,0.08);border:1px solid rgba(0,200,83,0.3);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">✅</span><div><p style="font-size:13px;font-weight:600;color:var(--green);">Palpites enviados à Comissão</p><p style="font-size:12px;color:var(--gray);margin-top:2px;">Seus palpites foram enviados. Apenas visualização disponível.</p></div></div>`
-    : `<div style="background:rgba(244,67,54,0.1);border:1px solid rgba(244,67,54,0.3);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">🔒</span><div><p style="font-size:13px;font-weight:600;color:var(--red);">Palpites encerrados</p><p style="font-size:12px;color:var(--gray);margin-top:2px;">Prazo encerrado em 11/06 às 02h59.</p></div></div>`)
+    : `<div style="background:rgba(244,67,54,0.1);border:1px solid rgba(244,67,54,0.3);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">🔒</span><div><p style="font-size:13px;font-weight:600;color:var(--red);">Palpites encerrados</p><p style="font-size:12px;color:var(--gray);margin-top:2px;">Prazo encerrado em 11/06 às 12h00.</p></div></div>`)
     : '');
 
   Object.keys(groups).forEach(g=>{
@@ -4651,7 +4651,7 @@ function renderPremiacao() {
   const prizes=[{medal:'🥇',place:'1º lugar',pct:60,cls:'gold'},{medal:'🥈',place:'2º lugar',pct:30,cls:'silver'},{medal:'🥉',place:'3º lugar',pct:10,cls:'bronze'}];
   let html=`<div class="prize-total"><div style="font-size:11px;color:rgba(245,197,24,0.7);font-weight:600;letter-spacing:1px;margin-bottom:8px;">TOTAL ARRECADADO</div><div class="prize-total-val">${fmt(arrecadado)}</div><p style="font-size:13px;color:var(--gray);margin-top:6px;">${total} participante${total!==1?'s':''} × R$ 300,00</p></div>`;
   html+=`<div class="card" style="margin-bottom:12px;"><div style="padding:14px 16px;"><p style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:1px;margin-bottom:10px;">DETALHES</p>`;
-  [{l:'Inscritos',v:total},{l:'Taxa',v:'R$ 300,00'},{l:'Total arrecadado',v:fmt(arrecadado),gold:true},{l:'Prazo',v:'11/06 às 02h59'}].forEach(r=>{ html+=`<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);"><span style="font-size:14px;color:var(--gray);">${r.l}</span><span style="font-size:14px;font-weight:600;${r.gold?'color:var(--gold);':''}">${r.v}</span></div>`; });
+  [{l:'Inscritos',v:total},{l:'Taxa',v:'R$ 300,00'},{l:'Total arrecadado',v:fmt(arrecadado),gold:true},{l:'Prazo',v:'11/06 às 12h00'}].forEach(r=>{ html+=`<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);"><span style="font-size:14px;color:var(--gray);">${r.l}</span><span style="font-size:14px;font-weight:600;${r.gold?'color:var(--gold);':''}">${r.v}</span></div>`; });
   html+='</div></div>';
   html+='<div class="card">';
   prizes.forEach((p,i)=>{ const val=arrecadado*p.pct/100; const ldr=scores[i]; html+=`<div class="prize-row"><div style="font-size:30px;flex-shrink:0;width:40px;text-align:center;">${p.medal}</div><div style="flex:1;"><p style="font-family:'Barlow Condensed';font-size:15px;font-weight:700;color:var(--light);">${p.place}</p><p style="font-size:12px;color:var(--gray);">${p.pct}%${ldr&&ldr.pts>0?' → '+uName(ldr.u).split(' ')[0]+' ('+ldr.pts+' pts)':' → A definir'}</p></div><div class="prize-val ${p.cls}">${fmt(val)}</div></div>`; });
