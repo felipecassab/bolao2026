@@ -3368,7 +3368,7 @@ function renderMatches() {
       const statusClass = res?'pill-done':m.status==='live'?'pill-live':'pill-upcoming';
       const statusLabel = res?'Encerrado':m.status==='live'?'AO VIVO':m.date;
       const dis = locked?'disabled':'';
-      const canViewMatch = isPastDeadline() && Object.keys(state.users).length > 0;
+      const canViewMatch = isPastDeadline() && !(adminEditMode && adminAuthed) && Object.keys(state.users).length > 0;
       const matchClick = canViewMatch ? `onclick="viewMatchPalpites('${m.id}')" style="cursor:pointer;"` : '';
       // Verificar se é empate knockout sem pênaltis definidos
       // isPenPending: apenas estado salvo (DOM não existe ainda no render)
@@ -3692,8 +3692,11 @@ function renderMatches() {
 // ═══════════════════════════════════════════════════════════════════
 async function syncDraft() {
   if (!state.user) { openModal('login'); return; }
-  if (isPastDeadline()) { showToast('Prazo encerrado!', true); return; }
-  if (isSubmitted()) { showToast('Palpites já enviados à Comissão!', true); return; }
+  // Modo admin ignora bloqueios de prazo/envio
+  if (!(adminEditMode && adminAuthed)) {
+    if (isPastDeadline()) { showToast('Prazo encerrado!', true); return; }
+    if (isSubmitted()) { showToast('Palpites já enviados à Comissão!', true); return; }
+  }
 
   // Verificar pênaltis pendentes em jogos de mata-mata empatados
   {
@@ -3990,8 +3993,11 @@ function loadDraft() {
 
 async function savePalpites() {
   if (!state.user) { openModal('login'); return; }
-  if (isPastDeadline()) { showToast('Prazo encerrado!', true); return; }
-  if (isSubmitted()) { showToast('Palpites já enviados à Comissão!', true); return; }
+  // Modo admin ignora bloqueios de prazo/envio
+  if (!(adminEditMode && adminAuthed)) {
+    if (isPastDeadline()) { showToast('Prazo encerrado!', true); return; }
+    if (isSubmitted()) { showToast('Palpites já enviados à Comissão!', true); return; }
+  }
   // Verificar pagamento
   const userObj = state.users[state.user];
   if (userObj && userObj.paid === false) {
