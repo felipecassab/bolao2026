@@ -3405,7 +3405,7 @@ function renderMatches() {
             } else if (rW===pW) {
               return '<span style="font-family:\'Barlow Condensed\',sans-serif;font-weight:900;font-size:15px;color:#f5a623;">+3 pts</span>';
             } else {
-              return '<span style="font-family:\'Barlow Condensed\',sans-serif;font-weight:700;font-size:13px;color:var(--gray);">0 pts</span>';
+              return '<span style="font-family:\'Barlow Condensed\',sans-serif;font-weight:900;font-size:15px;color:var(--red);">0 pts</span>';
             }
           })()}
         </div>
@@ -4222,9 +4222,22 @@ function renderRanking() {
     <div class="metric"><div class="metric-val" style="color:${extrasCorrigidas===extrasTotal?'var(--green)':'var(--gold)'};">${extrasCorrigidas}<span style="font-size:14px;font-weight:500;color:var(--gray);">/${extrasTotal}</span></div><div class="metric-label">Extras corrigidas</div></div>`;
   if (!scores.length) { document.getElementById('ranking-list').innerHTML='<div class="empty"><div class="empty-icon">🏆</div><p>Nenhum participante ainda</p></div>'; return; }
   const canView = isPastDeadline();
+  // Calcular posição com empates compartilhados (ex: 1,2,3,3,3,6...)
+  // A posição de cada participante é 1 + número de participantes com MAIS pontos
+  let lastPts = null, lastRank = 0;
+  scores.forEach((s, i) => {
+    if (lastPts === null || s.pts !== lastPts) {
+      s._rank = i + 1;       // nova posição = índice + 1
+      lastRank = s._rank;
+      lastPts = s.pts;
+    } else {
+      s._rank = lastRank;    // mesmo placar = mesma posição do anterior
+    }
+  });
   document.getElementById('ranking-list').innerHTML = scores.map((s,i)=>{
-    const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`;
-    const cls=i===0?'color:#FFD700':i===1?'color:#C0C0C0':i===2?'color:#CD7F32':'color:var(--gray)';
+    const rank = s._rank;
+    const medal=rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':`#${rank}`;
+    const cls=rank===1?'color:#FFD700':rank===2?'color:#C0C0C0':rank===3?'color:#CD7F32':'color:var(--gray)';
     const clickable = `onclick="openScoreModal('${s.u}')" style="cursor:pointer;"`;
     const hint = '<span style="font-size:10px;color:var(--gold);margin-left:4px;">▸ detalhes</span>';
     buildResolvedTeams(state.palpites[s.u] || {}, null, false);
