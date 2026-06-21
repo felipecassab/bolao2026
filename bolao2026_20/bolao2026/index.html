@@ -369,7 +369,8 @@ body{display:flex;flex-direction:column}
   <div class="page" id="page-historico">
     <p class="sec-title">Histórico</p>
     <div class="tabs">
-      <button class="tab-btn active" data-tab="todos" onclick="histTab('todos',this)">Palpites de todos</button>
+      <button class="tab-btn active" data-tab="resultados" onclick="histTab('resultados',this)">Resultados oficiais</button>
+      <button class="tab-btn" data-tab="todos" onclick="histTab('todos',this)">Palpites de todos</button>
       <button class="tab-btn" data-tab="eu" onclick="histTab('eu',this)">Meus palpites</button>
     </div>
     <div id="hist-content"></div>
@@ -1172,6 +1173,31 @@ function renderThirdsStandings(userPalpites) {
     html += '</tr>';
   });
 
+  html += '</tbody></table></div>';
+  return html;
+}
+
+function renderOfficialStandings(group) {
+  // Usa a MESMA lógica de classificação/desempate, alimentada por state.results
+  const s = calcGroupStandings(group, state.results);
+  // Só mostra a tabela se houver pelo menos um jogo do grupo com resultado
+  const played = s.some(t => t.j > 0);
+  if (!played) return '';
+  let html = '<div class="classif-wrap">';
+  html += '<div class="classif-title">CLASSIFICAÇÃO OFICIAL — GRUPO ' + group + '</div>';
+  html += '<table class="classif-table"><thead><tr><th style="width:40%;">Seleção</th><th>PT</th><th>J</th><th>V</th><th>E</th><th>D</th><th>GP</th><th>GC</th><th>SG</th></tr></thead><tbody>';
+  s.forEach(function(t, i) {
+    var sg = t.gp - t.gc;
+    var sgColor = sg > 0 ? 'var(--green)' : sg < 0 ? 'var(--red)' : 'var(--gray)';
+    html += '<tr class="' + (i<2?'top2':'') + '">';
+    html += '<td><span class="classif-pos ' + (i<2?'q':'out') + '">' + (i+1) + '</span>';
+    html += '<img src="https://flagcdn.com/w20/' + t.flag + '.png" style="width:16px;height:11px;border-radius:1px;vertical-align:middle;margin-right:4px;" onerror="this.style.display=&quot;none&quot;"/>';
+    html += t.name + '</td>';
+    html += '<td>' + t.pt + '</td><td>' + t.j + '</td><td>' + t.v + '</td><td>' + t.e + '</td><td>' + t.d + '</td>';
+    html += '<td>' + t.gp + '</td><td>' + t.gc + '</td>';
+    html += '<td style="color:' + sgColor + ';">' + (sg>0?'+':'') + sg + '</td>';
+    html += '</tr>';
+  });
   html += '</tbody></table></div>';
   return html;
 }
@@ -4498,7 +4524,7 @@ function renderEvolucao() {
 // RENDER HISTORICO
 // ═══════════════════════════════════════════════════════════════════
 function renderHistorico() {
-  const tab = document.querySelector('#page-historico .tab-btn.active')?.dataset?.tab||'todos';
+  const tab = document.querySelector('#page-historico .tab-btn.active')?.dataset?.tab||'resultados';
   const el = document.getElementById('hist-content');
   if (el) _histTabRender(tab, el);
 }
@@ -4522,6 +4548,52 @@ function _histTabRender(tab, el) {
     el.innerHTML='<div style="padding:16px;color:#aaa;font-size:13px;">Nenhum resultado registrado ainda<br><small>' + debugInfo + '</small></div>';
     return;
   }
+  // ── Filtro "Resultados oficiais": placares agrupados por grupo ───
+  if (tab === 'resultados') {
+    // Agrupar jogos encerrados por grupo (fase de grupos) e separar mata-mata
+    const byGroup = {};      // {A:[...], B:[...], ...}
+    const knockout = [];
+    done.forEach(m => {
+      const res = state.results[m.id];
+      if (!res || res.h === undefined || res.a === undefined) return;
+      if (m.phase === 'group') {
+        const g = m.group || '?';
+        if (!byGroup[g]) byGroup[g] = [];
+        byGroup[g].push(m);
+      } else {
+        knockout.push(m);
+      }
+    });
+
+    const matchCard = (m) => {
+      const res = state.results[m.id];
+      const flag_h = typeof flagImg === 'function' ? flagImg(m.fH,'flag') : '';
+      const flag_a = typeof flagImg === 'function' ? flagImg(m.fA,'flag') : '';
+      return `<div class="hist-card"><div class="hist-header">
+        <span style="font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px;">${flag_h} ${m.home||''} × ${m.away||''} ${flag_a}</span>
+        <span class="hist-result">${res.h}:${res.a}</span></div>
+        <div style="padding:6px 14px 10px;font-size:11px;color:var(--gray);">${m.date ? m.date : ''}${m.city ? ' · ' + m.city : ''}</div>
+      </div>`;
+    };
+
+    let rhtml = '';
+    // Grupos em ordem alfabética
+    Object.keys(byGroup).sort().forEach(g => {
+      rhtml += `<div class="score-phase-title" style="margin:14px 4px 8px;">GRUPO ${g}</div>`;
+      byGroup[g].forEach(m => { rhtml += matchCard(m); });
+      // Tabela de classificação oficial do grupo (mesmos critérios da aba Palpites)
+      rhtml += renderOfficialStandings(g);
+    });
+    // Mata-mata ao final
+    if (knockout.length) {
+      rhtml += `<div class="score-phase-title" style="margin:18px 4px 8px;">MATA-MATA</div>`;
+      knockout.forEach(m => { rhtml += matchCard(m); });
+    }
+
+    el.innerHTML = rhtml || '<div style="padding:16px;color:#aaa;font-size:13px;">Nenhum resultado registrado ainda.</div>';
+    return;
+  }
+  // ─────────────────────────────────────────────────────────────────
   const users = tab==='eu'&&state.user
     ? [state.user]
     : Object.keys(state.users).filter(u => {
@@ -4544,8 +4616,8 @@ function _histTabRender(tab, el) {
         if(p && p.h!==undefined && p.a!==undefined){
           guess=`${p.h}:${p.a}`;
           const pW=p.h>p.a?'H':p.h<p.a?'A':'E';
-          if(+p.h===+res.h&&+p.a===+res.a) badge='<span class="badge badge-gold">+5 Exato</span>';
-          else if(rW===pW) badge='<span class="badge badge-green">+3 Vencedor</span>';
+          if(+p.h===+res.h&&+p.a===+res.a) badge='<span class="badge badge-green">+5 Exato</span>';
+          else if(rW===pW) badge='<span class="badge badge-gold">+3 Vencedor</span>';
           else badge='<span class="badge badge-red">0 pts</span>';
         }
         const bg=usr.color||COLORS[0]; const cl=usr.colorT||COLORS_T[0];
