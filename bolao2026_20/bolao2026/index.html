@@ -127,6 +127,7 @@ body{display:flex;flex-direction:column}
 .score-pts-winner { background:rgba(245,197,24,0.12); color:var(--gold);  border:1px solid rgba(245,197,24,0.3); }
 .score-pts-bonus  { background:rgba(126,184,245,0.12);color:#7eb8f5;     border:1px solid rgba(126,184,245,0.3); }
 .score-pts-zero   { background:rgba(255,255,255,0.04);color:var(--gray);  border:1px solid rgba(255,255,255,0.08); }
+.score-pts-miss   { background:rgba(244,67,54,0.12); color:var(--red);   border:1px solid rgba(244,67,54,0.3); }
 .score-pts-extra  { background:rgba(0,200,83,0.12);  color:var(--green); border:1px solid rgba(0,200,83,0.25); }
 .score-summary-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:16px; }
 .score-summary-cell { background:rgba(255,255,255,0.04); border-radius:10px; padding:10px 6px; text-align:center; border:1px solid rgba(255,255,255,0.07); }
@@ -6982,7 +6983,7 @@ async function openScoreModal(uid) {
             if (+p.h === res.h && +p.a === res.a) { pts = 5; type = 'exact'; }
             else if (rW === pW) { pts = 3; type = 'winner'; }
           }
-          const ptsClass = type === 'exact' ? 'score-pts-exact' : type === 'winner' ? 'score-pts-winner' : 'score-pts-zero';
+          const ptsClass = type === 'exact' ? 'score-pts-exact' : type === 'winner' ? 'score-pts-winner' : 'score-pts-miss';
           phaseHtml += '<div class="score-match-row">' +
             '<span class="score-pts-badge ' + ptsClass + '">' + (pts > 0 ? '+' + pts : '0') + '</span>' +
             '<img src="https://flagcdn.com/w20/' + homeFlag + '.png" style="width:16px;height:11px;border-radius:1px;flex-shrink:0;" onerror="this.style.display=&quot;none&quot;">' +
@@ -7137,14 +7138,29 @@ async function openScoreModal(uid) {
     const userQ   = qa[q.id];           // user's answer object (may be undefined)
     const ans     = qaAnswers[q.id];    // admin's correction (may be undefined)
     const userAns = userQ ? (userQ.answer || '—') : '—';
-    const correct = userQ && userQ.correct === true;
-    const graded  = userQ && userQ.correct !== null && userQ.correct !== undefined;
     const corrAns = ans ? (ans.correct || '') : '';
+
+    // Normaliza para comparação (ignora acentos, caixa e espaços extras)
+    const norm = function(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/\s+/g,' '); };
+    const hasGabarito = corrAns.trim() !== '';
+    const userAnswered = userQ && userQ.answer && userQ.answer.trim() !== '';
+
+    // Avaliação: prioridade ao correct explícito; senão, deriva do gabarito oficial
+    let correct, graded;
+    if (userQ && userQ.correct === true) { correct = true; graded = true; }
+    else if (userQ && userQ.correct === false) { correct = false; graded = true; }
+    else if (hasGabarito) {
+      // Gabarito preenchido — comparar com a resposta do participante
+      graded = true;
+      correct = userAnswered && norm(userAns) === norm(corrAns);
+    } else {
+      correct = false; graded = false; // ainda sem gabarito
+    }
 
     // Badge: green +3 if correct, red 0 if graded wrong, gray ? if not graded yet
     var badgeClass, badgeText;
     if (correct)        { badgeClass = 'score-pts-extra'; badgeText = '+3'; }
-    else if (graded)    { badgeClass = 'score-pts-zero';  badgeText = '0'; }
+    else if (graded)    { badgeClass = 'score-pts-miss';  badgeText = '0'; }
     else                { badgeClass = 'score-pts-zero';  badgeText = '?'; }
 
     extrasHtml += '<div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);">' +
