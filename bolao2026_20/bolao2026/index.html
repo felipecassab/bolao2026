@@ -1137,6 +1137,47 @@ function calcGroupStandings(group, userPalpites) {
   return result;
 }
 
+function renderOfficialThirds() {
+  // Tabela dos 8 melhores terceiros usando RESULTADOS OFICIAIS
+  var groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+  // Fair play oficial dos terceiros, se o admin definiu
+  var officialResults = Object.assign({}, state.results);
+  if (state.results._fp3) officialResults._fp3 = state.results._fp3;
+  var thirds = groups.map(function(g) {
+    var s = calcGroupStandings(g, officialResults);
+    if (!s[2] || s[2].j < 3) return null; // terceiro do grupo precisa ter jogado os 3 jogos
+    return Object.assign({}, s[2], {group:g});
+  }).filter(Boolean);
+  if (thirds.length === 0) return '';
+  sortThirds(thirds, officialResults);
+
+  var html = '<div class="classif-wrap" style="margin-top:10px;">';
+  html += '<div class="classif-title">MELHORES TERCEIROS COLOCADOS — CLASSIFICAÇÃO OFICIAL</div>';
+  html += '<table class="classif-table"><thead><tr>';
+  html += '<th style="width:40%;">Seleção</th><th>PT</th><th>J</th><th>V</th><th>E</th><th>D</th><th>GP</th><th>GC</th><th>SG</th>';
+  html += '</tr></thead><tbody>';
+
+  thirds.forEach(function(t, i) {
+    var sg = t.gp - t.gc;
+    var sgColor = sg > 0 ? 'var(--green)' : sg < 0 ? 'var(--red)' : 'var(--gray)';
+    var qualified = i < 8;
+    var borderTop = i === 8 ? 'border-top:2px solid rgba(244,67,54,0.4);' : '';
+    html += '<tr style="' + borderTop + '">';
+    html += '<td><span class="classif-pos ' + (qualified ? 'q' : 'out') + '">' + (i+1) + '</span>';
+    html += '<img src="https://flagcdn.com/w20/' + t.flag + '.png" style="width:16px;height:11px;border-radius:1px;vertical-align:middle;margin-right:4px;" onerror="this.style.display=&quot;none&quot;"/>';
+    html += t.name;
+    html += '<span style="font-size:10px;color:var(--gray);margin-left:4px;">(Gr.' + t.group + ')</span>';
+    html += '</td>';
+    html += '<td>' + t.pt + '</td><td>' + t.j + '</td><td>' + t.v + '</td><td>' + t.e + '</td><td>' + t.d + '</td>';
+    html += '<td>' + t.gp + '</td><td>' + t.gc + '</td>';
+    html += '<td style="color:' + sgColor + ';">' + (sg>0?'+':'') + sg + '</td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  return html;
+}
+
 function renderThirdsStandings(userPalpites) {
   var groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
   // Mesclar com cache do DOM e palpites salvos para máxima cobertura
@@ -3323,6 +3364,83 @@ function flagImg(code, cls='flag') {
   if (code==='un') return '<span style="font-size:16px;">🏳️</span>';
   return `<img class="${cls}" src="https://flagcdn.com/w40/${code}.png" onerror="this.style.display=&quot;none&quot;"/>`;
 }
+// Converte a string de data do jogo (ex: '27 Jun · 18h') para um objeto Date (ano 2026)
+function parseMatchDate(dateStr) {
+  if (!dateStr) return null;
+  const MM = {'Jan':0,'Feb':1,'Mar':2,'Apr':3,'May':4,'Jun':5,'Jul':6,'Aug':7,'Sep':8,'Oct':9,'Nov':10,'Dec':11};
+  const m = dateStr.match(/(\d+)\s+(\w+)(?:\s*·\s*(\d+)h)?/);
+  if (!m) return null;
+  const day = parseInt(m[1], 10);
+  const mon = MM[m[2]];
+  if (mon === undefined) return null;
+  const hour = m[3] ? parseInt(m[3], 10) : 0;
+  return new Date(2026, mon, day, hour, 0, 0);
+}
+
+// Retorna 'YYYY-MM-DD' de uma data
+function dateKeyOf(d) {
+  if (!d) return '';
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+// Card "Jogos de hoje" (ou próximos, se não houver hoje)
+function renderTodayMatchesCard() {
+  const today = new Date();
+  const todayKey = dateKeyOf(today);
+
+  // Mapear jogos com data parseável
+  const dated = MATCHES.map(m => {
+    const d = parseMatchDate(m.date);
+    return d ? { m, d, key: dateKeyOf(d) } : null;
+  }).filter(Boolean);
+
+  // Jogos de hoje
+  let list = dated.filter(x => x.key === todayKey);
+  let isToday = true;
+
+  // Se não há jogos hoje, pegar a próxima data futura com jogos
+  if (list.length === 0) {
+    isToday = false;
+    const future = dated.filter(x => x.d >= new Date(today.getFullYear(), today.getMonth(), today.getDate()))
+                        .sort((a,b) => a.d - b.d);
+    if (future.length === 0) return ''; // não há mais jogos
+    const nextKey = future[0].key;
+    list = future.filter(x => x.key === nextKey);
+  }
+
+  // Ordenar por horário
+  list.sort((a,b) => a.d - b.d);
+
+  const title = isToday ? '⚽ JOGOS DE HOJE' : '⏭️ PRÓXIMOS JOGOS';
+  const dateLabel = isToday ? '' : ` <span style="font-weight:400;color:var(--gray);font-size:12px;">· ${list[0].m.date.split('·')[0].trim()}</span>`;
+
+  let rows = '';
+  list.forEach(({m}) => {
+    const res = state.results[m.id];
+    const rt = resolvedTeams[m.id] || null;
+    const homeName = (rt && rt.home && rt.home.name) ? rt.home.name : m.home;
+    const awayName = (rt && rt.away && rt.away.name) ? rt.away.name : m.away;
+    const homeFlag = (rt && rt.home && rt.home.flag) ? rt.home.flag : m.fH;
+    const awayFlag = (rt && rt.away && rt.away.flag) ? rt.away.flag : m.fA;
+    const isLiveMatch = !res && state.results._live && state.results._live[m.id];
+    const timePart = m.date.includes('·') ? m.date.split('·')[1].trim() : '';
+    let statusBadge;
+    if (res) statusBadge = `<span class="status-pill pill-done">${res.h}:${res.a}</span>`;
+    else if (isLiveMatch) statusBadge = `<span class="status-pill pill-live">🔴 AO VIVO</span>`;
+    else statusBadge = `<span style="font-size:12px;color:var(--gold);font-weight:700;font-family:'Barlow Condensed';">${timePart||'—'}</span>`;
+    rows += `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+      <div style="flex:1;display:flex;align-items:center;gap:5px;justify-content:flex-end;font-size:13px;text-align:right;">${homeName} ${flagImg(homeFlag)}</div>
+      <div style="min-width:54px;text-align:center;">${statusBadge}</div>
+      <div style="flex:1;display:flex;align-items:center;gap:5px;font-size:13px;">${flagImg(awayFlag)} ${awayName}</div>
+    </div>`;
+  });
+
+  return `<div class="card" style="margin-bottom:14px;border:1px solid rgba(245,197,24,0.25);background:linear-gradient(180deg,rgba(245,197,24,0.06),rgba(245,197,24,0.02));">
+    <div style="padding:12px 16px 4px;font-family:'Barlow Condensed';font-weight:900;font-size:15px;letter-spacing:0.5px;color:var(--gold);">${title}${dateLabel}</div>
+    <div style="padding:2px 16px 12px;">${rows}</div>
+  </div>`;
+}
+
 function renderMatches() {
   const locked = isLocked();
   // Capturar valores atuais do DOM ANTES de destruir (para FP3)
@@ -3375,7 +3493,7 @@ function renderMatches() {
     </div>`;
   }
 
-  let html = summaryHtml + (locked ? (isSubmitted()
+  let html = renderTodayMatchesCard() + summaryHtml + (locked ? (isSubmitted()
     ? `<div style="background:rgba(0,200,83,0.08);border:1px solid rgba(0,200,83,0.3);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">✅</span><div><p style="font-size:13px;font-weight:600;color:var(--green);">Palpites enviados à Comissão</p><p style="font-size:12px;color:var(--gray);margin-top:2px;">Seus palpites foram enviados. Apenas visualização disponível.</p></div></div>`
     : `<div style="background:rgba(244,67,54,0.1);border:1px solid rgba(244,67,54,0.3);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">🔒</span><div><p style="font-size:13px;font-weight:600;color:var(--red);">Palpites encerrados</p><p style="font-size:12px;color:var(--gray);margin-top:2px;">Prazo encerrado em 11/06 às 14h00.</p></div></div>`)
     : '');
@@ -4584,6 +4702,12 @@ function _histTabRender(tab, el) {
       // Tabela de classificação oficial do grupo (mesmos critérios da aba Palpites)
       rhtml += renderOfficialStandings(g);
     });
+    // Tabela dos 8 melhores terceiros colocados (após todos os grupos)
+    const thirdsTable = renderOfficialThirds();
+    if (thirdsTable) {
+      rhtml += `<div class="score-phase-title" style="margin:18px 4px 8px;">MELHORES TERCEIROS</div>`;
+      rhtml += thirdsTable;
+    }
     // Mata-mata ao final
     if (knockout.length) {
       rhtml += `<div class="score-phase-title" style="margin:18px 4px 8px;">MATA-MATA</div>`;
