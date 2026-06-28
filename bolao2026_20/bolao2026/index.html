@@ -4708,10 +4708,61 @@ function _histTabRender(tab, el) {
       rhtml += `<div class="score-phase-title" style="margin:18px 4px 8px;">MELHORES TERCEIROS</div>`;
       rhtml += thirdsTable;
     }
-    // Mata-mata ao final
-    if (knockout.length) {
-      rhtml += `<div class="score-phase-title" style="margin:18px 4px 8px;">MATA-MATA</div>`;
-      knockout.forEach(m => { rhtml += matchCard(m); });
+    // ── MATA-MATA propagado por fase, com times resolvidos ──────────
+    buildResolvedTeamsFromResults(); // garante resolvedTeamsReal atualizado
+
+    // Card de confronto do mata-mata (usa times resolvidos pelos resultados oficiais)
+    const koMatchCard = (m) => {
+      const res = state.results[m.id];
+      const rt = resolvedTeamsReal[m.id] || {};
+      const homeName = (rt.home && rt.home.name) ? rt.home.name : m.home;
+      const awayName = (rt.away && rt.away.name) ? rt.away.name : m.away;
+      const homeFlag = (rt.home && rt.home.flag) ? rt.home.flag : m.fH;
+      const awayFlag = (rt.away && rt.away.flag) ? rt.away.flag : m.fA;
+      const isLiveMatch = !res && state.results._live && state.results._live[m.id];
+      // Lado direito: placar (com pênaltis se houver), AO VIVO, ou data/hora
+      let right;
+      if (res) {
+        const penTxt = res.pen ? ` <span style="font-size:10px;color:var(--gray);">(pen: ${res.pen==='H'?homeName:awayName})</span>` : '';
+        right = `<span class="hist-result">${res.h}:${res.a}</span>${penTxt}`;
+      } else if (isLiveMatch) {
+        right = `<span class="status-pill pill-live">🔴 AO VIVO</span>`;
+      } else {
+        right = `<span style="font-size:12px;color:var(--gray);font-style:italic;">a jogar</span>`;
+      }
+      const flag_h = typeof flagImg === 'function' ? flagImg(homeFlag,'flag') : '';
+      const flag_a = typeof flagImg === 'function' ? flagImg(awayFlag,'flag') : '';
+      return `<div class="hist-card"><div class="hist-header">
+        <span style="font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px;">${flag_h} ${homeName||''} × ${awayName||''} ${flag_a}</span>
+        <span style="display:flex;align-items:center;gap:6px;">${right}</span></div>
+        <div style="padding:6px 14px 10px;font-size:11px;color:var(--gray);">${m.date ? m.date : ''}${m.city ? ' · ' + m.city : ''}</div>
+      </div>`;
+    };
+
+    // Ordem e rótulos das fases do mata-mata
+    const koPhases = [
+      {key:'32-avos',    label:'32-AVOS DE FINAL'},
+      {key:'Oitavas',    label:'OITAVAS DE FINAL'},
+      {key:'Quartas',    label:'QUARTAS DE FINAL'},
+      {key:'Semifinais', label:'SEMIFINAIS'},
+      {key:'3º Lugar',   label:'DISPUTA DE 3º LUGAR'},
+      {key:'Final',      label:'FINAL'},
+    ];
+
+    // Há algo de mata-mata para mostrar? (confronto resolvido OU resultado lançado)
+    const koMatches = MATCHES.filter(m => m.phase === 'knockout');
+    const anyKO = koMatches.some(m => state.results[m.id] || resolvedTeamsReal[m.id]);
+
+    if (anyKO) {
+      rhtml += `<div class="score-phase-title" style="margin:20px 4px 8px;font-size:15px;color:var(--gold);">🏆 MATA-MATA</div>`;
+      koPhases.forEach(ph => {
+        const phMatches = koMatches.filter(m => m.group === ph.key);
+        // Só mostrar a fase se algum confronto já está resolvido ou jogado
+        const visible = phMatches.filter(m => state.results[m.id] || resolvedTeamsReal[m.id]);
+        if (visible.length === 0) return;
+        rhtml += `<div class="score-phase-title" style="margin:14px 4px 8px;">${ph.label}</div>`;
+        visible.forEach(m => { rhtml += koMatchCard(m); });
+      });
     }
 
     el.innerHTML = rhtml || '<div style="padding:16px;color:#aaa;font-size:13px;">Nenhum resultado registrado ainda.</div>';
