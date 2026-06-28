@@ -3425,6 +3425,33 @@ function todayKOGames() {
     .sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff));
 }
 
+// Sequência de fases do mata-mata. A "Final" agrupa Final + 3º lugar.
+const KO_PHASE_SEQ = [
+  { key: '32-avos', label: '32-avos de final' },
+  { key: 'Oitavas', label: 'Oitavas de final' },
+  { key: 'Quartas', label: 'Quartas de final' },
+  { key: 'Semifinais', label: 'Semifinais' },
+  { key: 'Final', label: 'Final e 3º lugar' },
+];
+function koPhaseGames(phaseKey) {
+  const groups = phaseKey === 'Final' ? ['Final', '3º Lugar'] : [phaseKey];
+  return MATCHES.filter(m => m.phase === 'knockout' && groups.indexOf(m.group) !== -1)
+    .sort((a, b) => (MATCH_NUMBERS[a.id] || 999) - (MATCH_NUMBERS[b.id] || 999));
+}
+// Fase atual = primeira fase que ainda tem ao menos um jogo sem resultado
+function currentKOPhase() {
+  for (const ph of KO_PHASE_SEQ) {
+    const games = koPhaseGames(ph.key);
+    if (!games.length) continue;
+    if (!games.every(m => state.results[m.id])) return ph;
+  }
+  return null; // mata-mata encerrado
+}
+function currentPhaseGames() {
+  const ph = currentKOPhase();
+  return ph ? koPhaseGames(ph.key) : [];
+}
+
 // Trava do palpite do dia: começou (kickoff), está ao vivo, ou já tem resultado
 function dailyLocked(m) {
   if (state.results[m.id]) return true;
@@ -3458,8 +3485,9 @@ var dailyDraftPen = {}, dailyGameNames = {};
 
 function openDailyModal() {
   if (!state.user) { showToast('Entre para palpitar', true); return; }
-  const games = todayKOGames();
-  if (!games.length) { showToast('Sem jogos do mata-mata hoje', true); return; }
+  const phase = currentKOPhase();
+  const games = currentPhaseGames();
+  if (!games.length) { showToast('O mata-mata ainda não começou (ou já acabou)', true); return; }
   buildResolvedTeamsFromResults();
   const mine = (state.palpites[state.user] && state.palpites[state.user]._dia) || {};
   dailyDraftPen = {}; dailyGameNames = {};
@@ -3485,11 +3513,11 @@ function openDailyModal() {
     if (locked) {
       const res = state.results[m.id];
       const live = state.results._live && state.results._live[m.id];
-      const st = res ? ('placar oficial ' + res.h + '×' + res.a) : (live ? '🔴 em andamento' : 'encerrado · ' + hora);
+      const st = res ? ('placar oficial ' + res.h + '×' + res.a) : (live ? '🔴 em andamento' : 'encerrado');
       const betTxt = (bet && bet.h !== undefined) ? (bet.h + '×' + bet.a + (bet.pen ? ' · pên: ' + (bet.pen === 'H' ? hName : aName) : '')) : '— sem palpite —';
       body += `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:10px 12px;margin-bottom:10px;opacity:0.7;">
         <div>${teamLine(hName, hFlag)} <span style="color:var(--gray);">×</span> ${teamLine(aName, aFlag)}</div>
-        <div style="font-size:10px;color:var(--gray);margin-top:4px;">🔒 ${st}</div>
+        <div style="font-size:10px;color:var(--gray);margin-top:4px;">🔒 ${m.date} · ${hora} · ${st}</div>
         <div style="font-size:12px;color:var(--light);margin-top:3px;">Seu palpite: <b>${betTxt}</b></div>
       </div>`;
     } else {
@@ -3497,7 +3525,7 @@ function openDailyModal() {
       const drawNow = hv !== '' && av !== '' && +hv === +av;
       const inp = (sfx, val) => `<input id="dia_${m.id}_${sfx}" type="number" min="0" inputmode="numeric" value="${val}" oninput="dailyOnInput('${m.id}')" style="width:38px;height:38px;text-align:center;font-size:16px;font-weight:700;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:var(--navy2);color:var(--light);">`;
       body += `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(126,184,245,0.25);border-radius:10px;padding:10px 12px;margin-bottom:10px;">
-        <div style="font-size:10px;color:#7eb8f5;font-weight:700;margin-bottom:6px;">⏰ palpite até ${hora}</div>
+        <div style="font-size:10px;color:#7eb8f5;font-weight:700;margin-bottom:6px;">⏰ ${m.date} · palpite até ${hora}</div>
         <div style="display:flex;align-items:center;justify-content:center;gap:8px;">
           <div style="flex:1;text-align:right;">${teamLine(hName, hFlag)}</div>
           ${inp('h', hv)}<span style="color:var(--gray);">×</span>${inp('a', av)}
@@ -3521,9 +3549,9 @@ function openDailyModal() {
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:900;color:#7eb8f5;">🎯 PALPITE DO DIA</div>
         <button onclick="closeDailyModal()" style="background:none;border:none;color:var(--gray);font-size:24px;cursor:pointer;line-height:1;">×</button>
       </div>
-      <p style="font-size:11px;color:var(--gray);margin-bottom:14px;line-height:1.5;">Bolão paralelo, sem relação com o ranking principal. Vale até o início de cada jogo. Empate exige escolher o vencedor nos pênaltis.</p>
+      <p style="font-size:11px;color:var(--gray);margin-bottom:14px;line-height:1.5;">${phase ? '<b style="color:#7eb8f5;">' + phase.label + '</b> · ' : ''}Bolão paralelo, sem relação com o ranking principal. Cada jogo vale até o seu horário de início. Empate exige escolher o vencedor nos pênaltis.</p>
       ${body}
-      ${anyOpen ? `<button onclick="saveDailyBet()" style="width:100%;padding:13px;border:none;border-radius:10px;background:linear-gradient(90deg,#7eb8f5,#5a9be8);color:#0a1628;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;letter-spacing:0.5px;cursor:pointer;margin-top:4px;">SALVAR PALPITE DO DIA</button>` : '<div style="text-align:center;font-size:12px;color:var(--gray);padding:6px 0;">Todos os jogos de hoje já começaram.</div>'}
+      ${anyOpen ? `<button onclick="saveDailyBet()" style="width:100%;padding:13px;border:none;border-radius:10px;background:linear-gradient(90deg,#7eb8f5,#5a9be8);color:#0a1628;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;letter-spacing:0.5px;cursor:pointer;margin-top:4px;">SALVAR PALPITES</button>` : '<div style="text-align:center;font-size:12px;color:var(--gray);padding:6px 0;">Todos os jogos desta fase já começaram.</div>'}
     </div>`;
   overlay.addEventListener('click', e => { if (e.target === overlay) closeDailyModal(); });
   document.body.appendChild(overlay);
@@ -3553,7 +3581,7 @@ function dailySetPen(mid, side) {
 
 async function saveDailyBet() {
   if (!state.user) return;
-  const games = todayKOGames().filter(m => !dailyLocked(m));
+  const games = currentPhaseGames().filter(m => !dailyLocked(m));
 
   // 1) Coletar e validar SÓ os jogos que o usuário acabou de editar agora
   const edits = {};
@@ -3654,7 +3682,7 @@ function renderTodayMatchesCard() {
   return `<div class="card" style="margin-bottom:14px;border:1px solid rgba(245,197,24,0.25);background:linear-gradient(180deg,rgba(245,197,24,0.06),rgba(245,197,24,0.02));">
     <div style="padding:12px 16px 4px;font-family:'Barlow Condensed';font-weight:900;font-size:15px;letter-spacing:0.5px;color:var(--gold);">${title}${dateLabel}</div>
     <div style="padding:2px 16px 12px;">${rows}</div>
-    ${(isToday && state.user && list.some(x => x.m.phase === 'knockout')) ? `<div style="padding:0 16px 14px;"><button onclick="openDailyModal()" style="width:100%;padding:11px;border:none;border-radius:10px;background:linear-gradient(90deg,#7eb8f5,#5a9be8);color:#0a1628;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:15px;letter-spacing:0.5px;cursor:pointer;">🎯 DÊ O SEU PALPITE — PALPITE DO DIA</button><div style="font-size:10px;color:var(--gray);text-align:center;margin-top:5px;">Bolão paralelo · vale até o início de cada jogo</div></div>` : ''}
+    ${(state.user && currentPhaseGames().length) ? `<div style="padding:0 16px 14px;"><button onclick="openDailyModal()" style="width:100%;padding:11px;border:none;border-radius:10px;background:linear-gradient(90deg,#7eb8f5,#5a9be8);color:#0a1628;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:15px;letter-spacing:0.5px;cursor:pointer;">🎯 DÊ O SEU PALPITE — PALPITE DO DIA</button><div style="font-size:10px;color:var(--gray);text-align:center;margin-top:5px;">Bolão paralelo · palpite na fase atual, cada jogo até seu horário</div></div>` : ''}
   </div>`;
 }
 
