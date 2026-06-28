@@ -3626,15 +3626,20 @@ function renderTodayMatchesCard() {
   const dateLabel = isToday ? '' : ` <span style="font-weight:400;color:var(--gray);font-size:12px;">· ${list[0].m.date.split('·')[0].trim()}</span>`;
 
   let rows = '';
+  buildResolvedTeamsFromResults(); // garante o confronto REAL atualizado
   list.forEach(({m}) => {
     const res = state.results[m.id];
-    const rt = resolvedTeams[m.id] || null;
+    // Confronto REAL (oficial), não o bracket do usuário. Jogos de grupo já
+    // têm os times em m.home/m.away; mata-mata vem de resolvedTeamsReal.
+    const rt = (m.phase === 'knockout') ? (resolvedTeamsReal[m.id] || null) : null;
     const homeName = (rt && rt.home && rt.home.name) ? rt.home.name : m.home;
     const awayName = (rt && rt.away && rt.away.name) ? rt.away.name : m.away;
     const homeFlag = (rt && rt.home && rt.home.flag) ? rt.home.flag : m.fH;
     const awayFlag = (rt && rt.away && rt.away.flag) ? rt.away.flag : m.fA;
     const isLiveMatch = !res && state.results._live && state.results._live[m.id];
-    const timePart = m.date.includes('·') ? m.date.split('·')[1].trim() : '';
+    let timePart = '';
+    if (m.kickoff) { const k = new Date(m.kickoff); timePart = String(k.getHours()).padStart(2, '0') + ':' + String(k.getMinutes()).padStart(2, '0'); }
+    else if (m.date.includes('·')) timePart = m.date.split('·')[1].trim();
     let statusBadge;
     if (res) statusBadge = `<span class="status-pill pill-done">${res.h}:${res.a}</span>`;
     else if (isLiveMatch) statusBadge = `<span class="status-pill pill-live">🔴 AO VIVO</span>`;
