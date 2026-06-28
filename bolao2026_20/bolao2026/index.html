@@ -344,10 +344,14 @@ body{display:flex;flex-direction:column}
     <div class="metrics" id="metrics"></div>
     <div class="tabs" id="ranking-tabs">
       <button class="tab-btn active" onclick="rankTab('atual',this)">Atual</button>
+      <button class="tab-btn" onclick="rankTab('dia',this)">Palpite do Dia</button>
       <button class="tab-btn" onclick="rankTab('evolucao',this)">Evolução</button>
     </div>
     <div id="ranking-atual">
       <div class="card"><div class="card-body" id="ranking-list"></div></div>
+    </div>
+    <div id="ranking-dia" style="display:none;">
+      <div id="ranking-dia-content"></div>
     </div>
     <div id="ranking-evolucao" style="display:none;">
       <div class="card"><div class="card-body">
@@ -917,43 +921,43 @@ const MATCHES = [
   {id:'l5',home:'Panamá',away:'Inglaterra',fH:'pa',fA:'gb-eng',group:'L',phase:'group',status:'upcoming',date:'27 Jun · 18h',city:'Nova York/NJ'},
   {id:'l6',home:'Croácia',away:'Gana',fH:'hr',fA:'gh',group:'L',phase:'group',status:'upcoming',date:'27 Jun · 18h',city:'Filadélfia'},
   // 32-AVOS
-  {id:'r32_1',home:'2º Gr.A',away:'2º Gr.B',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'28 Jun',city:'Los Angeles'},
-  {id:'r32_2',home:'1º Gr.E',away:'3º A/B/C/D/F',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'29 Jun',city:'Boston'},
-  {id:'r32_3',home:'1º Gr.F',away:'2º Gr.C',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'29 Jun',city:'Monterrey'},
-  {id:'r32_4',home:'1º Gr.C',away:'2º Gr.F',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'29 Jun',city:'Houston'},
-  {id:'r32_5',home:'1º Gr.I',away:'3º C/D/F/G/H',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'30 Jun',city:'Nova York/NJ'},
-  {id:'r32_6',home:'2º Gr.E',away:'2º Gr.I',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'30 Jun',city:'Dallas'},
-  {id:'r32_7',home:'1º Gr.A',away:'3º C/E/F/H/I',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'30 Jun',city:'Cidade do México'},
-  {id:'r32_8',home:'1º Gr.L',away:'3º E/H/I/J/K',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'01 Jul',city:'Atlanta'},
-  {id:'r32_9',home:'1º Gr.D',away:'3º B/E/F/I/J',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'01 Jul',city:'Santa Clara'},
-  {id:'r32_10',home:'1º Gr.G',away:'3º A/E/H/I/J',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'01 Jul',city:'Seattle'},
-  {id:'r32_11',home:'2º Gr.K',away:'2º Gr.L',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'02 Jul',city:'Toronto'},
-  {id:'r32_12',home:'1º Gr.H',away:'2º Gr.J',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'02 Jul',city:'Los Angeles'},
-  {id:'r32_13',home:'1º Gr.B',away:'3º E/F/G/I/J',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'02 Jul',city:'Vancouver'},
-  {id:'r32_14',home:'1º Gr.J',away:'2º Gr.H',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'03 Jul',city:'Miami'},
-  {id:'r32_15',home:'1º Gr.K',away:'3º D/E/I/J/L',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'03 Jul',city:'Kansas City'},
-  {id:'r32_16',home:'2º Gr.D',away:'2º Gr.G',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'03 Jul',city:'Dallas'},
+  {id:'r32_1',home:'2º Gr.A',away:'2º Gr.B',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'28 Jun',kickoff:'2026-06-28T16:00:00-03:00',city:'Los Angeles'},
+  {id:'r32_2',home:'1º Gr.E',away:'3º A/B/C/D/F',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'29 Jun',kickoff:'2026-06-29T17:30:00-03:00',city:'Boston'},
+  {id:'r32_3',home:'1º Gr.F',away:'2º Gr.C',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'29 Jun',kickoff:'2026-06-29T22:00:00-03:00',city:'Monterrey'},
+  {id:'r32_4',home:'1º Gr.C',away:'2º Gr.F',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'29 Jun',kickoff:'2026-06-29T14:00:00-03:00',city:'Houston'},
+  {id:'r32_5',home:'1º Gr.I',away:'3º C/D/F/G/H',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'30 Jun',kickoff:'2026-06-30T18:00:00-03:00',city:'Nova York/NJ'},
+  {id:'r32_6',home:'2º Gr.E',away:'2º Gr.I',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'30 Jun',kickoff:'2026-06-30T14:00:00-03:00',city:'Dallas'},
+  {id:'r32_7',home:'1º Gr.A',away:'3º C/E/F/H/I',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'30 Jun',kickoff:'2026-06-30T22:00:00-03:00',city:'Cidade do México'},
+  {id:'r32_8',home:'1º Gr.L',away:'3º E/H/I/J/K',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'01 Jul',kickoff:'2026-07-01T13:00:00-03:00',city:'Atlanta'},
+  {id:'r32_9',home:'1º Gr.D',away:'3º B/E/F/I/J',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'01 Jul',kickoff:'2026-07-01T21:00:00-03:00',city:'Santa Clara'},
+  {id:'r32_10',home:'1º Gr.G',away:'3º A/E/H/I/J',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'01 Jul',kickoff:'2026-07-01T17:00:00-03:00',city:'Seattle'},
+  {id:'r32_11',home:'2º Gr.K',away:'2º Gr.L',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'02 Jul',kickoff:'2026-07-02T20:00:00-03:00',city:'Toronto'},
+  {id:'r32_12',home:'1º Gr.H',away:'2º Gr.J',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'02 Jul',kickoff:'2026-07-02T16:00:00-03:00',city:'Los Angeles'},
+  {id:'r32_13',home:'1º Gr.B',away:'3º E/F/G/I/J',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'03 Jul',kickoff:'2026-07-03T00:00:00-03:00',city:'Vancouver'},
+  {id:'r32_14',home:'1º Gr.J',away:'2º Gr.H',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'03 Jul',kickoff:'2026-07-03T19:00:00-03:00',city:'Miami'},
+  {id:'r32_15',home:'1º Gr.K',away:'3º D/E/I/J/L',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'03 Jul',kickoff:'2026-07-03T22:30:00-03:00',city:'Kansas City'},
+  {id:'r32_16',home:'2º Gr.D',away:'2º Gr.G',fH:'un',fA:'un',group:'32-avos',phase:'knockout',status:'upcoming',date:'03 Jul',kickoff:'2026-07-03T15:00:00-03:00',city:'Dallas'},
   // OITAVAS
-  {id:'r16_1',home:'Venc. J74',away:'Venc. J77',fH:'un',fA:'un',group:'Oitavas',phase:'knockout',status:'upcoming',date:'04 Jul',city:'Filadélfia'},
-  {id:'r16_2',home:'Venc. J73',away:'Venc. J75',fH:'un',fA:'un',group:'Oitavas',phase:'knockout',status:'upcoming',date:'04 Jul',city:'Houston'},
-  {id:'r16_3',home:'Venc. J76',away:'Venc. J78',fH:'un',fA:'un',group:'Oitavas',phase:'knockout',status:'upcoming',date:'05 Jul',city:'Nova York/NJ'},
-  {id:'r16_4',home:'Venc. J79',away:'Venc. J80',fH:'un',fA:'un',group:'Oitavas',phase:'knockout',status:'upcoming',date:'05 Jul',city:'Cidade do México'},
-  {id:'r16_5',home:'Venc. J83',away:'Venc. J84',fH:'un',fA:'un',group:'Oitavas',phase:'knockout',status:'upcoming',date:'06 Jul',city:'Dallas'},
-  {id:'r16_6',home:'Venc. J81',away:'Venc. J82',fH:'un',fA:'un',group:'Oitavas',phase:'knockout',status:'upcoming',date:'06 Jul',city:'Seattle'},
-  {id:'r16_7',home:'Venc. J86',away:'Venc. J88',fH:'un',fA:'un',group:'Oitavas',phase:'knockout',status:'upcoming',date:'07 Jul',city:'Atlanta'},
-  {id:'r16_8',home:'Venc. J85',away:'Venc. J87',fH:'un',fA:'un',group:'Oitavas',phase:'knockout',status:'upcoming',date:'07 Jul',city:'Vancouver'},
+  {id:'r16_1',home:'Venc. J74',away:'Venc. J77',fH:'un',fA:'un',group:'Oitavas',phase:'knockout',status:'upcoming',date:'04 Jul',kickoff:'2026-07-04T18:00:00-03:00',city:'Filadélfia'},
+  {id:'r16_2',home:'Venc. J73',away:'Venc. J75',fH:'un',fA:'un',group:'Oitavas',phase:'knockout',status:'upcoming',date:'04 Jul',kickoff:'2026-07-04T14:00:00-03:00',city:'Houston'},
+  {id:'r16_3',home:'Venc. J76',away:'Venc. J78',fH:'un',fA:'un',group:'Oitavas',phase:'knockout',status:'upcoming',date:'05 Jul',kickoff:'2026-07-05T17:00:00-03:00',city:'Nova York/NJ'},
+  {id:'r16_4',home:'Venc. J79',away:'Venc. J80',fH:'un',fA:'un',group:'Oitavas',phase:'knockout',status:'upcoming',date:'05 Jul',kickoff:'2026-07-05T21:00:00-03:00',city:'Cidade do México'},
+  {id:'r16_5',home:'Venc. J83',away:'Venc. J84',fH:'un',fA:'un',group:'Oitavas',phase:'knockout',status:'upcoming',date:'06 Jul',kickoff:'2026-07-06T16:00:00-03:00',city:'Dallas'},
+  {id:'r16_6',home:'Venc. J81',away:'Venc. J82',fH:'un',fA:'un',group:'Oitavas',phase:'knockout',status:'upcoming',date:'06 Jul',kickoff:'2026-07-06T21:00:00-03:00',city:'Seattle'},
+  {id:'r16_7',home:'Venc. J86',away:'Venc. J88',fH:'un',fA:'un',group:'Oitavas',phase:'knockout',status:'upcoming',date:'07 Jul',kickoff:'2026-07-07T13:00:00-03:00',city:'Atlanta'},
+  {id:'r16_8',home:'Venc. J85',away:'Venc. J87',fH:'un',fA:'un',group:'Oitavas',phase:'knockout',status:'upcoming',date:'07 Jul',kickoff:'2026-07-07T17:00:00-03:00',city:'Vancouver'},
   // QUARTAS
-  {id:'qf_1',home:'Venc. O1',away:'Venc. O2',fH:'un',fA:'un',group:'Quartas',phase:'knockout',status:'upcoming',date:'09 Jul',city:'Boston'},
-  {id:'qf_2',home:'Venc. O5',away:'Venc. O6',fH:'un',fA:'un',group:'Quartas',phase:'knockout',status:'upcoming',date:'10 Jul',city:'Los Angeles'},
-  {id:'qf_3',home:'Venc. O3',away:'Venc. O4',fH:'un',fA:'un',group:'Quartas',phase:'knockout',status:'upcoming',date:'12 Jul',city:'Miami'},
-  {id:'qf_4',home:'Venc. O7',away:'Venc. O8',fH:'un',fA:'un',group:'Quartas',phase:'knockout',status:'upcoming',date:'12 Jul',city:'Kansas City'},
+  {id:'qf_1',home:'Venc. O1',away:'Venc. O2',fH:'un',fA:'un',group:'Quartas',phase:'knockout',status:'upcoming',date:'09 Jul',kickoff:'2026-07-09T17:00:00-03:00',city:'Boston'},
+  {id:'qf_2',home:'Venc. O5',away:'Venc. O6',fH:'un',fA:'un',group:'Quartas',phase:'knockout',status:'upcoming',date:'10 Jul',kickoff:'2026-07-10T16:00:00-03:00',city:'Los Angeles'},
+  {id:'qf_3',home:'Venc. O3',away:'Venc. O4',fH:'un',fA:'un',group:'Quartas',phase:'knockout',status:'upcoming',date:'11 Jul',kickoff:'2026-07-11T18:00:00-03:00',city:'Miami'},
+  {id:'qf_4',home:'Venc. O7',away:'Venc. O8',fH:'un',fA:'un',group:'Quartas',phase:'knockout',status:'upcoming',date:'11 Jul',kickoff:'2026-07-11T22:00:00-03:00',city:'Kansas City'},
   // SEMIFINAIS
-  {id:'sf_1',home:'Venc. QF1',away:'Venc. QF2',fH:'un',fA:'un',group:'Semifinais',phase:'knockout',status:'upcoming',date:'14 Jul',city:'Dallas'},
-  {id:'sf_2',home:'Venc. QF3',away:'Venc. QF4',fH:'un',fA:'un',group:'Semifinais',phase:'knockout',status:'upcoming',date:'15 Jul',city:'Atlanta'},
+  {id:'sf_1',home:'Venc. QF1',away:'Venc. QF2',fH:'un',fA:'un',group:'Semifinais',phase:'knockout',status:'upcoming',date:'14 Jul',kickoff:'2026-07-14T16:00:00-03:00',city:'Dallas'},
+  {id:'sf_2',home:'Venc. QF3',away:'Venc. QF4',fH:'un',fA:'un',group:'Semifinais',phase:'knockout',status:'upcoming',date:'15 Jul',kickoff:'2026-07-15T16:00:00-03:00',city:'Atlanta'},
   // 3º LUGAR
-  {id:'third',home:'Perd. SF1',away:'Perd. SF2',fH:'un',fA:'un',group:'3º Lugar',phase:'knockout',status:'upcoming',date:'18 Jul',city:'Miami'},
+  {id:'third',home:'Perd. SF1',away:'Perd. SF2',fH:'un',fA:'un',group:'3º Lugar',phase:'knockout',status:'upcoming',date:'18 Jul',kickoff:'2026-07-18T18:00:00-03:00',city:'Miami'},
   // FINAL
-  {id:'final',home:'Venc. SF1',away:'Venc. SF2',fH:'un',fA:'un',group:'Final',phase:'knockout',status:'upcoming',date:'19 Jul',city:'Nova York/NJ'},
+  {id:'final',home:'Venc. SF1',away:'Venc. SF2',fH:'un',fA:'un',group:'Final',phase:'knockout',status:'upcoming',date:'19 Jul',kickoff:'2026-07-19T16:00:00-03:00',city:'Nova York/NJ'},
 ];
 
 const EXTRA_QS = [
@@ -2614,6 +2618,7 @@ function startPolling() {
           if (prevUserData._qa  && !fbUserData._qa)  fbUserData._qa  = prevUserData._qa;
           if (prevUserData._fp  && !fbUserData._fp)  fbUserData._fp  = prevUserData._fp;
           if (prevUserData._fp3 && !fbUserData._fp3) fbUserData._fp3 = prevUserData._fp3;
+          if (prevUserData._dia && !fbUserData._dia) fbUserData._dia = prevUserData._dia;
 
           // Preservar _submitted se Firebase tem (nunca perder)
           if (s.palpites?.[state.user]?._submitted && !s.palpites?.[state.user]?._adminUnsubmitted) {
@@ -3404,6 +3409,190 @@ function dateKeyOf(d) {
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// PALPITE DO DIA (bolão paralelo) — 100% isolado do ranking principal.
+// Os palpites ficam em state.palpites[user]._dia[matchId] = {h,a,pen?}.
+// calcPts/calcBonusPts NUNCA leem _dia, então não há interferência.
+// ═══════════════════════════════════════════════════════════════════
+const DAILY_ADV_BONUS = { '32-avos': 4, 'Oitavas': 6, 'Quartas': 8, 'Semifinais': 12, 'Final': 20 }; // 3º Lugar: sem bônus
+
+// Jogos do mata-mata cujo kickoff é hoje, ordenados por horário
+function todayKOGames() {
+  const todayKey = dateKeyOf(new Date());
+  return MATCHES.filter(m => m.phase === 'knockout' && m.kickoff)
+    .filter(m => dateKeyOf(new Date(m.kickoff)) === todayKey)
+    .sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff));
+}
+
+// Trava do palpite do dia: começou (kickoff), está ao vivo, ou já tem resultado
+function dailyLocked(m) {
+  if (state.results[m.id]) return true;
+  if (state.results._live && state.results._live[m.id]) return true;
+  if (m.kickoff && Date.now() >= new Date(m.kickoff).getTime()) return true;
+  return false;
+}
+
+// Pontuação do bolão paralelo: 5/3 do placar + bônus de avanço por acertar o vencedor
+function calcDailyPts(userPalpites) {
+  let pts = 0, ac = 0, ex = 0, bonus = 0, games = 0;
+  const dia = (userPalpites && userPalpites._dia) || {};
+  MATCHES.filter(m => m.phase === 'knockout').forEach(m => {
+    const res = state.results[m.id]; if (!res) return;
+    const p = dia[m.id]; if (!p || p.h === undefined || p.a === undefined) return;
+    games++;
+    const rW = res.h > res.a ? 'H' : res.h < res.a ? 'A' : 'E';
+    const pW = p.h > p.a ? 'H' : p.h < p.a ? 'A' : 'E';
+    if (p.h === res.h && p.a === res.a) { pts += PTS_EXACT; ac++; ex++; }
+    else if (rW === pW) { pts += PTS_WINNER; ac++; }
+    // bônus de avanço: acertou o vencedor real (incluindo pênaltis)?
+    const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : res.pen === 'A' ? 'A' : null);
+    const predWin = p.h > p.a ? 'H' : p.a > p.h ? 'A' : (p.pen === 'H' ? 'H' : p.pen === 'A' ? 'A' : null);
+    if (realWin && predWin && realWin === predWin) { const b = DAILY_ADV_BONUS[m.group] || 0; pts += b; bonus += b; }
+  });
+  return { pts, ac, ex, bonus, games };
+}
+
+// ── Modal do Palpite do Dia ─────────────────────────────────────────
+var dailyDraftPen = {}, dailyGameNames = {};
+
+function openDailyModal() {
+  if (!state.user) { showToast('Entre para palpitar', true); return; }
+  const games = todayKOGames();
+  if (!games.length) { showToast('Sem jogos do mata-mata hoje', true); return; }
+  buildResolvedTeamsFromResults();
+  const mine = (state.palpites[state.user] && state.palpites[state.user]._dia) || {};
+  dailyDraftPen = {}; dailyGameNames = {};
+
+  let body = '', anyOpen = false;
+  const teamLine = (name, flag) => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;">${flagImg(flag)} ${name}</span>`;
+
+  games.forEach(m => {
+    const rtr = resolvedTeamsReal[m.id] || {};
+    const hName = (rtr.home && rtr.home.name) ? rtr.home.name : m.home;
+    const aName = (rtr.away && rtr.away.name) ? rtr.away.name : m.away;
+    const hFlag = (rtr.home && rtr.home.flag) ? rtr.home.flag : m.fH;
+    const aFlag = (rtr.away && rtr.away.flag) ? rtr.away.flag : m.fA;
+    dailyGameNames[m.id] = { h: hName, a: aName };
+    const kh = new Date(m.kickoff);
+    const hora = String(kh.getHours()).padStart(2, '0') + ':' + String(kh.getMinutes()).padStart(2, '0');
+    const locked = dailyLocked(m);
+    const bet = mine[m.id];
+    if (bet && bet.pen) dailyDraftPen[m.id] = bet.pen;
+    const hv = (bet && bet.h !== undefined) ? bet.h : '';
+    const av = (bet && bet.a !== undefined) ? bet.a : '';
+
+    if (locked) {
+      const res = state.results[m.id];
+      const live = state.results._live && state.results._live[m.id];
+      const st = res ? ('placar oficial ' + res.h + '×' + res.a) : (live ? '🔴 em andamento' : 'encerrado · ' + hora);
+      const betTxt = (bet && bet.h !== undefined) ? (bet.h + '×' + bet.a + (bet.pen ? ' · pên: ' + (bet.pen === 'H' ? hName : aName) : '')) : '— sem palpite —';
+      body += `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:10px 12px;margin-bottom:10px;opacity:0.7;">
+        <div>${teamLine(hName, hFlag)} <span style="color:var(--gray);">×</span> ${teamLine(aName, aFlag)}</div>
+        <div style="font-size:10px;color:var(--gray);margin-top:4px;">🔒 ${st}</div>
+        <div style="font-size:12px;color:var(--light);margin-top:3px;">Seu palpite: <b>${betTxt}</b></div>
+      </div>`;
+    } else {
+      anyOpen = true;
+      const drawNow = hv !== '' && av !== '' && +hv === +av;
+      const inp = (sfx, val) => `<input id="dia_${m.id}_${sfx}" type="number" min="0" inputmode="numeric" value="${val}" oninput="dailyOnInput('${m.id}')" style="width:38px;height:38px;text-align:center;font-size:16px;font-weight:700;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:var(--navy2);color:var(--light);">`;
+      body += `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(126,184,245,0.25);border-radius:10px;padding:10px 12px;margin-bottom:10px;">
+        <div style="font-size:10px;color:#7eb8f5;font-weight:700;margin-bottom:6px;">⏰ palpite até ${hora}</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;">
+          <div style="flex:1;text-align:right;">${teamLine(hName, hFlag)}</div>
+          ${inp('h', hv)}<span style="color:var(--gray);">×</span>${inp('a', av)}
+          <div style="flex:1;text-align:left;">${teamLine(aName, aFlag)}</div>
+        </div>
+        <div id="diapen_${m.id}" class="penalty-selector" style="display:${drawNow ? 'flex' : 'none'};margin-top:8px;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span class="penalty-label">🥅 Pênaltis:</span>
+          <button id="diapenbtn_${m.id}_H" class="penalty-btn${dailyDraftPen[m.id] === 'H' ? ' selected' : ''}" onclick="dailySetPen('${m.id}','H')">${hName}</button>
+          <button id="diapenbtn_${m.id}_A" class="penalty-btn${dailyDraftPen[m.id] === 'A' ? ' selected' : ''}" onclick="dailySetPen('${m.id}','A')">${aName}</button>
+        </div>
+      </div>`;
+    }
+  });
+
+  const overlay = document.createElement('div');
+  overlay.id = 'daily-modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.8);display:flex;align-items:flex-end;justify-content:center;';
+  overlay.innerHTML = `
+    <div style="background:var(--card);border-radius:18px 18px 0 0;padding:18px 16px calc(18px + var(--safe-bot));max-width:480px;width:100%;max-height:85vh;overflow-y:auto;border-top:2px solid #7eb8f5;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:900;color:#7eb8f5;">🎯 PALPITE DO DIA</div>
+        <button onclick="closeDailyModal()" style="background:none;border:none;color:var(--gray);font-size:24px;cursor:pointer;line-height:1;">×</button>
+      </div>
+      <p style="font-size:11px;color:var(--gray);margin-bottom:14px;line-height:1.5;">Bolão paralelo, sem relação com o ranking principal. Vale até o início de cada jogo. Empate exige escolher o vencedor nos pênaltis.</p>
+      ${body}
+      ${anyOpen ? `<button onclick="saveDailyBet()" style="width:100%;padding:13px;border:none;border-radius:10px;background:linear-gradient(90deg,#7eb8f5,#5a9be8);color:#0a1628;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;letter-spacing:0.5px;cursor:pointer;margin-top:4px;">SALVAR PALPITE DO DIA</button>` : '<div style="text-align:center;font-size:12px;color:var(--gray);padding:6px 0;">Todos os jogos de hoje já começaram.</div>'}
+    </div>`;
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeDailyModal(); });
+  document.body.appendChild(overlay);
+}
+
+function closeDailyModal() { const o = document.getElementById('daily-modal-overlay'); if (o) o.remove(); }
+
+function dailyOnInput(mid) {
+  const hi = document.getElementById('dia_' + mid + '_h'), ai = document.getElementById('dia_' + mid + '_a');
+  if (!hi || !ai) return;
+  const draw = hi.value !== '' && ai.value !== '' && +hi.value === +ai.value;
+  const penRow = document.getElementById('diapen_' + mid);
+  if (penRow) penRow.style.display = draw ? 'flex' : 'none';
+  if (!draw) {
+    delete dailyDraftPen[mid];
+    const bh = document.getElementById('diapenbtn_' + mid + '_H'), ba = document.getElementById('diapenbtn_' + mid + '_A');
+    if (bh) bh.classList.remove('selected'); if (ba) ba.classList.remove('selected');
+  }
+}
+
+function dailySetPen(mid, side) {
+  dailyDraftPen[mid] = side;
+  const bh = document.getElementById('diapenbtn_' + mid + '_H'), ba = document.getElementById('diapenbtn_' + mid + '_A');
+  if (bh) bh.classList.toggle('selected', side === 'H');
+  if (ba) ba.classList.toggle('selected', side === 'A');
+}
+
+async function saveDailyBet() {
+  if (!state.user) return;
+  const games = todayKOGames().filter(m => !dailyLocked(m));
+
+  // 1) Coletar e validar SÓ os jogos que o usuário acabou de editar agora
+  const edits = {};
+  for (const m of games) {
+    const hi = document.getElementById('dia_' + m.id + '_h'), ai = document.getElementById('dia_' + m.id + '_a');
+    if (!hi || !ai) continue;
+    const h = hi.value, a = ai.value;
+    if (h === '' && a === '') continue; // sem palpite para este jogo
+    const nm = dailyGameNames[m.id] || {};
+    if (h === '' || a === '') { showToast('Preencha os dois placares de ' + (nm.h || '') + ' × ' + (nm.a || ''), true); return; }
+    const entry = { h: +h, a: +a };
+    if (+h === +a) {
+      if (!dailyDraftPen[m.id]) { showToast('Empate em ' + (nm.h || '') + ' × ' + (nm.a || '') + ': escolha o vencedor nos pênaltis', true); return; }
+      entry.pen = dailyDraftPen[m.id];
+    }
+    edits[m.id] = entry;
+  }
+
+  // 2) MERGE-BEFORE-WRITE no nível do _dia (defesa contra concorrência):
+  //    buscar a versão mais recente do Firebase e mesclar. O Firebase manda
+  //    nos jogos antigos (inclui palpites feitos em outro dispositivo/aba);
+  //    apenas os jogos editados AGORA têm prioridade local. Assim o palpite
+  //    de um jogo nunca apaga o de outro jogo gravado em paralelo.
+  let fresh = null;
+  try { fresh = await fbGet(); } catch (e) { fresh = null; }
+  const fbDia = (fresh && fresh.palpites && fresh.palpites[state.user] && fresh.palpites[state.user]._dia) || {};
+  const localDia = (state.palpites[state.user] && state.palpites[state.user]._dia) || {};
+  // base: tudo que o local conhece, com o Firebase sobrepondo (mais recente p/ jogos antigos)
+  const merged = Object.assign({}, localDia, fbDia);
+  // edições atuais vencem (intenção do usuário neste momento)
+  Object.keys(edits).forEach(id => { merged[id] = edits[id]; });
+
+  if (!state.palpites[state.user]) state.palpites[state.user] = {};
+  state.palpites[state.user]._dia = merged;
+
+  try { await saveGlobal(); showToast('Palpite do dia salvo! ✓'); }
+  catch (e) { showToast('Erro ao salvar, tente de novo', true); return; }
+  closeDailyModal();
+}
+
 // Card "Jogos de hoje" (ou próximos, se não houver hoje)
 function renderTodayMatchesCard() {
   const today = new Date();
@@ -3459,6 +3648,7 @@ function renderTodayMatchesCard() {
   return `<div class="card" style="margin-bottom:14px;border:1px solid rgba(245,197,24,0.25);background:linear-gradient(180deg,rgba(245,197,24,0.06),rgba(245,197,24,0.02));">
     <div style="padding:12px 16px 4px;font-family:'Barlow Condensed';font-weight:900;font-size:15px;letter-spacing:0.5px;color:var(--gold);">${title}${dateLabel}</div>
     <div style="padding:2px 16px 12px;">${rows}</div>
+    ${(isToday && state.user && list.some(x => x.m.phase === 'knockout')) ? `<div style="padding:0 16px 14px;"><button onclick="openDailyModal()" style="width:100%;padding:11px;border:none;border-radius:10px;background:linear-gradient(90deg,#7eb8f5,#5a9be8);color:#0a1628;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:15px;letter-spacing:0.5px;cursor:pointer;">🎯 DÊ O SEU PALPITE — PALPITE DO DIA</button><div style="font-size:10px;color:var(--gray);text-align:center;margin-top:5px;">Bolão paralelo · vale até o início de cada jogo</div></div>` : ''}
   </div>`;
 }
 
@@ -3935,7 +4125,8 @@ async function syncDraft() {
     _savedAt: state.palpites[state.user]._savedAt,
     _qa: state.palpites[state.user]._qa,
     _fp: state.palpites[state.user]._fp,
-    _fp3: state.palpites[state.user]._fp3
+    _fp3: state.palpites[state.user]._fp3,
+    _dia: state.palpites[state.user]._dia
   };
   // Aplicar temp sobre o state existente (não apagar tudo)
   Object.assign(state.palpites[state.user], temp);
@@ -3943,6 +4134,7 @@ async function syncDraft() {
   if (preserved2._qa) state.palpites[state.user]._qa = preserved2._qa;
   if (preserved2._fp) state.palpites[state.user]._fp = preserved2._fp;
   if (preserved2._fp3) state.palpites[state.user]._fp3 = preserved2._fp3;
+  if (preserved2._dia) state.palpites[state.user]._dia = preserved2._dia;
   // Save local draft too
   localStorage.setItem('bolao_draft_' + state.user, JSON.stringify(state.palpites[state.user]));
   localStorage.setItem('bolao_draft_time_' + state.user, new Date().toISOString());
@@ -4015,6 +4207,7 @@ async function saveDraft() {
   if (existingMeta._fp) draft._fp = existingMeta._fp;
   if (existingMeta._fp3) draft._fp3 = existingMeta._fp3;
   if (existingMeta._submitted) draft._submitted = existingMeta._submitted;
+  if (existingMeta._dia) draft._dia = existingMeta._dia;
 
   // Update state
   if (!state.palpites[state.user]) state.palpites[state.user] = {};
@@ -4134,8 +4327,8 @@ function loadDraft() {
       }
     });
 
-    // Metadados: _fp, _fp3, _qa do draft local se Firebase não tem
-    ['_fp', '_fp3', '_qa'].forEach(function(k) {
+    // Metadados: _fp, _fp3, _qa, _dia do draft local se Firebase não tem
+    ['_fp', '_fp3', '_qa', '_dia'].forEach(function(k) {
       if (local[k] && !fb[k]) { fb[k] = local[k]; changed = true; }
     });
     // Também verificar bolao_backup para _qa (caso saveGlobal tenha falhado silenciosamente)
@@ -4424,8 +4617,59 @@ function rankTab(tab, btn) {
   document.querySelectorAll('#ranking-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('ranking-atual').style.display=tab==='atual'?'block':'none';
+  document.getElementById('ranking-dia').style.display=tab==='dia'?'block':'none';
   document.getElementById('ranking-evolucao').style.display=tab==='evolucao'?'block':'none';
   if (tab==='evolucao') renderEvolucao();
+  if (tab==='dia') renderDailyRanking();
+}
+
+// Ranking do bolão paralelo "Palpite do Dia" (isolado, via calcDailyPts)
+function renderDailyRanking() {
+  const el = document.getElementById('ranking-dia-content');
+  if (!el) return;
+  const names = Object.keys(state.users).filter(u => {
+    const usr = state.users[u];
+    return usr && !usr._deleted && usr.status !== 'pending' && usr.status !== 'rejected';
+  });
+  const scores = names.map(u => Object.assign({ u }, calcDailyPts(state.palpites[u] || {})))
+    .filter(s => s.games > 0)
+    .sort((a, b) => b.pts - a.pts);
+
+  const totalGames = MATCHES.filter(m => m.phase === 'knockout' && state.results[m.id]).length;
+
+  let head = `<div style="background:linear-gradient(180deg,rgba(126,184,245,0.08),rgba(126,184,245,0.02));border:1px solid rgba(126,184,245,0.2);border-radius:12px;padding:12px 14px;margin-bottom:12px;">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:900;color:#7eb8f5;">🎯 Palpite do Dia</div>
+    <div style="font-size:11px;color:var(--gray);line-height:1.5;margin-top:3px;">Bolão paralelo, totalmente separado do principal. Placar exato +5, vencedor +3, e o mesmo bônus de classificação/campeã por acertar quem avança. ${totalGames} jogo(s) do mata-mata já apurado(s).</div>
+  </div>`;
+
+  if (!scores.length) {
+    el.innerHTML = head + '<div class="empty" style="padding:30px 0;"><div class="empty-icon">🎯</div><p>Ainda ninguém pontuou no Palpite do Dia. As pontuações aparecem quando os jogos palpitados forem encerrados.</p></div>';
+    return;
+  }
+
+  // Posições compartilhadas (empate = mesma posição)
+  let lastPts = null, lastRank = 0;
+  scores.forEach((s, i) => {
+    if (lastPts === null || s.pts !== lastPts) { s._rank = i + 1; lastRank = s._rank; lastPts = s.pts; }
+    else s._rank = lastRank;
+  });
+
+  const rows = scores.map(s => {
+    const rank = s._rank;
+    const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '#' + rank;
+    const cls = rank === 1 ? 'color:#FFD700' : rank === 2 ? 'color:#C0C0C0' : rank === 3 ? 'color:#CD7F32' : 'color:var(--gray)';
+    return `<div class="rank-row">
+      <span class="rank-num" style="${cls}">${medal}</span>
+      ${avatarHtml(state.users[s.u], s.u)}
+      <div style="flex:1;">
+        <div class="rank-name">${uName(s.u)}</div>
+        <div class="rank-sub">${s.ac} acertos · ${s.ex} exatos · ${s.games} jogos${s.bonus ? ' · bônus ' + s.bonus : ''}</div>
+      </div>
+      <div><div class="pts-big" style="color:#7eb8f5;">${s.pts}</div><div class="pts-small">pontos</div></div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = head + '<div class="card"><div class="card-body">' + rows + '</div></div>';
 }
 function renderEvolucao() {
   const snaps=state.snapshots, canvas=document.getElementById('evo-chart');
