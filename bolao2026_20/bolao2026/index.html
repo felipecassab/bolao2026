@@ -4797,11 +4797,13 @@ function renderStats() {
   }).filter(d => d.home || d.away);
 
   // ── Contagens por seleção (com lista de apelidos) ───────────────
+  // Classificadas: QUEM classificou (cravou) cada seleção. Ordem crescente
+  // pela quantidade, mantendo as mais surpreendentes (poucos cravaram) no topo.
   const classifStats = [...realQualSet].map(name => {
-    const us = bettorR32.filter(b => !b.set.has(name)).map(b => uName(b.u));
+    const us = bettorR32.filter(b => b.set.has(name)).map(b => uName(b.u));
     us.sort((a, b) => a.localeCompare(b, 'pt-BR'));
     return { name, flag: teamFlag[name] || 'un', count: us.length, users: us, isThird: realThird8.has(name) };
-  }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'pt-BR'));
+  }).sort((a, b) => a.count - b.count || a.name.localeCompare(b.name, 'pt-BR'));
 
   const elimStats = realElim.map(name => {
     const us = bettorR32.filter(b => b.set.has(name)).map(b => uName(b.u));
@@ -4932,7 +4934,7 @@ function renderStats() {
     // kind: 'classif' (verde, "não avançaram") | 'elim' (vermelho, "avançaram")
     const accent = kind === 'classif' ? (s.isThird ? 'var(--gold)' : 'var(--green)') : 'var(--red)';
     const nameColor = kind === 'classif' ? 'var(--green)' : 'var(--red)';
-    const label = kind === 'classif' ? 'não avançaram' : 'avançaram';
+    const label = kind === 'classif' ? 'classificaram' : 'avançaram';
     const bid = 'statchip_' + (kind) + '_' + (chipSeq++);
     const namesHtml = s.users.length
       ? s.users.map(n => `<div style="font-size:11px;color:var(--light);padding:2px 0;border-top:1px solid rgba(255,255,255,0.05);">${n}</div>`).join('')
@@ -5029,9 +5031,9 @@ function renderStats() {
     html += `<div style="margin-top:18px;display:flex;align-items:center;gap:8px;margin-bottom:4px;">
       <span style="width:8px;height:8px;border-radius:50%;background:var(--green);"></span>
       <span style="font-size:14px;font-weight:800;color:var(--green);letter-spacing:0.5px;">CLASSIFICADAS</span>
-      <span style="font-size:11px;color:var(--gray);">— quantos NÃO avançaram</span>
+      <span style="font-size:11px;color:var(--gray);">— quem classificou</span>
     </div>`;
-    html += `<p style="font-size:11px;color:var(--gray);margin-bottom:10px;">Topo = as classificações mais surpreendentes (poucos cravaram).</p>`;
+    html += `<p style="font-size:11px;color:var(--gray);margin-bottom:10px;">Topo = as classificações mais surpreendentes (poucos cravaram). Toque para ver quem acertou.</p>`;
     html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">${classifStats.map(s => teamChip(s, 'classif')).join('')}</div>`;
   }
 
