@@ -508,7 +508,10 @@ body{display:flex;flex-direction:column}
       <div class="card"><div class="card-body" id="admin-extras" style="display:none;"></div></div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px;">
         <p style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:1px;">PARTICIPANTES</p>
-        <button onclick="exportPalpites()" style="padding:6px 14px;background:rgba(0,200,83,0.12);color:var(--green);border:1px solid rgba(0,200,83,0.3);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📊 Exportar Excel</button>
+        <div style="display:flex;gap:8px;">
+          <button onclick="exportMultiverso()" style="padding:6px 14px;background:rgba(126,184,245,0.12);color:#7eb8f5;border:1px solid rgba(126,184,245,0.3);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">🌌 Multiverso</button>
+          <button onclick="exportPalpites()" style="padding:6px 14px;background:rgba(0,200,83,0.12);color:var(--green);border:1px solid rgba(0,200,83,0.3);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📊 Exportar Excel</button>
+        </div>
       </div>
       <div class="card"><div class="card-body" id="admin-participants"></div></div>
     </div>
@@ -7235,6 +7238,209 @@ function exportPalpites() {
   const date = new Date().toLocaleDateString('pt-BR').replace(/\//g,'-');
   XLSX.writeFile(wb, 'Bolao2026_Palpites_' + date + '.xlsx');
   showToast('Excel exportado com sucesso! ✓');
+}
+
+// ── Export "Multiverso do Bolão" — base normalizada do mata-mata ─────
+function exportMultiverso() {
+  if (!adminAuthed) { showToast('Acesso negado', true); return; }
+  if (typeof XLSX === 'undefined') { showToast('Aguarde, carregando biblioteca...', true); return; }
+
+  buildResolvedTeamsFromResults(); // resolvedTeamsReal atualizado
+
+  // Participantes aprovados, ordenados por apelido
+  const users = Object.entries(state.users)
+    .filter(([, u]) => u.status === 'approved' && !u._deleted)
+    .sort((a, b) => (a[1].apelido || a[1].nome || '').toLowerCase().localeCompare((b[1].apelido || b[1].nome || '').toLowerCase(), 'pt-BR'));
+  const nUsers = users.length;
+
+  // Jogos do mata-mata, ordenados pelo número oficial
+  const koMatches = MATCHES.filter(m => m.phase === 'knockout')
+    .slice().sort((a, b) => (MATCH_NUMBERS[a.id] || 999) - (MATCH_NUMBERS[b.id] || 999));
+  const phaseOrder = { '32-avos': 1, 'Oitavas': 2, 'Quartas': 3, 'Semifinais': 4, '3º Lugar': 5, 'Final': 6 };
+
+  const pct = (num, den) => den > 0 ? (Math.round(num / den * 1000) / 10).toFixed(1).replace('.', ',') + '%' : '0,0%';
+
+  // Pré-resolver o bracket de cada participante (nomes por slot)
+  const userResolved = {};
+  users.forEach(([wpp]) => {
+    buildResolvedTeams(state.palpites[wpp] || {}, null, false);
+    const snap = {};
+    koMatches.forEach(m => {
+      const rt = resolvedTeams[m.id];
+      if (rt) snap[m.id] = { a: rt.home && rt.home.name ? rt.home.name : '', b: rt.away && rt.away.name ? rt.away.name : '' };
+    });
+    userResolved[wpp] = snap;
+  });
+  buildResolvedTeams(state.palpites[state.user] || {}); // restaura usuário atual
+
+  const koWinner = (p, aName, bName) => {
+    if (!p || p.h === undefined || p.a === undefined) return { res: '', venc: '' };
+    if (+p.h > +p.a) return { res: (aName || 'Seleção A') + ' vence', venc: aName || '' };
+    if (+p.a > +p.h) return { res: (bName || 'Seleção B') + ' vence', venc: bName || '' };
+    if (p.pen === 'H') return { res: 'Empate (pênaltis: ' + (aName || 'Seleção A') + ')', venc: aName || '' };
+    if (p.pen === 'A') return { res: 'Empate (pênaltis: ' + (bName || 'Seleção B') + ')', venc: bName || '' };
+    return { res: 'Empate', venc: '' };
+  };
+
+  // Contadores de auditoria
+  let totalExported = 0, vazios = 0, naoResolvidos = 0;
+  const gameFill = {};
+  const universos = {}; // mid -> { confronto -> {aName,bName,users:[],placares:{}} }
+
+  // ── Sheet 1: PALPITES_CONFRONTOS_LONG ───────────────────────────
+  const longRows = [['Jogo_Numero','Jogo_Codigo','Fase','Ordem_Fase','Slot_Jogo','Participante','Apelido','Selecao_A_Prevista','Selecao_B_Prevista','Confronto_Previsto','Gols_A_Previsto','Gols_B_Previsto','Placar_Previsto','Resultado_Previsto','Vencedor_Previsto','Texto_Original_Confronto','Texto_Original_Placar','Observacoes_Leitura']];
+
+  koMatches.forEach(m => {
+    const jn = MATCH_NUMBERS[m.id] || '';
+    const jc = jn ? 'J' + jn : m.id;
+    const slot = m.home + ' x ' + m.away;
+    gameFill[m.id] = 0;
+    universos[m.id] = {};
+    users.forEach(([wpp, u]) => {
+      const nome = u.nome || u.apelido || wpp;
+      const apelido = u.apelido || u.nome || wpp;
+      const rt = userResolved[wpp][m.id] || {};
+      const aName = rt.a || '', bName = rt.b || '';
+      const p = state.palpites[wpp] && state.palpites[wpp][m.id];
+      const hasScore = p && p.h !== undefined && p.a !== undefined;
+      const obs = [];
+      if (!hasScore) { vazios++; }
+      else { totalExported++; gameFill[m.id]++; }
+      if (hasScore && (!aName || !bName)) { naoResolvidos++; obs.push('Confronto não resolvido (bracket do participante incompleto)'); }
+      if (hasScore && +p.h === +p.a && !p.pen) obs.push('Empate sem critério de pênalti definido');
+      const confronto = (aName && bName) ? (aName + ' x ' + bName) : '';
+      const placar = hasScore ? (p.h + '-' + p.a) : '';
+      const w = koWinner(p, aName, bName);
+      let txtPlacar = '';
+      if (hasScore) { txtPlacar = p.h + ':' + p.a; if (p.pen) txtPlacar += ' (pen: ' + (p.pen === 'H' ? (aName || m.home) : (bName || m.away)) + ')'; }
+
+      longRows.push([jn, jc, m.group, phaseOrder[m.group] || '', slot, nome, apelido, aName, bName, confronto,
+        hasScore ? +p.h : '', hasScore ? +p.a : '', placar, hasScore ? w.res : '', hasScore ? w.venc : '', slot, txtPlacar, obs.join(' | ')]);
+
+      if (confronto && hasScore) {
+        if (!universos[m.id][confronto]) universos[m.id][confronto] = { aName, bName, users: [], placares: {} };
+        const U = universos[m.id][confronto];
+        U.users.push({ nome, apelido });
+        if (!U.placares[placar]) U.placares[placar] = { count: 0, users: [], res: w.res };
+        U.placares[placar].count++;
+        U.placares[placar].users.push({ nome, apelido });
+      }
+    });
+  });
+
+  // ── Sheet 2: UNIVERSOS_AGREGADOS ────────────────────────────────
+  const uniRows = [['Jogo_Numero','Jogo_Codigo','Fase','Confronto_Previsto','Selecao_A_Prevista','Selecao_B_Prevista','Quantidade_Palpites','Percentual','Participantes','Apelidos','Placares_Do_Universo']];
+  let distinctUniversos = 0;
+  koMatches.forEach(m => {
+    const jn = MATCH_NUMBERS[m.id] || '', jc = jn ? 'J' + jn : m.id;
+    const games = universos[m.id];
+    const total = Object.values(games).reduce((acc, U) => acc + U.users.length, 0);
+    Object.entries(games).sort((a, b) => b[1].users.length - a[1].users.length).forEach(([conf, U]) => {
+      distinctUniversos++;
+      const plList = Object.entries(U.placares).sort((a, b) => b[1].count - a[1].count)
+        .map(([pl, o]) => pl + ': ' + pct(o.count, U.users.length) + ' (' + o.count + ')').join('; ');
+      uniRows.push([jn, jc, m.group, conf, U.aName, U.bName, U.users.length, pct(U.users.length, total),
+        U.users.map(x => x.nome).join(', '), U.users.map(x => x.apelido).join(', '), plList]);
+    });
+  });
+
+  // ── Sheet 3: PLACARES_POR_UNIVERSO ──────────────────────────────
+  const plcRows = [['Jogo_Numero','Jogo_Codigo','Fase','Confronto_Previsto','Placar_Previsto','Resultado_Previsto','Quantidade_Palpites','Percentual_No_Jogo','Percentual_No_Universo','Participantes','Apelidos']];
+  koMatches.forEach(m => {
+    const jn = MATCH_NUMBERS[m.id] || '', jc = jn ? 'J' + jn : m.id;
+    const games = universos[m.id];
+    const totalGame = Object.values(games).reduce((acc, U) => acc + U.users.length, 0);
+    Object.entries(games).forEach(([conf, U]) => {
+      Object.entries(U.placares).sort((a, b) => b[1].count - a[1].count).forEach(([pl, o]) => {
+        plcRows.push([jn, jc, m.group, conf, pl, o.res, o.count, pct(o.count, totalGame), pct(o.count, U.users.length),
+          o.users.map(x => x.nome).join(', '), o.users.map(x => x.apelido).join(', ')]);
+      });
+    });
+  });
+
+  // ── Sheet 4: MAPA_JOGOS_FIXOS ───────────────────────────────────
+  const mapaRows = [['Jogo_Numero','Jogo_Codigo','Fase','Slot_A','Slot_B','Selecao_A_Real','Selecao_B_Real','Observacao']];
+  koMatches.forEach(m => {
+    const jn = MATCH_NUMBERS[m.id] || '', jc = jn ? 'J' + jn : m.id;
+    const rtr = resolvedTeamsReal[m.id] || {};
+    const aReal = rtr.home && rtr.home.name ? rtr.home.name : '';
+    const bReal = rtr.away && rtr.away.name ? rtr.away.name : '';
+    const obs = (aReal && bReal) ? 'Confronto real confirmado' : (aReal || bReal) ? 'Parcialmente definido' : 'Ainda não definido';
+    mapaRows.push([jn, jc, m.group, m.home, m.away, aReal, bReal, obs]);
+  });
+
+  // ── Sheet 5: AUDITORIA ──────────────────────────────────────────
+  const totalEsperado = nUsers * koMatches.length;
+  const jogosSemPalpite = koMatches.filter(m => gameFill[m.id] === 0).length;
+  const participantesSemPalpite = users.filter(([wpp]) => !koMatches.some(m => { const p = state.palpites[wpp] && state.palpites[wpp][m.id]; return p && p.h !== undefined; })).length;
+  const somaFecha = koMatches.every(m => gameFill[m.id] <= nUsers);
+
+  const auditRows = [['Item','Valor','Status','Observacao']];
+  const stOk = 'OK', stAt = 'Atenção';
+  auditRows.push(['Total de participantes', nUsers, stOk, 'Aprovados']);
+  auditRows.push(['Total de jogos do mata-mata', koMatches.length, stOk, 'J' + (MATCH_NUMBERS[koMatches[0].id] || '') + '–J' + (MATCH_NUMBERS[koMatches[koMatches.length - 1].id] || '')]);
+  auditRows.push(['Total esperado de palpites', totalEsperado, stOk, 'participantes × jogos']);
+  auditRows.push(['Total exportado de palpites', totalExported, totalExported === totalEsperado ? stOk : stAt, 'palpites efetivamente preenchidos']);
+  auditRows.push(['Jogos sem nenhum palpite', jogosSemPalpite, jogosSemPalpite === 0 ? stOk : stAt, '']);
+  auditRows.push(['Participantes sem nenhum palpite no mata-mata', participantesSemPalpite, participantesSemPalpite === 0 ? stOk : stAt, '']);
+  auditRows.push(['Vazios (célula participante×jogo sem palpite)', vazios, '', 'esperado = esperado − exportado']);
+  auditRows.push(['Ilegíveis', 0, stOk, 'Dados estruturados (numéricos) — não há texto livre']);
+  auditRows.push(['Confrontos ambíguos', 0, stOk, 'Confronto derivado do bracket — sem ambiguidade de leitura']);
+  auditRows.push(['Placares ambíguos', 0, stOk, 'Placar numérico — sem ambiguidade de leitura']);
+  auditRows.push(['Confrontos não resolvidos (placar sem times definidos)', naoResolvidos, naoResolvidos === 0 ? stOk : stAt, 'Participante não completou o bracket que define as seleções deste jogo']);
+  auditRows.push(['Soma por jogo fecha com total de participantes', somaFecha ? 'Sim' : 'Não', somaFecha ? stOk : stAt, 'Cada jogo ≤ ' + nUsers + ' palpites']);
+  auditRows.push(['', '', '', '']);
+  auditRows.push(['— CONFERÊNCIA POR JOGO —', '', '', '']);
+  koMatches.forEach(m => {
+    const jn = MATCH_NUMBERS[m.id] || '', jc = jn ? 'J' + jn : m.id;
+    const f = gameFill[m.id];
+    auditRows.push([jc + ' · ' + m.group, f + '/' + nUsers + ' palpites', f === nUsers ? stOk : stAt, f === nUsers ? 'Fecha com o total' : (nUsers - f) + ' sem palpite']);
+  });
+
+  // ── Montar workbook ─────────────────────────────────────────────
+  const wb = XLSX.utils.book_new();
+  const wsLong = XLSX.utils.aoa_to_sheet(longRows);
+  wsLong['!cols'] = [{wch:10},{wch:10},{wch:11},{wch:9},{wch:22},{wch:20},{wch:16},{wch:18},{wch:18},{wch:28},{wch:8},{wch:8},{wch:11},{wch:20},{wch:16},{wch:22},{wch:18},{wch:40}];
+  XLSX.utils.book_append_sheet(wb, wsLong, 'PALPITES_CONFRONTOS_LONG');
+  const wsUni = XLSX.utils.aoa_to_sheet(uniRows);
+  wsUni['!cols'] = [{wch:10},{wch:10},{wch:11},{wch:28},{wch:18},{wch:18},{wch:12},{wch:10},{wch:50},{wch:40},{wch:50}];
+  XLSX.utils.book_append_sheet(wb, wsUni, 'UNIVERSOS_AGREGADOS');
+  const wsPlc = XLSX.utils.aoa_to_sheet(plcRows);
+  wsPlc['!cols'] = [{wch:10},{wch:10},{wch:11},{wch:28},{wch:11},{wch:20},{wch:12},{wch:14},{wch:16},{wch:50},{wch:40}];
+  XLSX.utils.book_append_sheet(wb, wsPlc, 'PLACARES_POR_UNIVERSO');
+  const wsMapa = XLSX.utils.aoa_to_sheet(mapaRows);
+  wsMapa['!cols'] = [{wch:10},{wch:10},{wch:11},{wch:18},{wch:18},{wch:18},{wch:18},{wch:24}];
+  XLSX.utils.book_append_sheet(wb, wsMapa, 'MAPA_JOGOS_FIXOS');
+  const wsAud = XLSX.utils.aoa_to_sheet(auditRows);
+  wsAud['!cols'] = [{wch:48},{wch:18},{wch:10},{wch:40}];
+  XLSX.utils.book_append_sheet(wb, wsAud, 'AUDITORIA');
+
+  // ── Resumo antes de finalizar ───────────────────────────────────
+  const minN = MATCH_NUMBERS[koMatches[0].id] || '', maxN = MATCH_NUMBERS[koMatches[koMatches.length - 1].id] || '';
+  const resumo = 'RESUMO — Multiverso do Bolão (Mata-mata)\n\n'
+    + '• Participantes: ' + nUsers + '\n'
+    + '• Jogos do mata-mata: ' + koMatches.length + '\n'
+    + '• Palpites exportados: ' + totalExported + ' de ' + totalEsperado + ' esperados\n'
+    + '• Confrontos/universos distintos: ' + distinctUniversos + '\n'
+    + '• Vazios: ' + vazios + ' | Ilegíveis: 0 | Confrontos não resolvidos: ' + naoResolvidos + '\n'
+    + '• Numeração dos jogos preservada: J' + minN + '–J' + maxN + '\n\n'
+    + 'Baixar os arquivos (.xlsx + .csv)?';
+  if (!confirm(resumo)) return;
+
+  XLSX.writeFile(wb, 'Bolao2026_MataMata_Confrontos_Participantes_Normalizado.xlsx');
+
+  // CSV da aba LONG (separador ; e BOM para acentos no Excel pt-BR)
+  try {
+    const csv = '\ufeff' + XLSX.utils.sheet_to_csv(wsLong, { FS: ';' });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'Bolao2026_MataMata_PALPITES_CONFRONTOS_LONG.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) { /* CSV opcional */ }
+
+  showToast('Multiverso exportado! ✓');
 }
 
 const FIFA_THIRD_COMBINATIONS = {
