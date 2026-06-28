@@ -4745,6 +4745,57 @@ function renderStats() {
   }
   const bettorR32 = bettors.map(u => ({ u, set: predictedR32(state.palpites[u]) }));
 
+  // ── Destaque do dia: jogos do mata-mata de HOJE ─────────────────
+  // Para cada seleção em jogo hoje, quantos apostadores a avançaram p/ a
+  // próxima fase (= previram essa seleção vencendo a partida da fase atual).
+  const todayKey = dateKeyOf(new Date());
+  const nextPhaseLabel = { '32-avos':'as oitavas', 'Oitavas':'as quartas', 'Quartas':'as semifinais', 'Semifinais':'a final', 'Final':'o título' };
+  const todayKO = MATCHES.filter(m => m.phase === 'knockout' && nextPhaseLabel[m.group])
+    .map(m => { const d = parseMatchDate(m.date); return d && dateKeyOf(d) === todayKey ? m : null; })
+    .filter(Boolean);
+
+  // Pré-computa, por grupo de fase presente hoje, o conjunto de vencedores
+  // previstos por cada apostador (no bracket dele) — evita recomputar.
+  const winnersByPhase = {}; // phaseGroup -> [{u, set}]
+  [...new Set(todayKO.map(m => m.group))].forEach(pg => {
+    winnersByPhase[pg] = bettors.map(u => {
+      const p = state.palpites[u];
+      buildResolvedTeams(p, null, false);
+      const set = new Set();
+      MATCHES.filter(m => m.group === pg).forEach(m => {
+        const pp = p[m.id]; if (!pp || pp.h === undefined || pp.a === undefined) return;
+        const rt = resolvedTeams[m.id]; if (!rt) return;
+        let w = null;
+        if (+pp.h > +pp.a) w = rt.home; else if (+pp.a > +pp.h) w = rt.away;
+        else if (pp.pen === 'H') w = rt.home; else if (pp.pen === 'A') w = rt.away;
+        if (w && w.name) set.add(w.name);
+      });
+      return { u, set };
+    });
+  });
+  buildResolvedTeams(state.palpites[state.user] || {}); // restaura p/ usuário atual
+
+  // Monta dados de cada jogo de hoje
+  const dayMatches = todayKO.map(m => {
+    const rtr = resolvedTeamsReal[m.id] || {};
+    const wbp = winnersByPhase[m.group] || [];
+    const sideData = (side) => {
+      const t = rtr[side];
+      if (!t || !t.name) return null;
+      const us = wbp.filter(x => x.set.has(t.name)).map(x => uName(x.u)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      return { name: t.name, flag: t.flag || 'un', count: us.length, users: us };
+    };
+    return {
+      id: m.id,
+      nextLabel: nextPhaseLabel[m.group],
+      time: m.date.includes('·') ? m.date.split('·')[1].trim() : '',
+      res: state.results[m.id] || null,
+      live: !state.results[m.id] && state.results._live && state.results._live[m.id],
+      home: sideData('home'),
+      away: sideData('away'),
+    };
+  }).filter(d => d.home || d.away);
+
   // ── Contagens por seleção (com lista de apelidos) ───────────────
   const classifStats = [...realQualSet].map(name => {
     const us = bettorR32.filter(b => !b.set.has(name)).map(b => uName(b.u));
@@ -4874,6 +4925,47 @@ function renderStats() {
     ${counterCard(totalContas, 'Participantes')}
     ${counterCard(enviadas, 'Apostas enviadas')}
   </div>`;
+
+  // Destaque do dia (jogos do mata-mata de hoje)
+  if (dayMatches.length && nB > 0) {
+    html += `<div style="font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;margin:4px 0 8px;">📅 DESTAQUE DO DIA</div>`;
+    dayMatches.forEach((d, di) => {
+      let status;
+      if (d.res) status = `<span style="color:var(--light);font-weight:700;">${d.res.h} - ${d.res.a}</span>${d.res.pen ? ' <span style="font-size:10px;color:var(--gray);">(pen)</span>' : ''}`;
+      else if (d.live) status = `<span style="color:var(--red);font-weight:700;">🔴 AO VIVO</span>`;
+      else status = `<span style="color:var(--gray);">${d.time || 'hoje'}</span>`;
+
+      const sideChip = (s, side) => {
+        if (!s) return `<div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:10px 12px;opacity:0.5;font-size:12px;color:var(--gray);">a definir</div>`;
+        const bid = 'statday_' + di + '_' + side;
+        const namesHtml = s.users.length
+          ? s.users.map(n => `<div style="font-size:11px;color:var(--light);padding:2px 0;border-top:1px solid rgba(255,255,255,0.05);">${n}</div>`).join('')
+          : `<div style="font-size:11px;color:var(--gray);padding:2px 0;">— ninguém —</div>`;
+        const clickable = s.count > 0;
+        return `<div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-left:3px solid var(--gold);border-radius:10px;padding:10px 12px;${clickable ? 'cursor:pointer;' : ''}" ${clickable ? `onclick="toggleStatChip('${bid}',this)"` : ''}>
+          <div style="display:flex;align-items:center;gap:7px;">${flagImg(s.flag)}<span style="font-size:13px;font-weight:700;color:var(--light);">${s.name}</span></div>
+          <div style="display:flex;align-items:baseline;gap:5px;margin-top:6px;">
+            <span style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:#7eb8f5;">${s.count}</span>
+            <span style="font-size:11px;color:var(--gray);">avançaram</span>
+            ${clickable ? `<span class="statchip-chevron" style="margin-left:auto;color:var(--gray);font-size:11px;transition:transform 0.2s;">▼</span>` : ''}
+          </div>
+          <div id="${bid}" style="display:none;margin-top:8px;max-height:200px;overflow-y:auto;">${namesHtml}</div>
+        </div>`;
+      };
+
+      html += `<div style="background:rgba(245,197,24,0.04);border:1px solid rgba(245,197,24,0.25);border-radius:12px;padding:12px;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+          <div style="font-size:14px;font-weight:800;color:var(--light);">${d.home ? d.home.name : '?'} <span style="color:var(--gray);font-weight:400;">×</span> ${d.away ? d.away.name : '?'}</div>
+          <div style="font-size:12px;white-space:nowrap;">${status}</div>
+        </div>
+        <div style="font-size:11px;color:var(--gray);margin-bottom:8px;">Quem avançou cada uma para <b style="color:var(--gold);">${d.nextLabel}</b>:</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          ${sideChip(d.home, 'h')}
+          ${sideChip(d.away, 'a')}
+        </div>
+      </div>`;
+    });
+  }
 
   // Destaques
   if (hasQual && nB > 0) {
