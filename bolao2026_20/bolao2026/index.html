@@ -377,6 +377,12 @@ body{display:flex;flex-direction:column}
     <div id="hist-content"></div>
   </div>
 
+  <!-- PAGE: STATS -->
+  <div class="page" id="page-stats">
+    <p class="sec-title">Stats</p>
+    <div id="stats-content"></div>
+  </div>
+
   <!-- PAGE: EXTRAS -->
   <div class="page" id="page-extras">
     <p class="sec-title">Perguntas Extras</p>
@@ -523,6 +529,9 @@ body{display:flex;flex-direction:column}
   </button>
   <button class="nav-btn" id="nav-historico" onclick="showPage('historico',this)">
     <svg viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Histórico
+  </button>
+  <button class="nav-btn" id="nav-stats" onclick="showPage('stats',this)">
+    <svg viewBox="0 0 24 24"><path d="M3 3v18h18M18 17V9M13 17V5M8 17v-3"/></svg>Stats
   </button>
   <button class="nav-btn" id="nav-premiacao" onclick="showPage('premiacao',this)">
     <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Premiação
@@ -2895,6 +2904,7 @@ function showPage(page, btn) {
   if (page==='palpites') renderMatches();
   if (page==='ranking') renderRanking();
   if (page==='historico') renderHistorico();
+  if (page==='stats') renderStats();
   if (page==='premiacao') renderPremiacao();
   if (page==='extras') renderExtras();
   if (page==='admin') renderAdminPage();
@@ -4663,6 +4673,239 @@ function histTab(tab, btn) {
   // Renderiza imediatamente com o que tiver no state
   _histTabRender(tab, el);
 }
+// ── Aba STATS: estatísticas do bolão ───────────────────────────────
+function renderStats() {
+  const el = document.getElementById('stats-content');
+  if (!el) return;
+  buildResolvedTeamsFromResults();
+
+  const groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+
+  // ── Participantes (mesma base do ranking) ───────────────────────
+  const allUsers = Object.keys(state.users).filter(u => {
+    const usr = state.users[u];
+    return usr && !usr._deleted && usr.status !== 'pending' && usr.status !== 'rejected';
+  });
+  const totalContas = allUsers.length;
+  const enviadas = allUsers.filter(u => state.palpites[u] && state.palpites[u]._submitted).length;
+
+  // Apostadores válidos = fase de grupos completamente preenchida
+  function groupComplete(p) {
+    if (!p) return false;
+    return MATCHES.filter(m => m.phase === 'group').every(m => {
+      const x = p[m.id]; return x && x.h !== undefined && x.a !== undefined;
+    });
+  }
+  const bettors = allUsers.filter(u => groupComplete(state.palpites[u]));
+  const nB = bettors.length;
+
+  // ── Times reais classificados (resolvedTeamsReal dos 32-avos) ────
+  const realQualSet = new Set();
+  MATCHES.filter(m => m.group === '32-avos').forEach(m => {
+    const rtr = resolvedTeamsReal[m.id]; if (!rtr) return;
+    if (rtr.home && rtr.home.name) realQualSet.add(rtr.home.name);
+    if (rtr.away && rtr.away.name) realQualSet.add(rtr.away.name);
+  });
+
+  // Todos os times + bandeiras (das tabelas reais dos grupos)
+  const teamFlag = {};
+  const allTeams = new Set();
+  const realTop2 = new Set();
+  groups.forEach(g => {
+    const s = calcGroupStandings(g, state.results);
+    s.forEach(t => { if (t.name) { allTeams.add(t.name); teamFlag[t.name] = t.flag; } });
+    if (s[0] && s[0].name) realTop2.add(s[0].name);
+    if (s[1] && s[1].name) realTop2.add(s[1].name);
+  });
+  const realThird8 = new Set([...realQualSet].filter(n => !realTop2.has(n)));
+  const realElim = [...allTeams].filter(t => !realQualSet.has(t));
+
+  const groupStageDone = MATCHES.filter(m => m.phase === 'group').every(m => state.results[m.id]);
+  const hasQual = realQualSet.size > 0;
+
+  // ── Conjunto previsto por apostador (32 classificadas) ──────────
+  function predictedR32(p) {
+    const set = new Set();
+    groups.forEach(g => {
+      const s = calcGroupStandings(g, p);
+      if (s[0] && s[0].name) set.add(s[0].name);
+      if (s[1] && s[1].name) set.add(s[1].name);
+    });
+    getBest8Thirds(p).forEach(t => { if (t.name) set.add(t.name); });
+    return set;
+  }
+  const bettorR32 = bettors.map(u => ({ u, set: predictedR32(state.palpites[u]) }));
+
+  // ── Contagens por seleção ───────────────────────────────────────
+  const classifStats = [...realQualSet].map(name => ({
+    name, flag: teamFlag[name] || 'un',
+    count: bettorR32.filter(b => !b.set.has(name)).length,
+    isThird: realThird8.has(name)
+  })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'pt-BR'));
+
+  const elimStats = realElim.map(name => ({
+    name, flag: teamFlag[name] || 'un',
+    count: bettorR32.filter(b => b.set.has(name)).length
+  })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'pt-BR'));
+
+  // ── Destaques ───────────────────────────────────────────────────
+  const hitCounts = bettorR32.map(b => {
+    let h = 0; b.set.forEach(n => { if (realQualSet.has(n)) h++; }); return h;
+  });
+  const maxHits = hitCounts.length ? Math.max(...hitCounts) : 0;
+  const nMaxHits = hitCounts.filter(h => h === maxHits).length;
+  const avgHits = hitCounts.length ? (hitCounts.reduce((a, b) => a + b, 0) / hitCounts.length) : 0;
+  const totalQ = realQualSet.size;
+
+  const perfectSet = bettorR32.filter(b =>
+    b.set.size >= totalQ && [...realQualSet].every(n => b.set.has(n))
+  ).length;
+
+  const realPos = {};
+  groups.forEach(g => { const s = calcGroupStandings(g, state.results); realPos[g] = [s[0] && s[0].name, s[1] && s[1].name]; });
+  const perfectPos = bettors.filter(u => {
+    const p = state.palpites[u];
+    const okGroups = groups.every(g => {
+      const s = calcGroupStandings(g, p);
+      return (s[0] && s[0].name) === realPos[g][0] && (s[1] && s[1].name) === realPos[g][1];
+    });
+    if (!okGroups) return false;
+    const my3 = new Set(getBest8Thirds(p).map(t => t.name));
+    return my3.size >= realThird8.size && [...realThird8].every(n => my3.has(n));
+  }).length;
+
+  // ── Campeãs mais apostadas ──────────────────────────────────────
+  const champCount = {};
+  bettors.forEach(u => {
+    const p = state.palpites[u];
+    buildResolvedTeams(p, null, false);
+    const rt = resolvedTeams['final']; const fp = p['final'];
+    if (!rt || !fp || fp.h === undefined || fp.a === undefined) return;
+    let champ = null;
+    if (+fp.h > +fp.a) champ = rt.home;
+    else if (+fp.a > +fp.h) champ = rt.away;
+    else if (fp.pen === 'H') champ = rt.home;
+    else if (fp.pen === 'A') champ = rt.away;
+    if (champ && champ.name) {
+      if (!champCount[champ.name]) champCount[champ.name] = { name: champ.name, flag: champ.flag || teamFlag[champ.name] || 'un', n: 0 };
+      champCount[champ.name].n++;
+    }
+  });
+  buildResolvedTeams(state.palpites[state.user] || {}); // restaura p/ usuário atual
+  const champs = Object.values(champCount).sort((a, b) => b.n - a.n).slice(0, 8);
+  const champMax = champs.length ? champs[0].n : 1;
+  const champTotal = Object.values(champCount).reduce((a, b) => a + b.n, 0);
+
+  // ── Render helpers ──────────────────────────────────────────────
+  const counterCard = (val, label) =>
+    `<div style="flex:1;background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:18px 10px;text-align:center;">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:40px;font-weight:900;color:#7eb8f5;line-height:1;">${val}</div>
+      <div style="font-size:11px;color:var(--gray);letter-spacing:1px;margin-top:6px;text-transform:uppercase;">${label}</div>
+    </div>`;
+
+  const highlight = (num, numColor, text) =>
+    `<div style="display:flex;align-items:center;gap:14px;background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:14px 16px;margin-bottom:8px;">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:34px;font-weight:900;color:${numColor};line-height:1;min-width:42px;text-align:center;">${num}</div>
+      <div style="font-size:13px;color:var(--light);line-height:1.4;">${text}</div>
+    </div>`;
+
+  const teamChip = (s, kind) => {
+    // kind: 'classif' (verde, "não avançaram") | 'elim' (vermelho, "avançaram")
+    const accent = kind === 'classif' ? (s.isThird ? 'var(--gold)' : 'var(--green)') : 'var(--red)';
+    const nameColor = kind === 'classif' ? 'var(--green)' : 'var(--red)';
+    const label = kind === 'classif' ? 'não avançaram' : 'avançaram';
+    return `<div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-left:3px solid ${accent};border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;">
+      <div style="display:flex;align-items:center;gap:7px;">
+        ${flagImg(s.flag)}
+        <span style="font-size:13px;font-weight:700;color:${nameColor};">${s.name}</span>
+        ${s.isThird ? '<span style="font-size:9px;color:var(--gold);font-weight:700;">3º</span>' : ''}
+      </div>
+      <div style="display:flex;align-items:baseline;gap:5px;">
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:#7eb8f5;">${s.count}</span>
+        <span style="font-size:11px;color:var(--gray);">${label}</span>
+      </div>
+    </div>`;
+  };
+
+  // ── HTML ────────────────────────────────────────────────────────
+  let html = '';
+
+  // Intro
+  html += `<p style="font-size:12px;color:var(--gray);margin-bottom:14px;line-height:1.5;">Números do bolão${nB ? ` · base de <b style="color:var(--light);">${nB}</b> apostadores com palpite completo` : ''}.</p>`;
+
+  // Counters
+  html += `<div style="display:flex;gap:10px;margin-bottom:16px;">
+    ${counterCard(totalContas, 'Participantes')}
+    ${counterCard(enviadas, 'Apostas enviadas')}
+  </div>`;
+
+  // Destaques
+  if (hasQual && nB > 0) {
+    html += `<div style="font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;margin:4px 0 8px;">🔥 DESTAQUES</div>`;
+    html += highlight(maxHits + '/' + totalQ, 'var(--green)',
+      `Melhor aproveitamento de classificação${nMaxHits > 1 ? ` — <b>${nMaxHits} apostadores</b> empatados` : ' — <b>1 apostador</b>'}.`);
+    if (perfectSet > 0)
+      html += highlight(perfectSet, 'var(--gold)',
+        `${perfectSet === 1 ? 'apostador cravou' : 'apostadores cravaram'} <b>todas as ${totalQ} seleções</b> classificadas (avançou e eliminou tudo certo).`);
+    if (perfectPos > 0)
+      html += highlight(perfectPos, 'var(--gold)',
+        `${perfectPos === 1 ? 'apostador acertou' : 'apostadores acertaram'} as ${totalQ} classificadas na <b>posição exata</b> (1º/2º + 8 melhores 3ºs).`);
+    html += highlight(avgHits.toFixed(1), '#7eb8f5',
+      `seleções classificadas certas, em <b>média</b>, por apostador.`);
+  }
+
+  // Classificadas
+  if (hasQual) {
+    html += `<div style="margin-top:18px;display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+      <span style="width:8px;height:8px;border-radius:50%;background:var(--green);"></span>
+      <span style="font-size:14px;font-weight:800;color:var(--green);letter-spacing:0.5px;">CLASSIFICADAS</span>
+      <span style="font-size:11px;color:var(--gray);">— quantos NÃO avançaram</span>
+    </div>`;
+    html += `<p style="font-size:11px;color:var(--gray);margin-bottom:10px;">Topo = as classificações mais surpreendentes (poucos cravaram).</p>`;
+    html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">${classifStats.map(s => teamChip(s, 'classif')).join('')}</div>`;
+  }
+
+  // Eliminadas
+  if (hasQual && elimStats.length) {
+    html += `<div style="margin-top:20px;display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+      <span style="width:8px;height:8px;border-radius:50%;background:var(--red);"></span>
+      <span style="font-size:14px;font-weight:800;color:var(--red);letter-spacing:0.5px;">ELIMINADAS</span>
+      <span style="font-size:11px;color:var(--gray);">— quantos avançaram (erro)</span>
+    </div>`;
+    html += `<p style="font-size:11px;color:var(--gray);margin-bottom:10px;">Topo = as "zebras" que mais gente apostou e caíram.</p>`;
+    html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">${elimStats.map(s => teamChip(s, 'elim')).join('')}</div>`;
+  }
+
+  // Campeãs mais apostadas
+  if (champs.length) {
+    html += `<div style="margin-top:22px;font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:10px;">🏆 CAMPEÃS MAIS APOSTADAS</div>`;
+    html += `<div style="display:flex;flex-direction:column;gap:8px;">`;
+    champs.forEach(c => {
+      const pct = champTotal ? Math.round(c.n / champTotal * 100) : 0;
+      const w = champMax ? Math.round(c.n / champMax * 100) : 0;
+      html += `<div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:10px 12px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          ${flagImg(c.flag)}
+          <span style="font-size:13px;font-weight:700;color:var(--light);flex:1;">${c.name}</span>
+          <span style="font-size:13px;font-weight:900;color:var(--gold);">${c.n}</span>
+          <span style="font-size:11px;color:var(--gray);">(${pct}%)</span>
+        </div>
+        <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
+          <div style="height:100%;width:${w}%;background:linear-gradient(90deg,rgba(245,197,24,0.6),var(--gold));border-radius:3px;"></div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Estado vazio
+  if (!hasQual) {
+    html += `<div class="empty" style="padding:30px 0;"><div class="empty-icon">📊</div><p>As estatísticas de classificação aparecerão quando a fase de grupos for encerrada nos resultados oficiais.</p></div>`;
+  }
+
+  el.innerHTML = html;
+}
+
 // ── Bracket visual do mata-mata ────────────────────────────────────
 function renderBracket() {
   buildResolvedTeamsFromResults();
