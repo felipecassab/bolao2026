@@ -5165,7 +5165,11 @@ function renderBracket() {
       : (res && res.pen ? `<div style="text-align:center;font-size:8px;color:var(--gray);padding-top:2px;">pen: ${res.pen==='H'?hName:aName}</div>` : '');
     const undefH = hName === '—', undefA = aName === '—';
     const matchNum = MATCH_NUMBERS[mid];
-    const numLabel = matchNum ? `<div style="text-align:right;font-size:8px;color:var(--gray);opacity:0.6;line-height:1;padding:0 2px 2px;">Match ${matchNum}</div>` : '';
+    const dateLabel = m.date ? m.date.split('·')[0].trim() : '';
+    const numLabel = (matchNum || dateLabel) ? `<div style="display:flex;justify-content:space-between;align-items:center;gap:4px;font-size:8px;color:var(--gray);opacity:0.65;line-height:1;padding:0 2px 2px;">
+        <span style="white-space:nowrap;">${dateLabel}</span>
+        ${matchNum ? `<span style="white-space:nowrap;">Match ${matchNum}</span>` : ''}
+      </div>` : '';
     return `<div class="bracket-cell" style="background:var(--card);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:3px;margin:0;width:130px;flex-shrink:0;">
       ${numLabel}
       ${teamRow(hName, hFlag, hScore, hWin, undefH)}
