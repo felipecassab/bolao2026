@@ -370,7 +370,7 @@ body{display:flex;flex-direction:column}
     <p class="sec-title">Histórico</p>
     <div class="tabs">
       <button class="tab-btn active" data-tab="resultados" onclick="histTab('resultados',this)">Resultados oficiais</button>
-      <button class="tab-btn" data-tab="chave" onclick="histTab('chave',this)">Chaveamento</button>
+      <button class="tab-btn" data-tab="chave" onclick="histTab('chave',this)">Chave</button>
       <button class="tab-btn" data-tab="todos" onclick="histTab('todos',this)">Palpites de todos</button>
       <button class="tab-btn" data-tab="eu" onclick="histTab('eu',this)">Meus palpites</button>
     </div>
@@ -3081,6 +3081,10 @@ function getKnockoutWinnerReal(matchId) {
 function calcBonusPts(userPalpites) {
   let bonus = 0;
 
+  // Garante que resolvedTeamsReal reflita a classificação real dos grupos
+  // (necessário p/ o bônus de 32-avos e para os vencedores reais das fases)
+  buildResolvedTeamsFromResults();
+
   // Build resolvedTeams without penFallback for correct group standings
   buildResolvedTeams(userPalpites, null, false);
 
@@ -3088,10 +3092,13 @@ function calcBonusPts(userPalpites) {
   function realTeamsInPhase(phase) {
     const teams = new Set();
     if (phase === '32-avos') {
+      // Times que SE CLASSIFICARAM para o mata-mata = quem ocupa os slots
+      // dos 32-avos pela classificação REAL dos grupos (top-2 + 8 melhores
+      // terceiros). NÃO depende de o jogo dos 32-avos já ter sido disputado.
       MATCHES.filter(m => m.group === '32-avos').forEach(m => {
-        const res = state.results[m.id]; if (!res) return;
-        if (res.homeTeam) teams.add(res.homeTeam);
-        if (res.awayTeam) teams.add(res.awayTeam);
+        const rtr = resolvedTeamsReal[m.id]; if (!rtr) return;
+        if (rtr.home && rtr.home.name) teams.add(rtr.home.name);
+        if (rtr.away && rtr.away.name) teams.add(rtr.away.name);
       });
     } else {
       // Winners of previous phase matches
@@ -6521,13 +6528,15 @@ async function adminViewPalpites(wpp) {
   let koHtml = '';
 
   // ── Pre-build sets of real teams per phase for bonus display ────
+  buildResolvedTeamsFromResults();
   const realTeamsPerPhase = {};
-  // 32-avos: from homeTeam/awayTeam stored in results
+  // 32-avos: times classificados pela classificação real dos grupos
+  // (resolvedTeamsReal), independente do jogo dos 32-avos ter sido disputado
   realTeamsPerPhase['32-avos'] = new Set();
   MATCHES.filter(function(m){ return m.group==='32-avos'; }).forEach(function(m){
-    const res2 = state.results[m.id];
-    if (res2 && res2.homeTeam) realTeamsPerPhase['32-avos'].add(res2.homeTeam);
-    if (res2 && res2.awayTeam) realTeamsPerPhase['32-avos'].add(res2.awayTeam);
+    const rtr2 = resolvedTeamsReal[m.id];
+    if (rtr2 && rtr2.home && rtr2.home.name) realTeamsPerPhase['32-avos'].add(rtr2.home.name);
+    if (rtr2 && rtr2.away && rtr2.away.name) realTeamsPerPhase['32-avos'].add(rtr2.away.name);
   });
   // Oitavas/Quartas/Semis/Final: winners of previous phase
   [['Oitavas','32-avos'],['Quartas','Oitavas'],['Semifinais','Quartas'],['Final','Semifinais']].forEach(function(pair){
@@ -7434,12 +7443,12 @@ async function openScoreModal(uid) {
           const realTeams = new Set();
           const realFlags = new Map();
           if (grp === '32-avos') {
-            // Teams that actually reached r32 (stored in results as homeTeam/awayTeam)
+            // Times que SE CLASSIFICARAM ao mata-mata pela classificação real
+            // dos grupos (não depende do jogo dos 32-avos ter sido disputado)
             MATCHES.filter(function(m){ return m.group==='32-avos'; }).forEach(function(m){
-              const res2 = state.results[m.id]; if (!res2) return;
-              const rtr2 = resolvedTeamsReal[m.id];
-              if (res2.homeTeam) { realTeams.add(res2.homeTeam); if (rtr2?.home?.flag) realFlags.set(res2.homeTeam, rtr2.home.flag); }
-              if (res2.awayTeam) { realTeams.add(res2.awayTeam); if (rtr2?.away?.flag) realFlags.set(res2.awayTeam, rtr2.away.flag); }
+              const rtr2 = resolvedTeamsReal[m.id]; if (!rtr2) return;
+              if (rtr2.home?.name) { realTeams.add(rtr2.home.name); if (rtr2.home.flag) realFlags.set(rtr2.home.name, rtr2.home.flag); }
+              if (rtr2.away?.name) { realTeams.add(rtr2.away.name); if (rtr2.away.flag) realFlags.set(rtr2.away.name, rtr2.away.flag); }
             });
           } else {
             // Real winners of previous phase matches
