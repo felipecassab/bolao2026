@@ -512,7 +512,8 @@ body{display:flex;flex-direction:column}
       <div class="card"><div class="card-body" id="admin-extras" style="display:none;"></div></div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px;">
         <p style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:1px;">PARTICIPANTES</p>
-        <div style="display:flex;gap:8px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+          <button onclick="exportDaily()" style="padding:6px 14px;background:rgba(245,197,24,0.12);color:var(--gold);border:1px solid rgba(245,197,24,0.3);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">🎯 Palpite do Dia</button>
           <button onclick="exportMultiverso()" style="padding:6px 14px;background:rgba(126,184,245,0.12);color:#7eb8f5;border:1px solid rgba(126,184,245,0.3);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">🌌 Multiverso</button>
           <button onclick="exportPalpites()" style="padding:6px 14px;background:rgba(0,200,83,0.12);color:var(--green);border:1px solid rgba(0,200,83,0.3);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📊 Exportar Excel</button>
         </div>
@@ -7685,6 +7686,78 @@ function exportMultiverso() {
   } catch (e) { /* CSV opcional */ }
 
   showToast('Multiverso exportado! ✓');
+}
+
+// ── Export do Palpite do Dia (bolão paralelo) ───────────────────────
+function exportDaily() {
+  if (!adminAuthed) { showToast('Acesso negado', true); return; }
+  if (typeof XLSX === 'undefined') { showToast('Aguarde, carregando biblioteca...', true); return; }
+  buildResolvedTeamsFromResults();
+
+  const users = Object.entries(state.users)
+    .filter(([, u]) => u.status === 'approved' && !u._deleted)
+    .sort((a, b) => (a[1].apelido || a[1].nome || '').toLowerCase().localeCompare((b[1].apelido || b[1].nome || '').toLowerCase(), 'pt-BR'));
+  const userLabel = ([, u]) => u.apelido ? u.nome + ' (' + u.apelido + ')' : u.nome;
+
+  const koMatches = MATCHES.filter(m => m.phase === 'knockout')
+    .slice().sort((a, b) => (MATCH_NUMBERS[a.id] || 999) - (MATCH_NUMBERS[b.id] || 999));
+
+  // Só jogos que têm ao menos um palpite do dia
+  const hasBet = (mid) => users.some(([wpp]) => {
+    const p = state.palpites[wpp] && state.palpites[wpp]._dia && state.palpites[wpp]._dia[mid];
+    return p && p.h !== undefined && p.a !== undefined;
+  });
+  const gamesWithBets = koMatches.filter(m => hasBet(m.id));
+
+  if (!gamesWithBets.length) { showToast('Ainda não há palpites do dia registrados', true); return; }
+
+  const wb = XLSX.utils.book_new();
+
+  // ── Sheet 1: Palpites do Dia (jogos × participantes) ─────────────
+  const header = ['Jogo', 'Fase', 'Data', 'Hora', 'Time A', 'Time B'];
+  users.forEach(u => header.push(userLabel(u)));
+  const rows = [header];
+  gamesWithBets.forEach(m => {
+    const rtr = resolvedTeamsReal[m.id] || {};
+    const hName = (rtr.home && rtr.home.name) ? rtr.home.name : m.home;
+    const aName = (rtr.away && rtr.away.name) ? rtr.away.name : m.away;
+    const jc = 'J' + (MATCH_NUMBERS[m.id] || '');
+    const kh = m.kickoff ? new Date(m.kickoff) : null;
+    const hora = kh ? (String(kh.getHours()).padStart(2, '0') + ':' + String(kh.getMinutes()).padStart(2, '0')) : '';
+    const res = state.results[m.id];
+    const row = [jc, m.group, m.date, hora, hName + (res ? ' (' + res.h + ')' : ''), aName + (res ? ' (' + res.a + ')' : '')];
+    users.forEach(([wpp]) => {
+      const p = state.palpites[wpp] && state.palpites[wpp]._dia && state.palpites[wpp]._dia[m.id];
+      if (!p || p.h === undefined || p.a === undefined) { row.push('–'); return; }
+      let v = p.h + ':' + p.a;
+      if (p.pen) v += ' (pen: ' + (p.pen === 'H' ? hName : aName) + ')';
+      row.push(v);
+    });
+    rows.push(row);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 7 }, { wch: 12 }, { wch: 9 }, { wch: 7 }, { wch: 20 }, { wch: 20 }, ...users.map(() => ({ wch: 20 }))];
+  XLSX.utils.book_append_sheet(wb, ws, 'Palpites do Dia');
+
+  // ── Sheet 2: Ranking do Dia ──────────────────────────────────────
+  const scores = users
+    .map(([wpp, u]) => Object.assign({ label: userLabel([wpp, u]) }, calcDailyPts(state.palpites[wpp] || {})))
+    .filter(s => s.games > 0)
+    .sort((a, b) => b.pts - a.pts);
+  const rankRows = [['Pos', 'Participante', 'Pontos', 'Acertos', 'Exatos', 'Bônus', 'Jogos']];
+  let lastPts = null, lastRank = 0;
+  scores.forEach((s, i) => {
+    const r = (lastPts === null || s.pts !== lastPts) ? (i + 1) : lastRank;
+    lastPts = s.pts; lastRank = r;
+    rankRows.push([r, s.label, s.pts, s.ac, s.ex, s.bonus, s.games]);
+  });
+  const wsR = XLSX.utils.aoa_to_sheet(rankRows);
+  wsR['!cols'] = [{ wch: 5 }, { wch: 30 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 7 }];
+  XLSX.utils.book_append_sheet(wb, wsR, 'Ranking do Dia');
+
+  const date = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+  XLSX.writeFile(wb, 'Bolao2026_PalpiteDoDia_' + date + '.xlsx');
+  showToast('Palpites do Dia exportados! ✓');
 }
 
 const FIFA_THIRD_COMBINATIONS = {
