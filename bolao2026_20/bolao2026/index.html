@@ -688,6 +688,10 @@ body{display:flex;flex-direction:column}
         <label class="form-label">CONFIRMAR SENHA</label>
         <input class="form-input" type="password" id="f-reg-pwd2" placeholder="Repita a senha" maxlength="30" onkeydown="if(event.key==='Enter')doRegister()"/>
       </div>
+      <label for="f-reg-dailyonly" style="display:flex;align-items:flex-start;gap:9px;margin:2px 0 16px;cursor:pointer;padding:11px 12px;background:rgba(126,184,245,0.07);border:1px solid rgba(126,184,245,0.25);border-radius:10px;">
+        <input type="checkbox" id="f-reg-dailyonly" style="margin-top:2px;width:18px;height:18px;flex-shrink:0;accent-color:#7eb8f5;cursor:pointer;"/>
+        <span style="font-size:12px;color:var(--light);line-height:1.45;">Quero entrar <b style="color:#7eb8f5;">só no Palpite do Dia</b> (bolão paralelo do mata-mata). Não concorro ao prêmio principal.</span>
+      </label>
       <button class="btn-primary" onclick="doRegister()" style="margin-bottom:0;">CADASTRAR</button>
       <button class="btn-link" onclick="switchView('login')">Já tenho conta — Entrar</button>
     </div>
@@ -2768,9 +2772,10 @@ function doRegister() {
   const apelidoExists = Object.values(state.users).some(u => u.apelido && u.apelido.toLowerCase() === apelido.toLowerCase());
   if (apelidoExists)   { showErr('register','Este apelido já está em uso. Escolha outro.'); return; }
   const idx = Object.keys(state.users).length % COLORS.length;
+  const dailyOnlyChk = !!(document.getElementById('f-reg-dailyonly') && document.getElementById('f-reg-dailyonly').checked);
   // Use apelido as the unique key (uid)
   const uid = apelido;
-  state.users[uid] = {nome, apelido, wpp, pwd:hashPwd(pwd), joined:new Date().toISOString(), color:COLORS[idx], colorT:COLORS_T[idx], status:'pending'};
+  state.users[uid] = {nome, apelido, wpp, pwd:hashPwd(pwd), joined:new Date().toISOString(), color:COLORS[idx], colorT:COLORS_T[idx], status:'pending', dailyOnly:dailyOnlyChk};
   saveGlobal();
   closeModal();
   // Show pending approval message instead of logging in
@@ -3242,7 +3247,7 @@ function takeSnapshot() {
   const scores = {};
   Object.keys(state.users).forEach(w=>{
     const u = state.users[w];
-    if (u._deleted || u.status==='pending' || u.status==='rejected') return;
+    if (u._deleted || u.dailyOnly || u.status==='pending' || u.status==='rejected') return;
     scores[w]=calcPts(state.palpites[w]).pts;
   });
   state.snapshots.push({date:today, scores});
@@ -4596,7 +4601,7 @@ function renderRanking() {
   takeSnapshot();
   const names = Object.keys(state.users).filter(u => {
     const usr = state.users[u];
-    return !usr._deleted && usr.status !== 'pending' && usr.status !== 'rejected';
+    return !usr._deleted && !usr.dailyOnly && usr.status !== 'pending' && usr.status !== 'rejected';
   });
   const scores = names.map(u=>{
     buildResolvedTeams(state.palpites[u] || {}, null, false);
@@ -4724,7 +4729,7 @@ function renderEvolucao() {
 
   const users = Object.keys(state.users).filter(w => {
     const u = state.users[w];
-    return u && !u._deleted && u.status !== 'pending' && u.status !== 'rejected';
+    return u && !u._deleted && !u.dailyOnly && u.status !== 'pending' && u.status !== 'rejected';
   });
 
   if (!daysWithResults.length) {
@@ -4971,10 +4976,10 @@ function renderStats() {
 
   const groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
 
-  // ── Participantes (mesma base do ranking) ───────────────────────
+  // ── Participantes (mesma base do ranking principal) ─────────────
   const allUsers = Object.keys(state.users).filter(u => {
     const usr = state.users[u];
-    return usr && !usr._deleted && usr.status !== 'pending' && usr.status !== 'rejected';
+    return usr && !usr._deleted && !usr.dailyOnly && usr.status !== 'pending' && usr.status !== 'rejected';
   });
   const totalContas = allUsers.length;
   const enviadas = allUsers.filter(u => state.palpites[u] && state.palpites[u]._submitted).length;
@@ -5619,7 +5624,7 @@ function _histTabRender(tab, el) {
     ? [state.user]
     : Object.keys(state.users).filter(u => {
         const usr = state.users[u];
-        return usr && !usr._deleted && usr.status !== 'pending' && usr.status !== 'rejected';
+        return usr && !usr._deleted && !usr.dailyOnly && usr.status !== 'pending' && usr.status !== 'rejected';
       }).sort((a, b) => {
         const ua = state.users[a], ub = state.users[b];
         const na = (ua.apelido || ua.nome || ua.name || a).toLowerCase();
@@ -5801,7 +5806,7 @@ async function saveExtras() {
 function renderPremiacao() {
   const activeUsers = Object.keys(state.users).filter(u => {
     const usr = state.users[u];
-    return usr && !usr._deleted && usr.status !== 'pending' && usr.status !== 'rejected';
+    return usr && !usr._deleted && !usr.dailyOnly && usr.status !== 'pending' && usr.status !== 'rejected';
   });
   const total=activeUsers.length, arrecadado=total*TAXA;
   const scores=activeUsers.map(u=>{ buildResolvedTeams(state.palpites[u], null, false); return {u,pts:calcPts(state.palpites[u]).pts}; }).sort((a,b)=>b.pts-a.pts);
@@ -5908,7 +5913,7 @@ function renderAdminExtras() {
 
     // Lista de respostas dos participantes
     if (correctAnswer) {
-      var participants = Object.entries(state.users).filter(function(e){ return e[1].status !== 'pending' && !e[1]._deleted; });
+      var participants = Object.entries(state.users).filter(function(e){ return e[1].status !== 'pending' && !e[1]._deleted && !e[1].dailyOnly; });
       if (participants.length) {
         html += '<div style="display:flex;flex-direction:column;gap:4px;">';
         participants.forEach(function(entry) {
@@ -6590,7 +6595,7 @@ async function renderAdminParticipants() {
       <div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:8px;background:rgba(245,166,35,0.08);border:1px solid rgba(245,166,35,0.2);border-radius:var(--radius-sm);">
         <div class="avatar" style="background:${u.color||COLORS[0]};color:${u.colorT||COLORS_T[0]};">${initials(uApelido(u,uid))}</div>
         <div style="flex:1;">
-          <p style="font-size:14px;font-weight:500;">${uApelido(u,uid)}</p>
+          <p style="font-size:14px;font-weight:500;">${uApelido(u,uid)}${u.dailyOnly ? ' <span style="font-size:9px;color:#7eb8f5;font-weight:700;background:rgba(126,184,245,0.12);border:1px solid rgba(126,184,245,0.35);padding:2px 6px;border-radius:50px;white-space:nowrap;">🎯 SÓ PALPITE DO DIA</span>' : ''}</p>
           <p style="font-size:12px;color:var(--gray);">📱 ${uWpp(u,uid)}</p>
         </div>
         <button onclick="adminApprove('${uid}')" style="padding:7px 12px;background:var(--green);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;margin-right:4px;">✓ Aprovar</button>
@@ -6601,22 +6606,26 @@ async function renderAdminParticipants() {
 
   // Approved participants
   if (approved.length) {
-    const paidCount = approved.filter(([,u]) => u.paid).length;
-    const pendingPayCount = approved.length - paidCount;
-    html += `<p style="font-size:11px;color:var(--green);font-weight:700;letter-spacing:1px;margin-bottom:8px;">✓ APROVADOS (${approved.length}) &nbsp;·&nbsp; <span style="color:var(--green);">💰 ${paidCount} pagos</span> &nbsp;·&nbsp; <span style="color:#f5a623;">⏳ ${pendingPayCount} pendentes</span></p>`;
+    const mainApproved = approved.filter(([,u]) => !u.dailyOnly);
+    const dailyOnlyCount = approved.length - mainApproved.length;
+    const paidCount = mainApproved.filter(([,u]) => u.paid).length;
+    const pendingPayCount = mainApproved.length - paidCount;
+    html += `<p style="font-size:11px;color:var(--green);font-weight:700;letter-spacing:1px;margin-bottom:8px;">✓ APROVADOS (${approved.length}) &nbsp;·&nbsp; <span style="color:var(--green);">💰 ${paidCount} pagos</span> &nbsp;·&nbsp; <span style="color:#f5a623;">⏳ ${pendingPayCount} pendentes</span>${dailyOnlyCount ? ` &nbsp;·&nbsp; <span style="color:#7eb8f5;">🎯 ${dailyOnlyCount} só Palpite do Dia</span>` : ''}</p>`;
     html += approved.map(([uid,u]) => {
       const submitted = state.palpites[uid]?._submitted;
+      const dailyBadge = u.dailyOnly ? ' <span style="font-size:9px;color:#7eb8f5;font-weight:700;background:rgba(126,184,245,0.12);border:1px solid rgba(126,184,245,0.35);padding:2px 6px;border-radius:50px;white-space:nowrap;">🎯 SÓ PALPITE DO DIA</span>' : '';
+      const paidBtn = u.dailyOnly ? '' : `<button onclick="adminTogglePaid('${uid}')" title="${u.paid ? 'Marcar como pendente' : 'Marcar como pago'}" style="padding:5px 10px;border-radius:8px;font-size:13px;cursor:pointer;border:1px solid ${u.paid ? 'rgba(0,200,83,0.4)' : 'rgba(255,255,255,0.15)'};background:${u.paid ? 'rgba(0,200,83,0.12)' : 'rgba(255,255,255,0.04)'};color:${u.paid ? 'var(--green)' : 'var(--gray)'}; font-weight:700;">${u.paid ? '💰 Pago' : '⏳ Pendente'}</button>`;
       return `
       <div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
           ${avatarHtml(u, uid, 'flex-shrink:0;')}
           <div style="flex:1;min-width:0;">
-            <p style="font-size:14px;font-weight:500;">${uApelido(u,uid)} ${submitted ? '<span style="font-size:10px;color:var(--green);font-weight:700;background:rgba(0,200,83,0.12);border:1px solid rgba(0,200,83,0.3);padding:2px 6px;border-radius:50px;">✅ ENVIADO</span>' : ''}</p>
+            <p style="font-size:14px;font-weight:500;">${uApelido(u,uid)}${dailyBadge} ${submitted ? '<span style="font-size:10px;color:var(--green);font-weight:700;background:rgba(0,200,83,0.12);border:1px solid rgba(0,200,83,0.3);padding:2px 6px;border-radius:50px;">✅ ENVIADO</span>' : ''}</p>
             <p style="font-size:12px;color:var(--gray);">📱 ${uWpp(u,uid)}</p>
           </div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button onclick="adminTogglePaid('${uid}')" title="${u.paid ? 'Marcar como pendente' : 'Marcar como pago'}" style="padding:5px 10px;border-radius:8px;font-size:13px;cursor:pointer;border:1px solid ${u.paid ? 'rgba(0,200,83,0.4)' : 'rgba(255,255,255,0.15)'};background:${u.paid ? 'rgba(0,200,83,0.12)' : 'rgba(255,255,255,0.04)'};color:${u.paid ? 'var(--green)' : 'var(--gray)'}; font-weight:700;">${u.paid ? '💰 Pago' : '⏳ Pendente'}</button>
+          ${paidBtn}
           <button onclick="adminViewPalpites('${uid}')" style="padding:5px 10px;background:rgba(126,184,245,0.12);color:#7eb8f5;border:1px solid rgba(126,184,245,0.3);border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;">👁 Ver</button>
           <button onclick="adminEditPalpites('${uid}')" style="padding:5px 10px;background:rgba(167,139,250,0.12);color:#a78bfa;border:1px solid rgba(167,139,250,0.3);border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;">✏️ Editar</button>
           ${submitted ? `<button onclick="adminUnsubmit('${uid}')" style="padding:5px 10px;background:rgba(245,197,24,0.12);color:var(--gold);border:1px solid rgba(245,197,24,0.3);border-radius:8px;font-size:12px;cursor:pointer;">🔓 Desbloquear</button>` : `<button onclick="adminMarkSubmitted('${uid}')" style="padding:5px 10px;background:rgba(0,200,83,0.1);color:var(--green);border:1px solid rgba(0,200,83,0.3);border-radius:8px;font-size:12px;cursor:pointer;">✅ Marcar enviado</button>`}
@@ -7433,7 +7442,7 @@ function exportPalpites() {
   const wb = XLSX.utils.book_new();
   // Ordenar alfabeticamente por apelido, excluindo rejeitados e pendentes
   const users = Object.entries(state.users)
-    .filter(([,u]) => u.status === 'approved')
+    .filter(([,u]) => u.status === 'approved' && !u.dailyOnly)
     .sort((a, b) => {
       const apA = (a[1].apelido || a[1].nome || '').toLowerCase();
       const apB = (b[1].apelido || b[1].nome || '').toLowerCase();
@@ -7525,9 +7534,9 @@ function exportMultiverso() {
 
   buildResolvedTeamsFromResults(); // resolvedTeamsReal atualizado
 
-  // Participantes aprovados, ordenados por apelido
+  // Participantes aprovados do bolão principal, ordenados por apelido
   const users = Object.entries(state.users)
-    .filter(([, u]) => u.status === 'approved' && !u._deleted)
+    .filter(([, u]) => u.status === 'approved' && !u._deleted && !u.dailyOnly)
     .sort((a, b) => (a[1].apelido || a[1].nome || '').toLowerCase().localeCompare((b[1].apelido || b[1].nome || '').toLowerCase(), 'pt-BR'));
   const nUsers = users.length;
 
