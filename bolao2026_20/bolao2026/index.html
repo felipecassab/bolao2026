@@ -4864,6 +4864,39 @@ function renderStats() {
   const champMax = champs.length ? champs[0].n : 1;
   const champTotal = Object.values(champCount).reduce((a, b) => a + b.n, 0);
 
+  // ── Perguntas extras: quantos acertaram cada uma (com gabarito) ──
+  const qaGab = (state.results && state.results._qaAnswers) || {};
+  const normTxt = s => (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+  const extraStats = EXTRA_QS.map(q => {
+    const gab = qaGab[q.id] && qaGab[q.id].correct;
+    if (!gab) return null; // ainda sem gabarito definido
+    let answered = 0;
+    const correctUsers = [];
+    const tally = {}; // chave normalizada -> { count, raws: {grafia: count} }
+    allUsers.forEach(u => {
+      const qa = state.palpites[u] && state.palpites[u]._qa && state.palpites[u]._qa[q.id];
+      if (!qa || !qa.answer || !qa.answer.trim()) return;
+      answered++;
+      if (qa.correct === true) correctUsers.push(uName(u));
+      const raw = qa.answer.trim();
+      const key = normTxt(raw);
+      if (!tally[key]) tally[key] = { count: 0, raws: {} };
+      tally[key].count++;
+      tally[key].raws[raw] = (tally[key].raws[raw] || 0) + 1;
+    });
+    correctUsers.sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    // resposta mais popular (representada pela grafia mais frequente do grupo)
+    let popular = null, popCount = 0;
+    Object.values(tally).forEach(t => {
+      if (t.count > popCount) {
+        popCount = t.count;
+        popular = Object.entries(t.raws).sort((a, b) => b[1] - a[1])[0][0];
+      }
+    });
+    const popularIsCorrect = popular && normTxt(gab) === normTxt(popular);
+    return { id: q.id, label: q.label, q: q.q, answer: gab, answered, count: correctUsers.length, users: correctUsers, popular, popCount, popularIsCorrect };
+  }).filter(Boolean);
+
   // ── Render helpers ──────────────────────────────────────────────
   const counterCard = (val, label) =>
     `<div style="flex:1;background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:18px 10px;text-align:center;">
@@ -5028,6 +5061,35 @@ function renderStats() {
           <div style="height:100%;width:${w}%;background:linear-gradient(90deg,rgba(245,197,24,0.6),var(--gold));border-radius:3px;"></div>
         </div>
         <div id="${bid}" style="display:none;margin-top:8px;max-height:200px;overflow-y:auto;">${namesHtml}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Perguntas extras
+  if (extraStats.length) {
+    html += `<div style="margin-top:22px;font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:10px;">❓ PERGUNTAS EXTRAS — quantos acertaram</div>`;
+    html += `<div style="display:flex;flex-direction:column;gap:8px;">`;
+    extraStats.forEach((q, qi) => {
+      const bid = 'statextra_' + qi;
+      const namesHtml = q.users.length
+        ? q.users.map(n => `<div style="font-size:11px;color:var(--light);padding:2px 0;border-top:1px solid rgba(255,255,255,0.05);">${n}</div>`).join('')
+        : `<div style="font-size:11px;color:var(--gray);padding:2px 0;">— ninguém acertou —</div>`;
+      const clickable = q.count > 0;
+      const pct = q.answered ? Math.round(q.count / q.answered * 100) : 0;
+      html += `<div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-left:3px solid var(--green);border-radius:10px;padding:11px 12px;${clickable ? 'cursor:pointer;' : ''}" ${clickable ? `onclick="toggleStatChip('${bid}',this)"` : ''}>
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <span style="flex-shrink:0;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;color:var(--navy2);background:var(--gold);width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;">${q.label}</span>
+          <span style="font-size:12px;color:var(--light);line-height:1.35;">${q.q}</span>
+        </div>
+        <div style="font-size:11px;color:var(--gray);margin:6px 0 0 28px;">Resposta certa: <b style="color:var(--gold);">${q.answer}</b></div>
+        ${q.popular ? `<div style="font-size:11px;color:var(--gray);margin:3px 0 0 28px;">Mais popular: <b style="color:${q.popularIsCorrect ? 'var(--green)' : 'var(--light)'};">${q.popular}</b> <span style="color:var(--gray);">· ${q.popCount} ${q.popCount === 1 ? 'palpite' : 'palpites'}</span> ${q.popularIsCorrect ? '<span style="color:var(--green);">✓</span>' : '<span style="color:var(--red);">✗</span>'}</div>` : ''}
+        <div style="display:flex;align-items:baseline;gap:5px;margin:6px 0 0 28px;">
+          <span style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:#7eb8f5;">${q.count}</span>
+          <span style="font-size:11px;color:var(--gray);">acertaram${q.answered ? ` de ${q.answered} (${pct}%)` : ''}</span>
+          ${clickable ? `<span class="statchip-chevron" style="margin-left:auto;color:var(--gray);font-size:11px;transition:transform 0.2s;">▼</span>` : ''}
+        </div>
+        <div id="${bid}" style="display:none;margin:8px 0 0 28px;max-height:200px;overflow-y:auto;">${namesHtml}</div>
       </div>`;
     });
     html += `</div>`;
