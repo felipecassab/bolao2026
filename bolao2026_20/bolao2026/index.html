@@ -6556,6 +6556,21 @@ async function adminTogglePaid(uid) {
   showToast(state.users[uid].paid ? '💰 Pagamento confirmado!' : '⏳ Marcado como pendente');
 }
 
+async function adminToggleDailyOnly(uid) {
+  if (!state.users[uid]) return;
+  const willBe = !state.users[uid].dailyOnly;
+  const nome = state.users[uid].apelido || state.users[uid].nome || uid;
+  const msg = willBe
+    ? nome + ' vai concorrer APENAS no Palpite do Dia (sai do ranking e do prêmio principal). Confirmar?'
+    : nome + ' volta a concorrer no bolão principal também. Confirmar?';
+  if (!confirm(msg)) return;
+  state.users[uid].dailyOnly = willBe;
+  if (willBe) state.users[uid].paid = false; // não paga o prêmio principal
+  await saveGlobal();
+  renderAdminParticipants();
+  showToast(willBe ? '🎯 Marcado como só Palpite do Dia' : '↩️ De volta ao bolão principal');
+}
+
 async function renderAdminParticipants() {
   // Buscar dados frescos do Firebase
   try {
@@ -6630,6 +6645,7 @@ async function renderAdminParticipants() {
           <button onclick="adminEditPalpites('${uid}')" style="padding:5px 10px;background:rgba(167,139,250,0.12);color:#a78bfa;border:1px solid rgba(167,139,250,0.3);border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;">✏️ Editar</button>
           ${submitted ? `<button onclick="adminUnsubmit('${uid}')" style="padding:5px 10px;background:rgba(245,197,24,0.12);color:var(--gold);border:1px solid rgba(245,197,24,0.3);border-radius:8px;font-size:12px;cursor:pointer;">🔓 Desbloquear</button>` : `<button onclick="adminMarkSubmitted('${uid}')" style="padding:5px 10px;background:rgba(0,200,83,0.1);color:var(--green);border:1px solid rgba(0,200,83,0.3);border-radius:8px;font-size:12px;cursor:pointer;">✅ Marcar enviado</button>`}
           <button onclick="adminResetPwd('${uid}')" style="padding:5px 10px;background:transparent;border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--gray);font-size:12px;cursor:pointer;">🔑 Senha</button>
+          <button onclick="adminToggleDailyOnly('${uid}')" title="${u.dailyOnly ? 'Voltar ao bolão principal' : 'Marcar como só Palpite do Dia'}" style="padding:5px 10px;border-radius:8px;font-size:12px;cursor:pointer;border:1px solid ${u.dailyOnly ? 'rgba(126,184,245,0.45)' : 'rgba(255,255,255,0.15)'};background:${u.dailyOnly ? 'rgba(126,184,245,0.14)' : 'transparent'};color:${u.dailyOnly ? '#7eb8f5' : 'var(--gray)'};font-weight:600;">🎯 ${u.dailyOnly ? 'Só Palpite do Dia ✓' : 'Só Palpite do Dia'}</button>
           <button onclick="adminDeleteUser('${uid}','${uApelido(u,uid)}')" style="padding:5px 10px;background:transparent;border:1px solid rgba(244,67,54,0.3);border-radius:8px;color:var(--red);font-size:12px;cursor:pointer;">🗑️</button>
         </div>
       </div>`;
