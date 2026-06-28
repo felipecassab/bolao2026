@@ -4674,6 +4674,15 @@ function histTab(tab, btn) {
   _histTabRender(tab, el);
 }
 // ── Aba STATS: estatísticas do bolão ───────────────────────────────
+function toggleStatChip(bid, headerEl) {
+  const body = document.getElementById(bid);
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  const chev = headerEl.querySelector('.statchip-chevron');
+  if (chev) chev.style.transform = open ? 'rotate(0deg)' : 'rotate(180deg)';
+}
+
 function renderStats() {
   const el = document.getElementById('stats-content');
   if (!el) return;
@@ -4736,34 +4745,39 @@ function renderStats() {
   }
   const bettorR32 = bettors.map(u => ({ u, set: predictedR32(state.palpites[u]) }));
 
-  // ── Contagens por seleção ───────────────────────────────────────
-  const classifStats = [...realQualSet].map(name => ({
-    name, flag: teamFlag[name] || 'un',
-    count: bettorR32.filter(b => !b.set.has(name)).length,
-    isThird: realThird8.has(name)
-  })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'pt-BR'));
+  // ── Contagens por seleção (com lista de apelidos) ───────────────
+  const classifStats = [...realQualSet].map(name => {
+    const us = bettorR32.filter(b => !b.set.has(name)).map(b => uName(b.u));
+    us.sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    return { name, flag: teamFlag[name] || 'un', count: us.length, users: us, isThird: realThird8.has(name) };
+  }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'pt-BR'));
 
-  const elimStats = realElim.map(name => ({
-    name, flag: teamFlag[name] || 'un',
-    count: bettorR32.filter(b => b.set.has(name)).length
-  })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'pt-BR'));
+  const elimStats = realElim.map(name => {
+    const us = bettorR32.filter(b => b.set.has(name)).map(b => uName(b.u));
+    us.sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    return { name, flag: teamFlag[name] || 'un', count: us.length, users: us };
+  }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'pt-BR'));
 
   // ── Destaques ───────────────────────────────────────────────────
-  const hitCounts = bettorR32.map(b => {
-    let h = 0; b.set.forEach(n => { if (realQualSet.has(n)) h++; }); return h;
+  const sortNames = arr => arr.slice().sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const hitByBettor = bettorR32.map(b => {
+    let h = 0; b.set.forEach(n => { if (realQualSet.has(n)) h++; });
+    return { u: b.u, h };
   });
-  const maxHits = hitCounts.length ? Math.max(...hitCounts) : 0;
-  const nMaxHits = hitCounts.filter(h => h === maxHits).length;
-  const avgHits = hitCounts.length ? (hitCounts.reduce((a, b) => a + b, 0) / hitCounts.length) : 0;
+  const maxHits = hitByBettor.length ? Math.max(...hitByBettor.map(x => x.h)) : 0;
+  const maxHitsUsers = sortNames(hitByBettor.filter(x => x.h === maxHits).map(x => uName(x.u)));
+  const nMaxHits = maxHitsUsers.length;
+  const avgHits = hitByBettor.length ? (hitByBettor.reduce((a, b) => a + b.h, 0) / hitByBettor.length) : 0;
   const totalQ = realQualSet.size;
 
-  const perfectSet = bettorR32.filter(b =>
+  const perfectSetUsers = sortNames(bettorR32.filter(b =>
     b.set.size >= totalQ && [...realQualSet].every(n => b.set.has(n))
-  ).length;
+  ).map(b => uName(b.u)));
+  const perfectSet = perfectSetUsers.length;
 
   const realPos = {};
   groups.forEach(g => { const s = calcGroupStandings(g, state.results); realPos[g] = [s[0] && s[0].name, s[1] && s[1].name]; });
-  const perfectPos = bettors.filter(u => {
+  const perfectPosUsers = sortNames(bettors.filter(u => {
     const p = state.palpites[u];
     const okGroups = groups.every(g => {
       const s = calcGroupStandings(g, p);
@@ -4772,7 +4786,8 @@ function renderStats() {
     if (!okGroups) return false;
     const my3 = new Set(getBest8Thirds(p).map(t => t.name));
     return my3.size >= realThird8.size && [...realThird8].every(n => my3.has(n));
-  }).length;
+  }).map(u => uName(u)));
+  const perfectPos = perfectPosUsers.length;
 
   // ── Campeãs mais apostadas ──────────────────────────────────────
   const champCount = {};
@@ -4787,11 +4802,13 @@ function renderStats() {
     else if (fp.pen === 'H') champ = rt.home;
     else if (fp.pen === 'A') champ = rt.away;
     if (champ && champ.name) {
-      if (!champCount[champ.name]) champCount[champ.name] = { name: champ.name, flag: champ.flag || teamFlag[champ.name] || 'un', n: 0 };
+      if (!champCount[champ.name]) champCount[champ.name] = { name: champ.name, flag: champ.flag || teamFlag[champ.name] || 'un', n: 0, users: [] };
       champCount[champ.name].n++;
+      champCount[champ.name].users.push(uName(u));
     }
   });
   buildResolvedTeams(state.palpites[state.user] || {}); // restaura p/ usuário atual
+  Object.values(champCount).forEach(c => c.users.sort((a, b) => a.localeCompare(b, 'pt-BR')));
   const champs = Object.values(champCount).sort((a, b) => b.n - a.n).slice(0, 8);
   const champMax = champs.length ? champs[0].n : 1;
   const champTotal = Object.values(champCount).reduce((a, b) => a + b.n, 0);
@@ -4803,27 +4820,46 @@ function renderStats() {
       <div style="font-size:11px;color:var(--gray);letter-spacing:1px;margin-top:6px;text-transform:uppercase;">${label}</div>
     </div>`;
 
-  const highlight = (num, numColor, text) =>
-    `<div style="display:flex;align-items:center;gap:14px;background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:14px 16px;margin-bottom:8px;">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-size:34px;font-weight:900;color:${numColor};line-height:1;min-width:42px;text-align:center;">${num}</div>
-      <div style="font-size:13px;color:var(--light);line-height:1.4;">${text}</div>
+  let hlSeq = 0;
+  const highlight = (num, numColor, text, users) => {
+    const hasList = Array.isArray(users) && users.length > 0;
+    const bid = 'stathl_' + (hlSeq++);
+    const namesHtml = hasList
+      ? users.map(n => `<div style="font-size:11px;color:var(--light);padding:2px 0;border-top:1px solid rgba(255,255,255,0.05);">${n}</div>`).join('')
+      : '';
+    return `<div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:14px 16px;margin-bottom:8px;${hasList ? 'cursor:pointer;' : ''}" ${hasList ? `onclick="toggleStatChip('${bid}',this)"` : ''}>
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:900;color:${numColor};line-height:1;min-width:64px;flex-shrink:0;text-align:center;white-space:nowrap;">${num}</div>
+        <div style="font-size:13px;color:var(--light);line-height:1.4;flex:1;">${text}</div>
+        ${hasList ? `<span class="statchip-chevron" style="color:var(--gray);font-size:11px;transition:transform 0.2s;flex-shrink:0;">▼</span>` : ''}
+      </div>
+      ${hasList ? `<div id="${bid}" style="display:none;margin-top:10px;max-height:220px;overflow-y:auto;">${namesHtml}</div>` : ''}
     </div>`;
+  };
 
+  let chipSeq = 0;
   const teamChip = (s, kind) => {
     // kind: 'classif' (verde, "não avançaram") | 'elim' (vermelho, "avançaram")
     const accent = kind === 'classif' ? (s.isThird ? 'var(--gold)' : 'var(--green)') : 'var(--red)';
     const nameColor = kind === 'classif' ? 'var(--green)' : 'var(--red)';
     const label = kind === 'classif' ? 'não avançaram' : 'avançaram';
-    return `<div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-left:3px solid ${accent};border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;">
+    const bid = 'statchip_' + (kind) + '_' + (chipSeq++);
+    const namesHtml = s.users.length
+      ? s.users.map(n => `<div style="font-size:11px;color:var(--light);padding:2px 0;border-top:1px solid rgba(255,255,255,0.05);">${n}</div>`).join('')
+      : `<div style="font-size:11px;color:var(--gray);padding:2px 0;">— ninguém —</div>`;
+    const clickable = s.count > 0;
+    return `<div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-left:3px solid ${accent};border-radius:10px;padding:10px 12px;${clickable ? 'cursor:pointer;' : ''}" ${clickable ? `onclick="toggleStatChip('${bid}',this)"` : ''}>
       <div style="display:flex;align-items:center;gap:7px;">
         ${flagImg(s.flag)}
         <span style="font-size:13px;font-weight:700;color:${nameColor};">${s.name}</span>
         ${s.isThird ? '<span style="font-size:9px;color:var(--gold);font-weight:700;">3º</span>' : ''}
       </div>
-      <div style="display:flex;align-items:baseline;gap:5px;">
+      <div style="display:flex;align-items:baseline;gap:5px;margin-top:6px;">
         <span style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:#7eb8f5;">${s.count}</span>
         <span style="font-size:11px;color:var(--gray);">${label}</span>
+        ${clickable ? `<span class="statchip-chevron" style="margin-left:auto;color:var(--gray);font-size:11px;transition:transform 0.2s;">▼</span>` : ''}
       </div>
+      <div id="${bid}" style="display:none;margin-top:8px;padding-top:2px;max-height:200px;overflow-y:auto;">${namesHtml}</div>
     </div>`;
   };
 
@@ -4843,13 +4879,16 @@ function renderStats() {
   if (hasQual && nB > 0) {
     html += `<div style="font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;margin:4px 0 8px;">🔥 DESTAQUES</div>`;
     html += highlight(maxHits + '/' + totalQ, 'var(--green)',
-      `Melhor aproveitamento de classificação${nMaxHits > 1 ? ` — <b>${nMaxHits} apostadores</b> empatados` : ' — <b>1 apostador</b>'}.`);
+      `Melhor aproveitamento de classificação${nMaxHits > 1 ? ` — <b>${nMaxHits} apostadores</b> empatados` : ' — <b>1 apostador</b>'}.`,
+      maxHitsUsers);
     if (perfectSet > 0)
       html += highlight(perfectSet, 'var(--gold)',
-        `${perfectSet === 1 ? 'apostador cravou' : 'apostadores cravaram'} <b>todas as ${totalQ} seleções</b> classificadas (avançou e eliminou tudo certo).`);
+        `${perfectSet === 1 ? 'apostador cravou' : 'apostadores cravaram'} <b>todas as ${totalQ} seleções</b> classificadas (avançou e eliminou tudo certo).`,
+        perfectSetUsers);
     if (perfectPos > 0)
       html += highlight(perfectPos, 'var(--gold)',
-        `${perfectPos === 1 ? 'apostador acertou' : 'apostadores acertaram'} as ${totalQ} classificadas na <b>posição exata</b> (1º/2º + 8 melhores 3ºs).`);
+        `${perfectPos === 1 ? 'apostador acertou' : 'apostadores acertaram'} as ${totalQ} classificadas na <b>posição exata</b> (1º/2º + 8 melhores 3ºs).`,
+        perfectPosUsers);
     html += highlight(avgHits.toFixed(1), '#7eb8f5',
       `seleções classificadas certas, em <b>média</b>, por apostador.`);
   }
@@ -4880,19 +4919,23 @@ function renderStats() {
   if (champs.length) {
     html += `<div style="margin-top:22px;font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:10px;">🏆 CAMPEÃS MAIS APOSTADAS</div>`;
     html += `<div style="display:flex;flex-direction:column;gap:8px;">`;
-    champs.forEach(c => {
+    champs.forEach((c, ci) => {
       const pct = champTotal ? Math.round(c.n / champTotal * 100) : 0;
       const w = champMax ? Math.round(c.n / champMax * 100) : 0;
-      html += `<div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:10px 12px;">
+      const bid = 'statchamp_' + ci;
+      const namesHtml = c.users.map(n => `<div style="font-size:11px;color:var(--light);padding:2px 0;border-top:1px solid rgba(255,255,255,0.05);">${n}</div>`).join('');
+      html += `<div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:10px 12px;cursor:pointer;" onclick="toggleStatChip('${bid}',this)">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
           ${flagImg(c.flag)}
           <span style="font-size:13px;font-weight:700;color:var(--light);flex:1;">${c.name}</span>
           <span style="font-size:13px;font-weight:900;color:var(--gold);">${c.n}</span>
           <span style="font-size:11px;color:var(--gray);">(${pct}%)</span>
+          <span class="statchip-chevron" style="color:var(--gray);font-size:11px;transition:transform 0.2s;">▼</span>
         </div>
         <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
           <div style="height:100%;width:${w}%;background:linear-gradient(90deg,rgba(245,197,24,0.6),var(--gold));border-radius:3px;"></div>
         </div>
+        <div id="${bid}" style="display:none;margin-top:8px;max-height:200px;overflow-y:auto;">${namesHtml}</div>
       </div>`;
     });
     html += `</div>`;
