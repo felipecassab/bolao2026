@@ -5089,7 +5089,7 @@ function renderStats() {
           <span style="font-size:12px;color:var(--light);line-height:1.35;">${q.q}</span>
         </div>
         <div style="font-size:11px;color:var(--gray);margin:6px 0 0 28px;">Resposta certa: <b style="color:var(--gold);">${q.answer}</b></div>
-        ${q.popular ? `<div style="font-size:11px;color:var(--gray);margin:3px 0 0 28px;">Mais popular: <b style="color:${q.popularIsCorrect ? 'var(--green)' : 'var(--light)'};">${q.popular}</b> <span style="color:var(--gray);">· ${q.popCount} ${q.popCount === 1 ? 'palpite' : 'palpites'}</span> ${q.popularIsCorrect ? '<span style="color:var(--green);">✓</span>' : '<span style="color:var(--red);">✗</span>'}</div>` : ''}
+        ${q.popular ? `<div style="font-size:11px;color:var(--gray);margin:3px 0 0 28px;">Mais apostado: <b style="color:${q.popularIsCorrect ? 'var(--green)' : 'var(--light)'};">${q.popular}</b> ${q.popularIsCorrect ? '<span style="color:var(--green);">✓</span>' : '<span style="color:var(--red);">✗</span>'}</div>` : ''}
         <div style="display:flex;align-items:baseline;gap:5px;margin:6px 0 0 28px;">
           <span style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:#7eb8f5;">${q.count}</span>
           <span style="font-size:11px;color:var(--gray);">acertaram${q.answered ? ` de ${q.answered} (${pct}%)` : ''}</span>
