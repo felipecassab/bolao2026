@@ -4867,19 +4867,25 @@ function renderStats() {
   // ── Perguntas extras: quantos acertaram cada uma (com gabarito) ──
   const qaGab = (state.results && state.results._qaAnswers) || {};
   const normTxt = s => (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+  // Canoniza respostas de "dois times": trata x / vs / e / & / , / + / - como
+  // o mesmo separador e ordena os nomes, agrupando variações de grafia/ordem.
+  const canon = s => {
+    let t = normTxt(s).replace(/\s*(?:x|vs\.?|×|&|\/|\+|,|-| e )\s*/g, '|');
+    return t.split('|').map(p => p.trim()).filter(Boolean).sort().join('|');
+  };
   const extraStats = EXTRA_QS.map(q => {
     const gab = qaGab[q.id] && qaGab[q.id].correct;
     if (!gab) return null; // ainda sem gabarito definido
     let answered = 0;
     const correctUsers = [];
-    const tally = {}; // chave normalizada -> { count, raws: {grafia: count} }
+    const tally = {}; // chave canônica -> { count, raws: {grafia: count} }
     allUsers.forEach(u => {
       const qa = state.palpites[u] && state.palpites[u]._qa && state.palpites[u]._qa[q.id];
       if (!qa || !qa.answer || !qa.answer.trim()) return;
       answered++;
       if (qa.correct === true) correctUsers.push(uName(u));
       const raw = qa.answer.trim();
-      const key = normTxt(raw);
+      const key = canon(raw);
       if (!tally[key]) tally[key] = { count: 0, raws: {} };
       tally[key].count++;
       tally[key].raws[raw] = (tally[key].raws[raw] || 0) + 1;
@@ -4893,7 +4899,7 @@ function renderStats() {
         popular = Object.entries(t.raws).sort((a, b) => b[1] - a[1])[0][0];
       }
     });
-    const popularIsCorrect = popular && normTxt(gab) === normTxt(popular);
+    const popularIsCorrect = popular && canon(gab) === canon(popular);
     return { id: q.id, label: q.label, q: q.q, answer: gab, answered, count: correctUsers.length, users: correctUsers, popular, popCount, popularIsCorrect };
   }).filter(Boolean);
 
