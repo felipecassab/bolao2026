@@ -3459,10 +3459,26 @@ function currentPhaseGames() {
 
 // Trava do palpite do dia: começou (kickoff), está ao vivo, ou já tem resultado
 function dailyLocked(m) {
+  if (adminEditMode && adminAuthed) return false; // admin pode editar qualquer jogo
   if (state.results[m.id]) return true;
   if (state.results._live && state.results._live[m.id]) return true;
   if (m.kickoff && Date.now() >= new Date(m.kickoff).getTime()) return true;
   return false;
+}
+
+// Jogos que aparecem no modal do Palpite do Dia.
+// Normal: só a fase atual. Admin editando: todos os jogos já definidos
+// (confronto real resolvido) + a fase atual, para corrigir fases passadas.
+function dailyModalGames() {
+  if (adminEditMode && adminAuthed) {
+    buildResolvedTeamsFromResults();
+    const cur = currentPhaseGames();
+    return MATCHES.filter(m => m.phase === 'knockout' && (
+      (resolvedTeamsReal[m.id] && resolvedTeamsReal[m.id].home && resolvedTeamsReal[m.id].away) ||
+      cur.some(g => g.id === m.id)
+    )).sort((a, b) => (MATCH_NUMBERS[a.id] || 999) - (MATCH_NUMBERS[b.id] || 999));
+  }
+  return currentPhaseGames();
 }
 
 // Pontuação do bolão paralelo: 5/3 do placar + bônus de avanço por acertar o vencedor
@@ -3490,8 +3506,9 @@ var dailyDraftPen = {}, dailyGameNames = {};
 
 function openDailyModal() {
   if (!state.user) { showToast('Entre para palpitar', true); return; }
+  const adminEditing = adminEditMode && adminAuthed;
   const phase = currentKOPhase();
-  const games = currentPhaseGames();
+  const games = dailyModalGames();
   if (!games.length) { showToast('O mata-mata ainda não começou (ou já acabou)', true); return; }
   buildResolvedTeamsFromResults();
   const mine = (state.palpites[state.user] && state.palpites[state.user]._dia) || {};
@@ -3528,9 +3545,13 @@ function openDailyModal() {
     } else {
       anyOpen = true;
       const drawNow = hv !== '' && av !== '' && +hv === +av;
+      const resA = state.results[m.id];
+      const headLine = (adminEditing && resA)
+        ? `🔓 ${m.date} · ${hora} · placar oficial <b>${resA.h}×${resA.a}</b>${resA.pen ? ' (pên: ' + (resA.pen === 'H' ? hName : aName) + ')' : ''}`
+        : (adminEditing ? `🔓 ${m.date} · ${hora} · liberado p/ edição` : `⏰ ${m.date} · palpite até ${hora}`);
       const inp = (sfx, val) => `<input id="dia_${m.id}_${sfx}" type="number" min="0" inputmode="numeric" value="${val}" oninput="dailyOnInput('${m.id}')" style="width:38px;height:38px;text-align:center;font-size:16px;font-weight:700;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:var(--navy2);color:var(--light);">`;
       body += `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(126,184,245,0.25);border-radius:10px;padding:10px 12px;margin-bottom:10px;">
-        <div style="font-size:10px;color:#7eb8f5;font-weight:700;margin-bottom:6px;">⏰ ${m.date} · palpite até ${hora}</div>
+        <div style="font-size:10px;color:#7eb8f5;font-weight:700;margin-bottom:6px;">${headLine}</div>
         <div style="display:flex;align-items:center;justify-content:center;gap:8px;">
           <div style="flex:1;text-align:right;">${teamLine(hName, hFlag)}</div>
           ${inp('h', hv)}<span style="color:var(--gray);">×</span>${inp('a', av)}
@@ -3554,7 +3575,8 @@ function openDailyModal() {
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:900;color:#7eb8f5;">🎯 PALPITE DO DIA</div>
         <button onclick="closeDailyModal()" style="background:none;border:none;color:var(--gray);font-size:24px;cursor:pointer;line-height:1;">×</button>
       </div>
-      <p style="font-size:11px;color:var(--gray);margin-bottom:14px;line-height:1.5;">${phase ? '<b style="color:#7eb8f5;">' + phase.label + '</b> · ' : ''}Bolão paralelo, sem relação com o ranking principal. Cada jogo vale até o seu horário de início. Empate exige escolher o vencedor nos pênaltis.</p>
+      ${adminEditing ? '<p style="font-size:11px;color:#a78bfa;font-weight:700;margin-bottom:8px;line-height:1.5;background:rgba(124,58,237,0.12);border:1px solid rgba(167,139,250,0.3);border-radius:8px;padding:8px 10px;">✏️ MODO ADMIN — editando o Palpite do Dia deste participante. Todos os jogos já definidos estão liberados (inclusive os encerrados).</p>' : ''}
+      <p style="font-size:11px;color:var(--gray);margin-bottom:14px;line-height:1.5;">${(!adminEditing && phase) ? '<b style="color:#7eb8f5;">' + phase.label + '</b> · ' : ''}Bolão paralelo, sem relação com o ranking principal. ${adminEditing ? 'Empate exige escolher o vencedor nos pênaltis.' : 'Cada jogo vale até o seu horário de início. Empate exige escolher o vencedor nos pênaltis.'}</p>
       ${body}
       ${anyOpen ? `<button onclick="saveDailyBet()" style="width:100%;padding:13px;border:none;border-radius:10px;background:linear-gradient(90deg,#7eb8f5,#5a9be8);color:#0a1628;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;letter-spacing:0.5px;cursor:pointer;margin-top:4px;">SALVAR PALPITES</button>` : '<div style="text-align:center;font-size:12px;color:var(--gray);padding:6px 0;">Todos os jogos desta fase já começaram.</div>'}
     </div>`;
@@ -3586,7 +3608,7 @@ function dailySetPen(mid, side) {
 
 async function saveDailyBet() {
   if (!state.user) return;
-  const games = currentPhaseGames().filter(m => !dailyLocked(m));
+  const games = dailyModalGames().filter(m => !dailyLocked(m));
 
   // 1) Coletar e validar SÓ os jogos que o usuário acabou de editar agora
   const edits = {};
@@ -7106,8 +7128,9 @@ function showAdminEditBanner(nome) {
     banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#7c3aed,#a78bfa);color:#fff;padding:8px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.4);';
     document.body.appendChild(banner);
   }
-  banner.innerHTML = `<span>✏️ MODO ADMIN — editando palpites de <b>${nome}</b></span>
-    <button onclick="exitAdminEditMode()" style="padding:5px 14px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);border-radius:8px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">✓ Sair do modo edição</button>`;
+  banner.innerHTML = `<span style="flex:1;min-width:0;">✏️ MODO ADMIN — editando <b>${nome}</b></span>
+    <button onclick="openDailyModal()" style="padding:5px 12px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.4);border-radius:8px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">🎯 Palpite do Dia</button>
+    <button onclick="exitAdminEditMode()" style="padding:5px 12px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);border-radius:8px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">✓ Sair</button>`;
   banner.style.display = 'flex';
   document.body.style.paddingTop = '40px';
 }
