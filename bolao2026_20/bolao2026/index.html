@@ -370,6 +370,7 @@ body{display:flex;flex-direction:column}
     <p class="sec-title">Histórico</p>
     <div class="tabs">
       <button class="tab-btn active" data-tab="resultados" onclick="histTab('resultados',this)">Resultados oficiais</button>
+      <button class="tab-btn" data-tab="chave" onclick="histTab('chave',this)">Chaveamento</button>
       <button class="tab-btn" data-tab="todos" onclick="histTab('todos',this)">Palpites de todos</button>
       <button class="tab-btn" data-tab="eu" onclick="histTab('eu',this)">Meus palpites</button>
     </div>
@@ -4655,6 +4656,92 @@ function histTab(tab, btn) {
   // Renderiza imediatamente com o que tiver no state
   _histTabRender(tab, el);
 }
+// ── Bracket visual do mata-mata ────────────────────────────────────
+function renderBracket() {
+  buildResolvedTeamsFromResults();
+  const koMatches = MATCHES.filter(m => m.phase === 'knockout');
+  const anyKO = koMatches.some(m => state.results[m.id] || resolvedTeamsReal[m.id]);
+  if (!anyKO) {
+    return '<div class="empty" style="padding:40px 0;"><div class="empty-icon">🏆</div><p>O chaveamento aparecerá quando a fase de mata-mata começar.</p></div>';
+  }
+
+  // Ordem dos slots em cada fase (segue a árvore real da Copa)
+  const cols = [
+    { label: '32-avos', ids: ['r32_1','r32_2','r32_3','r32_4','r32_5','r32_6','r32_7','r32_8','r32_9','r32_10','r32_11','r32_12','r32_13','r32_14','r32_15','r32_16'] },
+    { label: 'Oitavas', ids: ['r16_1','r16_2','r16_3','r16_4','r16_5','r16_6','r16_7','r16_8'] },
+    { label: 'Quartas', ids: ['qf_1','qf_2','qf_3','qf_4'] },
+    { label: 'Semis',   ids: ['sf_1','sf_2'] },
+    { label: 'Final',   ids: ['final'] },
+  ];
+
+  // Mini-card de um confronto no bracket
+  const cell = (mid) => {
+    const m = MATCHES.find(x => x.id === mid);
+    if (!m) return '';
+    const res = state.results[mid];
+    const rt = resolvedTeamsReal[mid] || {};
+    const hName = (rt.home && rt.home.name) ? rt.home.name : '—';
+    const aName = (rt.away && rt.away.name) ? rt.away.name : '—';
+    const hFlag = (rt.home && rt.home.flag) ? rt.home.flag : null;
+    const aFlag = (rt.away && rt.away.flag) ? rt.away.flag : null;
+    const isLiveMatch = !res && state.results._live && state.results._live[mid];
+    // Vencedor (para destacar)
+    let hWin = false, aWin = false;
+    if (res) {
+      if (res.h > res.a) hWin = true;
+      else if (res.a > res.h) aWin = true;
+      else if (res.pen === 'H') hWin = true;
+      else if (res.pen === 'A') aWin = true;
+    }
+    const flagSpan = (f) => f ? `<img src="https://flagcdn.com/w20/${f}.png" style="width:15px;height:10px;border-radius:1px;flex-shrink:0;" onerror="this.style.display=&quot;none&quot;"/>` : '<span style="width:15px;flex-shrink:0;"></span>';
+    const teamRow = (name, flag, score, win, dim) => `
+      <div style="display:flex;align-items:center;gap:5px;padding:3px 6px;${win?'background:rgba(245,197,24,0.12);':''}border-radius:4px;">
+        ${flagSpan(flag)}
+        <span style="flex:1;font-size:11px;font-weight:${win?'700':'500'};color:${win?'var(--gold)':(dim?'var(--gray)':'var(--light)')};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:78px;">${name}</span>
+        <span style="font-size:11px;font-weight:700;color:${win?'var(--gold)':'var(--gray)'};min-width:10px;text-align:right;">${score}</span>
+      </div>`;
+    const hScore = res ? res.h : '';
+    const aScore = res ? res.a : '';
+    const statusLine = isLiveMatch
+      ? '<div style="text-align:center;font-size:8px;color:var(--red);font-weight:700;padding-top:2px;">🔴 AO VIVO</div>'
+      : (res && res.pen ? `<div style="text-align:center;font-size:8px;color:var(--gray);padding-top:2px;">pen: ${res.pen==='H'?hName:aName}</div>` : '');
+    const undefH = hName === '—', undefA = aName === '—';
+    return `<div class="bracket-cell" style="background:var(--card);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:3px;margin:6px 0;width:130px;flex-shrink:0;">
+      ${teamRow(hName, hFlag, hScore, hWin, undefH)}
+      ${teamRow(aName, aFlag, aScore, aWin, undefA)}
+      ${statusLine}
+    </div>`;
+  };
+
+  // Monta colunas lado a lado
+  let colsHtml = '';
+  cols.forEach((col, ci) => {
+    let cellsHtml = '';
+    col.ids.forEach(mid => { cellsHtml += cell(mid); });
+    colsHtml += `<div style="display:flex;flex-direction:column;justify-content:space-around;min-width:130px;">
+      <div style="font-family:'Barlow Condensed';font-weight:900;font-size:12px;color:var(--gold);text-align:center;letter-spacing:0.5px;margin-bottom:4px;position:sticky;top:0;">${col.label.toUpperCase()}</div>
+      ${cellsHtml}
+    </div>`;
+  });
+
+  // Coluna extra para a disputa de 3º lugar (abaixo, separada)
+  const thirdCard = (state.results['third'] || resolvedTeamsReal['third'])
+    ? `<div style="margin-top:18px;"><div style="font-family:'Barlow Condensed';font-weight:900;font-size:12px;color:var(--gray);text-align:center;margin-bottom:4px;">DISPUTA DE 3º LUGAR</div><div style="display:flex;justify-content:center;">${cell('third')}</div></div>`
+    : '';
+
+  return `
+    <div style="font-size:12px;color:var(--gray);margin:4px 4px 10px;display:flex;align-items:center;gap:6px;">
+      <span>↔️</span><span>Arraste para o lado para ver todas as fases</span>
+    </div>
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:10px;">
+      <div style="display:flex;gap:12px;align-items:stretch;min-width:max-content;padding:0 4px;">
+        ${colsHtml}
+      </div>
+    </div>
+    ${thirdCard}
+  `;
+}
+
 function _histTabRender(tab, el) {
   const done = MATCHES.filter(m => {
     const r = state.results[m.id];
@@ -4766,6 +4853,13 @@ function _histTabRender(tab, el) {
     }
 
     el.innerHTML = rhtml || '<div style="padding:16px;color:#aaa;font-size:13px;">Nenhum resultado registrado ainda.</div>';
+    return;
+  }
+
+  // ── Filtro "Chaveamento": bracket visual do mata-mata ────────────
+  if (tab === 'chave') {
+    buildResolvedTeamsFromResults();
+    el.innerHTML = renderBracket();
     return;
   }
   // ─────────────────────────────────────────────────────────────────
