@@ -4991,6 +4991,39 @@ function toggleStatChip(bid, headerEl) {
   if (chev) chev.style.transform = open ? 'rotate(0deg)' : 'rotate(180deg)';
 }
 
+// Atualiza o destaque "Até onde vão?" conforme seleção/fase escolhidas
+function statsDeepRunUpdate() {
+  const D = window._deepRun; if (!D) return;
+  const teamEl = document.getElementById('deeprun-team');
+  const phaseEl = document.getElementById('deeprun-phase');
+  const out = document.getElementById('deeprun-result');
+  if (!teamEl || !phaseEl || !out) return;
+  const e = D.byName[teamEl.value];
+  const phase = phaseEl.value; // semi | final | champ
+  if (!e) { out.innerHTML = ''; return; }
+  const list = e[phase] || [];
+  const n = list.length;
+  const total = D.total || 0;
+  const pct = total ? Math.round(n / total * 100) : 0;
+  const verb = phase === 'champ' ? 'apontaram como campeã' : ('levaram até a ' + (phase === 'final' ? 'final' : 'semifinal'));
+  const flag = (typeof flagImg === 'function') ? flagImg(e.flag, 'flag') : '';
+  const chips = n
+    ? '<div id="deeprun-names" style="display:none;margin-top:10px;flex-wrap:wrap;gap:6px;">' +
+        list.map(nm => `<span style="font-size:11px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:50px;padding:3px 10px;">${nm}</span>`).join('') +
+      '</div>'
+    : '<div style="margin-top:8px;font-size:12px;color:var(--gray);">Ninguém levou essa seleção até essa fase.</div>';
+  const toggle = n
+    ? `<span onclick="(function(){var d=document.getElementById('deeprun-names');var c=document.getElementById('deeprun-chev');var o=d.style.display!=='none';d.style.display=o?'none':'flex';if(c)c.style.transform=o?'rotate(0deg)':'rotate(180deg)';})()" style="cursor:pointer;font-size:11px;color:#7eb8f5;display:inline-flex;align-items:center;gap:4px;margin-left:auto;">ver nomes <span id="deeprun-chev" style="transition:transform 0.2s;">▼</span></span>`
+    : '';
+  out.innerHTML =
+    `<div style="display:flex;align-items:center;gap:9px;">
+      ${flag}
+      <span style="font-size:22px;font-weight:900;color:var(--gold);font-family:'Barlow Condensed',sans-serif;">${n}</span>
+      <span style="font-size:13px;color:var(--light);line-height:1.3;">de ${total} ${verb}<br><span style="font-size:11px;color:var(--gray);">${pct}% dos participantes</span></span>
+      ${toggle}
+    </div>${chips}`;
+}
+
 function renderStats() {
   const el = document.getElementById('stats-content');
   if (!el) return;
@@ -5150,12 +5183,27 @@ function renderStats() {
   }).map(u => uName(u)));
   const perfectPos = perfectPosUsers.length;
 
-  // ── Campeãs mais apostadas ──────────────────────────────────────
+  // ── Campeãs mais apostadas + "Até onde vão?" (semi/final/campeã) ──
   const champCount = {};
+  const deepRun = {}; // name -> {name, flag, semi:Set, final:Set, champ:Set}
+  const drEnsure = (t) => {
+    if (!t || !t.name) return null;
+    if (!deepRun[t.name]) deepRun[t.name] = { name: t.name, flag: t.flag || teamFlag[t.name] || 'un', semi: new Set(), final: new Set(), champ: new Set() };
+    return deepRun[t.name];
+  };
   bettors.forEach(u => {
     const p = state.palpites[u];
     buildResolvedTeams(p, null, false);
+    const uname = uName(u);
+    // Semifinalistas (4 vagas das semis) — "chegou pelo menos à semifinal"
+    ['sf_1', 'sf_2'].forEach(s => {
+      const rs = resolvedTeams[s];
+      if (rs) { [rs.home, rs.away].forEach(t => { const e = drEnsure(t); if (e) e.semi.add(uname); }); }
+    });
     const rt = resolvedTeams['final']; const fp = p['final'];
+    // Finalistas (2 vagas da final)
+    if (rt) { [rt.home, rt.away].forEach(t => { const e = drEnsure(t); if (e) e.final.add(uname); }); }
+    // Campeã
     if (!rt || !fp || fp.h === undefined || fp.a === undefined) return;
     let champ = null;
     if (+fp.h > +fp.a) champ = rt.home;
@@ -5165,7 +5213,8 @@ function renderStats() {
     if (champ && champ.name) {
       if (!champCount[champ.name]) champCount[champ.name] = { name: champ.name, flag: champ.flag || teamFlag[champ.name] || 'un', n: 0, users: [] };
       champCount[champ.name].n++;
-      champCount[champ.name].users.push(uName(u));
+      champCount[champ.name].users.push(uname);
+      const e = drEnsure(champ); if (e) e.champ.add(uname);
     }
   });
   buildResolvedTeams(state.palpites[state.user] || {}); // restaura p/ usuário atual
@@ -5173,6 +5222,15 @@ function renderStats() {
   const champs = Object.values(champCount).sort((a, b) => b.n - a.n).slice(0, 8);
   const champMax = champs.length ? champs[0].n : 1;
   const champTotal = Object.values(champCount).reduce((a, b) => a + b.n, 0);
+
+  // Preparar dados do "Até onde vão?" (Sets -> arrays ordenados) e expor p/ o seletor
+  const _srt = (s) => [...s].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  Object.values(deepRun).forEach(e => { e.semi = _srt(e.semi); e.final = _srt(e.final); e.champ = _srt(e.champ); });
+  const drTeams = Object.values(deepRun).filter(e => e.semi.length > 0)
+    .sort((a, b) => b.semi.length - a.semi.length || a.name.localeCompare(b.name, 'pt-BR'));
+  window._deepRun = { byName: {}, total: bettors.length };
+  drTeams.forEach(e => { window._deepRun.byName[e.name] = { flag: e.flag, semi: e.semi, final: e.final, champ: e.champ }; });
+  const deepRunOpts = drTeams.map((e, i) => `<option value="${e.name.replace(/"/g, '&quot;')}"${i === 0 ? ' selected' : ''}>${e.name}</option>`).join('');
 
   // ── Perguntas extras: quantos acertaram cada uma (com gabarito) ──
   const qaGab = (state.results && state.results._qaAnswers) || {};
@@ -5382,7 +5440,22 @@ function renderStats() {
     html += `</div>`;
   }
 
-  // Perguntas extras
+  // ── Até onde vão? (seletor interativo de seleção × fase) ─────────
+  if (drTeams.length) {
+    html += `<div style="margin-top:22px;font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:10px;">🔭 ATÉ ONDE VÃO?</div>`;
+    html += `<div style="background:var(--card);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:14px 16px;">
+      <div style="font-size:12px;color:var(--gray);margin-bottom:11px;line-height:1.45;">Escolha uma seleção e uma fase para ver quantos participantes a levaram até lá no próprio bracket.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <select id="deeprun-team" onchange="statsDeepRunUpdate()" style="flex:1;min-width:130px;padding:9px;border-radius:8px;background:var(--navy2);color:var(--light);border:1px solid rgba(255,255,255,0.15);font-size:13px;font-weight:600;">${deepRunOpts}</select>
+        <select id="deeprun-phase" onchange="statsDeepRunUpdate()" style="padding:9px;border-radius:8px;background:var(--navy2);color:var(--light);border:1px solid rgba(255,255,255,0.15);font-size:13px;font-weight:600;">
+          <option value="semi" selected>Semifinal</option>
+          <option value="final">Final</option>
+          <option value="champ">Campeã</option>
+        </select>
+      </div>
+      <div id="deeprun-result"></div>
+    </div>`;
+  }
   if (extraStats.length) {
     html += `<div style="margin-top:22px;font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:10px;">❓ PERGUNTAS EXTRAS — quantos acertaram</div>`;
     html += `<div style="display:flex;flex-direction:column;gap:8px;">`;
@@ -5417,6 +5490,7 @@ function renderStats() {
   }
 
   el.innerHTML = html;
+  if (window._deepRun && document.getElementById('deeprun-result')) statsDeepRunUpdate();
 }
 
 // ── Bracket visual do mata-mata ────────────────────────────────────
