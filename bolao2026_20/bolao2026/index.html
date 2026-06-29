@@ -5655,12 +5655,19 @@ function _histTabRender(tab, el) {
       });
   let html='';
   try {
+    buildResolvedTeamsFromResults(); // garante o confronto REAL do mata-mata
     const isAccordion = (tab === 'todos'); // accordion só para "Palpites de todos"
     done.forEach(m=>{
       const res=state.results[m.id];
       if (!res || res.h === undefined || res.a === undefined) return;
       const flag_h = typeof flagImg === 'function' ? flagImg(m.fH,'flag') : '';
       const flag_a = typeof flagImg === 'function' ? flagImg(m.fA,'flag') : '';
+      // No mata-mata, mostrar os times REAIS que se classificaram (não o rótulo de vaga)
+      const _rt = (m.phase === 'knockout') ? (resolvedTeamsReal[m.id] || {}) : {};
+      const nameH = (_rt.home && _rt.home.name) ? _rt.home.name : (m.home || '');
+      const nameA = (_rt.away && _rt.away.name) ? _rt.away.name : (m.away || '');
+      const flagH2 = (_rt.home && _rt.home.flag && typeof flagImg === 'function') ? flagImg(_rt.home.flag, 'flag') : flag_h;
+      const flagA2 = (_rt.away && _rt.away.flag && typeof flagImg === 'function') ? flagImg(_rt.away.flag, 'flag') : flag_a;
 
       // Monta as linhas de palpites
       let rowsHtml = '';
@@ -5690,7 +5697,7 @@ function _histTabRender(tab, el) {
         const bodyId = 'histbody_' + m.id;
         html+=`<div class="hist-card">
           <div class="hist-header hist-toggle" onclick="toggleHistBody('${bodyId}', this)" style="cursor:pointer;user-select:none;">
-            <span style="font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px;">${flag_h} ${m.home||''} × ${m.away||''} ${flag_a}</span>
+            <span style="font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px;">${flagH2} ${nameH} × ${nameA} ${flagA2}</span>
             <span style="display:flex;align-items:center;gap:10px;">
               <span class="hist-result">${res.h}:${res.a}</span>
               <span class="hist-chevron" style="font-size:13px;color:var(--gray);transition:transform 0.2s;">▼</span>
@@ -5703,7 +5710,7 @@ function _histTabRender(tab, el) {
         </div>`;
       } else {
         // Modo "Meus palpites": sempre expandido
-        html+=`<div class="hist-card"><div class="hist-header"><span style="font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px;">${flag_h} ${m.home||''} × ${m.away||''} ${flag_a}</span><span class="hist-result">${res.h}:${res.a}</span></div>${rowsHtml}</div>`;
+        html+=`<div class="hist-card"><div class="hist-header"><span style="font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px;">${flagH2} ${nameH} × ${nameA} ${flagA2}</span><span class="hist-result">${res.h}:${res.a}</span></div>${rowsHtml}</div>`;
       }
     });
   } catch(e) {
