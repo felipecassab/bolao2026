@@ -3594,12 +3594,14 @@ function openDailyDetail(uid) {
   const dia = (state.palpites[uid] && state.palpites[uid]._dia) || {};
   const tot = calcDailyPts(state.palpites[uid] || {});
 
-  const koGames = MATCHES.filter(m => m.phase === 'knockout' && dia[m.id] && dia[m.id].h !== undefined && dia[m.id].a !== undefined)
+  const koGames = MATCHES.filter(m => m.phase === 'knockout'
+      && dia[m.id] && dia[m.id].h !== undefined && dia[m.id].a !== undefined
+      && state.results[m.id]) // só jogos já realizados (evita copiar palpite de jogo futuro)
     .sort((a, b) => (MATCH_NUMBERS[a.id] || 999) - (MATCH_NUMBERS[b.id] || 999));
 
   let body = '';
   if (!koGames.length) {
-    body = '<div style="text-align:center;padding:24px 8px;color:var(--gray);font-size:13px;">Este participante ainda não fez nenhum palpite do dia.</div>';
+    body = '<div style="text-align:center;padding:24px 8px;color:var(--gray);font-size:13px;">Ainda não há palpites em jogos encerrados para mostrar.<br><span style="font-size:11px;">Palpites de jogos que ainda não aconteceram ficam ocultos.</span></div>';
   } else {
     koGames.forEach(m => {
       const p = dia[m.id];
