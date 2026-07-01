@@ -1023,23 +1023,74 @@ function fromFS(fields) {
   }
   return out;
 }
+// Decodifica um campo do Firestore que pode estar no formato NOVO (JSON
+// compacto numa stringValue) ou ANTIGO (map/array verboso via fromFS).
+// Nunca lança: em caso de erro devolve o fallback, protegendo o carregamento.
+function decodeField(f, fallback) {
+  if (!f) return fallback;
+  try {
+    if (f.stringValue !== undefined) {
+      const p = JSON.parse(f.stringValue);
+      return (p === null || p === undefined) ? fallback : p;
+    }
+    if (f.mapValue) return fromFS(f.mapValue.fields);
+    if (f.arrayValue) { const w = fromFS({ __a: f }); return w.__a || fallback; }
+  } catch (e) {
+    console.error('Falha ao decodificar campo do Firestore:', e);
+  }
+  return fallback;
+}
 async function fbGet() {
   const r = await fetch(FB_URL);
   if (r.status === 404) return null;
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const doc = await r.json();
-  return fromFS(doc.fields);
+  const fields = doc.fields || {};
+  return {
+    users:     decodeField(fields.users, {}),
+    palpites:  decodeField(fields.palpites, {}),
+    results:   decodeField(fields.results, {}),
+    snapshots: decodeField(fields.snapshots, [])
+  };
 }
 async function fbSet(data) {
-  const fields = {};
-  for (const [k,v] of Object.entries(data)) fields[k] = toFS(v);
+  // Grava os campos grandes como JSON compacto (uma stringValue por campo).
+  // Isso reduz DRASTICAMENTE o tamanho do documento no Firestore comparado ao
+  // formato "map" verboso (que guarda cada número como string com tipo, repete
+  // as chaves, etc). O Firestore limita cada documento a 1 MiB; com o app
+  // crescido (palpites + extras + Palpite do Dia + snapshots + fotos base64)
+  // o formato antigo estourava esse teto e o PATCH era recusado inteiro.
+  const fields = {
+    users:     { stringValue: JSON.stringify(data.users || {}) },
+    palpites:  { stringValue: JSON.stringify(data.palpites || {}) },
+    results:   { stringValue: JSON.stringify(data.results || {}) },
+    snapshots: { stringValue: JSON.stringify(data.snapshots || []) }
+  };
+  const body = JSON.stringify({fields});
+  window._lastDocSize = body.length; // p/ diagnóstico do admin
   const patchUrl = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents/bolao/data?key=${FB_APIKEY}&updateMask.fieldPaths=users&updateMask.fieldPaths=palpites&updateMask.fieldPaths=results&updateMask.fieldPaths=snapshots`;
   const r = await fetch(patchUrl, {
     method: 'PATCH',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({fields})
+    body: body
   });
-  if (!r.ok) throw new Error('PATCH ' + r.status);
+  if (!r.ok) {
+    // Captura o motivo real (400 doc grande demais, 429 limite de taxa, 403 auth...)
+    let detail = '';
+    try { detail = (await r.text()).slice(0, 400); } catch(e) {}
+    const kb = (body.length / 1024).toFixed(0);
+    const err = new Error('PATCH ' + r.status + ' (' + kb + ' KB) ' + detail);
+    err.status = r.status;
+    err.sizeKB = kb;
+    throw err;
+  }
+}
+
+// Backup local é best-effort. Nunca deve lançar: se a cota do localStorage
+// estourar (comum no Safari iOS quando o app cresce), apenas ignora.
+function saveBackup(obj) {
+  try { localStorage.setItem('bolao_backup', JSON.stringify(obj)); }
+  catch (e) { console.warn('Backup local ignorado (cota/localStorage):', e && e.name); }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2371,7 +2422,7 @@ async function loadState() {
       state.palpites = s.palpites || {};
       state.results = s.results || {};
       state.snapshots = s.snapshots || [];
-      localStorage.setItem('bolao_backup', JSON.stringify(s));
+      saveBackup(s);
     }
   } catch(e) {
     console.warn('Firebase error, retrying once...', e);
@@ -2383,7 +2434,7 @@ async function loadState() {
         state.palpites = s2.palpites || {};
         state.results = s2.results || {};
         state.snapshots = s2.snapshots || [];
-        localStorage.setItem('bolao_backup', JSON.stringify(s2));
+        saveBackup(s2);
         console.log('Firebase retry succeeded');
       } else {
         throw new Error('Firebase retry returned empty');
@@ -2574,12 +2625,19 @@ async function saveGlobal() {
   const data = {users: state.users, palpites: state.palpites, results: state.results, snapshots: state.snapshots};
   try {
     await fbSet(data);
-    localStorage.setItem('bolao_backup', JSON.stringify(data));
   } catch(e) {
-    console.warn('Save error:', e);
-    showToast('Erro ao salvar. Verifique conexão.', true);
+    console.warn('Firebase save error:', e);
+    let msg = 'Erro ao salvar. Verifique conexão.';
+    if (e && e.status === 400) msg = 'Erro ao salvar: documento grande demais (' + (e.sizeKB || '?') + ' KB). Avise o admin.';
+    else if (e && e.status === 429) msg = 'Muitas gravações em pouco tempo. Aguarde e tente de novo.';
+    else if (e && (e.status === 401 || e.status === 403)) msg = 'Erro ao salvar: permissão negada.';
+    showToast(msg, true);
     throw e; // Relançar para que o chamador (ex: savePalpites) possa reverter
   }
+  // Backup local é best-effort: se estourar a cota do localStorage, NÃO deve
+  // falhar o save (o Firebase já gravou). Antes, um QuotaExceededError aqui
+  // disparava "Erro ao salvar" mesmo com o dado salvo no Firebase.
+  saveBackup(data);
 }
 
 function startPolling() {
