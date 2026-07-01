@@ -3586,6 +3586,86 @@ function openDailyModal() {
 
 function closeDailyModal() { const o = document.getElementById('daily-modal-overlay'); if (o) o.remove(); }
 
+// Detalhe dos palpites do dia de um participante (aberto pelo ranking)
+function closeDailyDetail() { const o = document.getElementById('daily-detail-overlay'); if (o) o.remove(); }
+function openDailyDetail(uid) {
+  const u = state.users[uid]; if (!u) return;
+  buildResolvedTeamsFromResults();
+  const dia = (state.palpites[uid] && state.palpites[uid]._dia) || {};
+  const tot = calcDailyPts(state.palpites[uid] || {});
+
+  const koGames = MATCHES.filter(m => m.phase === 'knockout' && dia[m.id] && dia[m.id].h !== undefined && dia[m.id].a !== undefined)
+    .sort((a, b) => (MATCH_NUMBERS[a.id] || 999) - (MATCH_NUMBERS[b.id] || 999));
+
+  let body = '';
+  if (!koGames.length) {
+    body = '<div style="text-align:center;padding:24px 8px;color:var(--gray);font-size:13px;">Este participante ainda não fez nenhum palpite do dia.</div>';
+  } else {
+    koGames.forEach(m => {
+      const p = dia[m.id];
+      const rt = resolvedTeamsReal[m.id] || {};
+      const hName = (rt.home && rt.home.name) ? rt.home.name : m.home;
+      const aName = (rt.away && rt.away.name) ? rt.away.name : m.away;
+      const hFlag = (rt.home && rt.home.flag) ? rt.home.flag : m.fH;
+      const aFlag = (rt.away && rt.away.flag) ? rt.away.flag : m.fA;
+      const res = state.results[m.id];
+      const penTxt = p.pen ? ` <span style="font-size:10px;color:var(--gray);">(pên: ${p.pen === 'H' ? hName : aName})</span>` : '';
+
+      // Pontuação do jogo (mesma lógica do calcDailyPts)
+      let ptsHtml = '<span style="font-size:11px;color:var(--gray);">a jogar</span>';
+      if (res) {
+        const rW = res.h > res.a ? 'H' : res.h < res.a ? 'A' : 'E';
+        const pW = p.h > p.a ? 'H' : p.h < p.a ? 'A' : 'E';
+        let base = 0, kind = '0 pts', bcls = 'badge-red';
+        if (p.h === res.h && p.a === res.a) { base = PTS_EXACT; kind = '+5 exato'; bcls = 'badge-green'; }
+        else if (rW === pW) { base = PTS_WINNER; kind = '+3 vencedor'; bcls = 'badge-gold'; }
+        const realWin = res.h > res.a ? 'H' : res.a > res.h ? 'A' : (res.pen === 'H' ? 'H' : res.pen === 'A' ? 'A' : null);
+        const predWin = p.h > p.a ? 'H' : p.a > p.h ? 'A' : (p.pen === 'H' ? 'H' : p.pen === 'A' ? 'A' : null);
+        const bonus = (realWin && predWin && realWin === predWin) ? (DAILY_ADV_BONUS[m.group] || 0) : 0;
+        ptsHtml = `<span class="badge ${bcls}">${kind}</span>${bonus ? ` <span class="badge badge-gold">+${bonus} classif.</span>` : ''}`;
+      }
+      const resTxt = res
+        ? `<b style="color:#7eb8f5;">${res.h}:${res.a}</b>${res.pen ? ` <span style="font-size:10px;color:var(--gray);">(pên: ${res.pen === 'H' ? hName : aName})</span>` : ''}`
+        : '<span style="font-size:11px;color:var(--gray);font-style:italic;">sem resultado</span>';
+
+      body += `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;">
+          <span style="display:flex;align-items:center;gap:5px;flex:1;min-width:0;">${flagImg(hFlag)} ${hName} <span style="color:var(--gray);">×</span> ${aName} ${flagImg(aFlag)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:7px;font-size:12px;">
+          <span style="color:var(--light);">Palpite: <b>${p.h}:${p.a}</b>${penTxt}</span>
+          <span style="color:var(--gray);">Resultado: ${resTxt}</span>
+        </div>
+        <div style="margin-top:7px;">${ptsHtml}</div>
+      </div>`;
+    });
+  }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'daily-detail-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,0.8);display:flex;align-items:flex-end;justify-content:center;';
+  overlay.innerHTML = `
+    <div style="background:var(--card);border-radius:18px 18px 0 0;padding:18px 16px calc(18px + var(--safe-bot));max-width:480px;width:100%;max-height:85vh;overflow-y:auto;border-top:2px solid #7eb8f5;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+          ${avatarHtml(u, uid, 'flex-shrink:0;')}
+          <div style="min-width:0;">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:900;color:#7eb8f5;line-height:1;">${uName(uid)}</div>
+            <div style="font-size:11px;color:var(--gray);margin-top:2px;">🎯 Palpite do Dia · ${tot.games} jogo(s) · ${tot.ex} exato(s) · ${tot.ac} acerto(s)${tot.bonus ? ' · bônus ' + tot.bonus : ''}</div>
+          </div>
+        </div>
+        <button onclick="closeDailyDetail()" style="background:none;border:none;color:var(--gray);font-size:24px;cursor:pointer;line-height:1;flex-shrink:0;">×</button>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:12px;padding:8px 12px;background:rgba(126,184,245,0.08);border:1px solid rgba(126,184,245,0.2);border-radius:10px;">
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:900;color:#7eb8f5;">${tot.pts}</span>
+        <span style="font-size:12px;color:var(--gray);">pontos no Palpite do Dia</span>
+      </div>
+      ${body}
+    </div>`;
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeDailyDetail(); });
+  document.body.appendChild(overlay);
+}
+
 function dailyOnInput(mid) {
   const hi = document.getElementById('dia_' + mid + '_h'), ai = document.getElementById('dia_' + mid + '_a');
   if (!hi || !ai) return;
@@ -4719,14 +4799,15 @@ function renderDailyRanking() {
     const rank = s._rank;
     const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '#' + rank;
     const cls = rank === 1 ? 'color:#FFD700' : rank === 2 ? 'color:#C0C0C0' : rank === 3 ? 'color:#CD7F32' : 'color:var(--gray)';
-    return `<div class="rank-row">
+    return `<div class="rank-row" onclick="openDailyDetail('${s.u.replace(/'/g, "\\'")}')" style="cursor:pointer;">
       <span class="rank-num" style="${cls}">${medal}</span>
       ${avatarHtml(state.users[s.u], s.u)}
       <div style="flex:1;">
         <div class="rank-name">${uName(s.u)}</div>
         <div class="rank-sub">${s.ac} acertos · ${s.ex} exatos · ${s.games} jogos${s.bonus ? ' · bônus ' + s.bonus : ''}</div>
       </div>
-      <div><div class="pts-big" style="color:#7eb8f5;">${s.pts}</div><div class="pts-small">pontos</div></div>
+      <div style="text-align:right;"><div class="pts-big" style="color:#7eb8f5;">${s.pts}</div><div class="pts-small">pontos</div></div>
+      <span style="color:var(--gray);font-size:18px;margin-left:2px;">›</span>
     </div>`;
   }).join('');
 
