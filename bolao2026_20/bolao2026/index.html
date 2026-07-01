@@ -3594,14 +3594,19 @@ function openDailyDetail(uid) {
   const dia = (state.palpites[uid] && state.palpites[uid]._dia) || {};
   const tot = calcDailyPts(state.palpites[uid] || {});
 
+  // Jogos já iniciados (com resultado, ao vivo, ou horário já passado): o palpite
+  // está travado, então mostrar não permite mais cópia. Jogos futuros ficam ocultos.
+  const started = (m) => !!(state.results[m.id]
+    || (state.results._live && state.results._live[m.id])
+    || (m.kickoff && Date.now() >= new Date(m.kickoff).getTime()));
   const koGames = MATCHES.filter(m => m.phase === 'knockout'
       && dia[m.id] && dia[m.id].h !== undefined && dia[m.id].a !== undefined
-      && state.results[m.id]) // só jogos já realizados (evita copiar palpite de jogo futuro)
+      && started(m))
     .sort((a, b) => (MATCH_NUMBERS[a.id] || 999) - (MATCH_NUMBERS[b.id] || 999));
 
   let body = '';
   if (!koGames.length) {
-    body = '<div style="text-align:center;padding:24px 8px;color:var(--gray);font-size:13px;">Ainda não há palpites em jogos encerrados para mostrar.<br><span style="font-size:11px;">Palpites de jogos que ainda não aconteceram ficam ocultos.</span></div>';
+    body = '<div style="text-align:center;padding:24px 8px;color:var(--gray);font-size:13px;">Ainda não há palpites em jogos iniciados para mostrar.<br><span style="font-size:11px;">Palpites de jogos que ainda não começaram ficam ocultos.</span></div>';
   } else {
     koGames.forEach(m => {
       const p = dia[m.id];
@@ -3611,10 +3616,11 @@ function openDailyDetail(uid) {
       const hFlag = (rt.home && rt.home.flag) ? rt.home.flag : m.fH;
       const aFlag = (rt.away && rt.away.flag) ? rt.away.flag : m.fA;
       const res = state.results[m.id];
+      const isLive = !res && state.results._live && state.results._live[m.id];
       const penTxt = p.pen ? ` <span style="font-size:10px;color:var(--gray);">(pên: ${p.pen === 'H' ? hName : aName})</span>` : '';
 
-      // Pontuação do jogo (mesma lógica do calcDailyPts)
-      let ptsHtml = '<span style="font-size:11px;color:var(--gray);">a jogar</span>';
+      // Pontuação do jogo (mesma lógica do calcDailyPts) — só quando há resultado
+      let ptsHtml = '<span style="font-size:11px;color:var(--gray);font-style:italic;">aguardando resultado</span>';
       if (res) {
         const rW = res.h > res.a ? 'H' : res.h < res.a ? 'A' : 'E';
         const pW = p.h > p.a ? 'H' : p.h < p.a ? 'A' : 'E';
@@ -3628,7 +3634,9 @@ function openDailyDetail(uid) {
       }
       const resTxt = res
         ? `<b style="color:#7eb8f5;">${res.h}:${res.a}</b>${res.pen ? ` <span style="font-size:10px;color:var(--gray);">(pên: ${res.pen === 'H' ? hName : aName})</span>` : ''}`
-        : '<span style="font-size:11px;color:var(--gray);font-style:italic;">sem resultado</span>';
+        : (isLive
+            ? '<span class="status-pill pill-live">🔴 AO VIVO</span>'
+            : '<span style="font-size:11px;color:var(--gold);font-style:italic;">em andamento</span>');
 
       body += `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;">
