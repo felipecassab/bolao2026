@@ -3216,9 +3216,14 @@ function calcBonusPts(userPalpites) {
       sortThirds(thirds, userPalpites);
       thirds.slice(0, 8).forEach(t => { if (t.name) teams.add(t.name); });
     } else {
-      // Winners of previous phase matches per user's palpites
+      // Winners of previous phase matches per user's palpites.
+      // Exige que o jogo já tenha sido disputado (mesmo critério de
+      // realTeamsInPhase e do modal). Sem isso, o palpite do usuário para um
+      // jogo ainda NÃO realizado podia coincidir com um time que já se
+      // classificou por outro confronto disputado, somando bônus fantasma.
       const prev = {'Oitavas':'32-avos','Quartas':'Oitavas','Semifinais':'Quartas','Final':'Semifinais','Campeã':'Final'}[phase];
       MATCHES.filter(m => m.group === prev).forEach(m => {
+        const res = state.results[m.id]; if (!res) return;
         const p = userPalpites?.[m.id]; if (!p || p.h === undefined || p.a === undefined) return;
         const rt = resolvedTeams[m.id]; if (!rt) return;
         const isDraw = +p.h === +p.a;
